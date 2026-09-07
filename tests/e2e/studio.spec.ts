@@ -643,3 +643,62 @@ test("berekende hoeveelheid uit het ontwerp → ontwerp wijzigen → veroudering
   await expect(page.getByText("· ontwerpversie 1", { exact: false })).toBeVisible();
   expect(errors).toEqual([]);
 });
+test("alternatief met prijsbron vastleggen → kiezen → herkomst en indicatiebedrag zichtbaar", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  const credentials = JSON.parse(await readFile("work/e2e-credentials.json", "utf8"));
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) { await page.context().addCookies(ownerCookies); await page.goto("/"); }
+  else {
+    await page.goto("/"); await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page.getByLabel("Wachtwoord", { exact: true }).fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
+  await page.getByLabel("Projectnaam").fill("Alternatievenstudio");
+  await page.getByRole("button", { name: "Project aanmaken", exact: true }).click();
+  await page.getByRole("button", { name: "Materiaalkeuzes", exact: true }).click();
+  await page.getByRole("button", { name: "Materiaal toevoegen", exact: true }).click();
+  await page.getByLabel("Materiaal name", { exact: true }).fill("Eiken vloer · naturel");
+  await page.getByLabel("Materiaal supplier", { exact: true }).fill("Fictieve vloermaker");
+  await page.getByLabel("Materiaal sku", { exact: true }).fill("V-01");
+  await page.getByLabel("Materiaal hoeveelheid", { exact: true }).fill("30");
+  await page.getByLabel("Materiaal onderbouwing", { exact: true }).fill("Ingemeten door de leverancier.");
+  await page.getByLabel("Eenheidsprijs", { exact: true }).fill("74,95");
+
+  // Een prijs zonder bron en datum wordt geweigerd.
+  await page.getByRole("button", { name: "Materiaal bewaren", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Noteer bij een prijs ook de bron en de prijsdatum");
+  await page.getByLabel("Prijsbron", { exact: true }).fill("Prijslijst 2026");
+  await page.getByLabel("Prijsdatum", { exact: true }).fill("2026-08-20");
+  await page.getByLabel("Monsterstatus", { exact: true }).selectOption("received");
+  await page.getByLabel("Monsterdatum", { exact: true }).fill("2026-08-28");
+  await page.getByRole("button", { name: "Alternatief toevoegen", exact: true }).click();
+  await page.getByLabel("Alternatief 1 naam", { exact: true }).fill("Es geborsteld");
+  await page.getByLabel("Alternatief 1 leverancier", { exact: true }).fill("Andere vloermaker");
+  await page.getByLabel("Alternatief 1 artikelnummer", { exact: true }).fill("V-02");
+  await page.getByLabel("Alternatief 1 prijsbron", { exact: true }).fill("Offerte 2026-114");
+  await page.getByLabel("Alternatief 1 prijsdatum", { exact: true }).fill("2026-09-01");
+  await page.getByLabel("Alternatief 1 eenheidsprijs", { exact: true }).fill("68,50");
+  await page.screenshot({ path: "outputs/qa/alternatief-invoeren.png" });
+  await page.getByRole("button", { name: "Materiaal bewaren", exact: true }).click();
+
+  await expect(page.getByText("€ 74,95 per m² · bron: Prijslijst 2026 · prijsdatum 2026-08-20", { exact: false })).toBeVisible();
+  await expect(page.getByText("indicatie € 2.248,50 bij 30 m²", { exact: false })).toBeVisible();
+  await expect(page.getByText("Monster ontvangen op 2026-08-28", { exact: true })).toBeVisible();
+  await expect(page.getByText("Het zijn geen offerteregels", { exact: false })).toBeVisible();
+  await expect(page.getByText("Es geborsteld · Andere vloermaker · V-02 · € 68,50 per m² (Offerte 2026-114, 2026-09-01)", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "outputs/qa/alternatieven.png" });
+
+  await page.getByRole("button", { name: "Kies Es geborsteld", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Es geborsteld", exact: true })).toBeVisible();
+  await expect(page.getByText("Gekozen uit het alternatief “Es geborsteld”.", { exact: true })).toBeVisible();
+  await expect(page.getByText("indicatie € 2.055,00 bij 30 m²", { exact: false })).toBeVisible();
+  await expect(page.getByText("Eiken vloer · naturel · Fictieve vloermaker · V-01", { exact: false })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "Materiaalkeuzes", exact: true }).click();
+  await expect(page.getByText("Versie 2 ·", { exact: false })).toBeVisible();
+  await page.getByLabel("Materialen zoeken", { exact: true }).fill("v-01");
+  await expect(page.getByRole("heading", { name: "Es geborsteld", exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});

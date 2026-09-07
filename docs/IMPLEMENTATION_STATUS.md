@@ -206,3 +206,31 @@ Op 7 september 19:03–19:05 UTC draaide de workflow *Foundation verification* v
 1. Alternatieven per materiaalkeuze met gekozen alternatief, prijsbron en prijsdatum; daarna de gordijnberekening met eigen invoervelden.
 2. Benoemde, persistente ruimtes zodat een hoeveelheidsbron een muurwijziging overleeft, inclusief een veilige herkoppeling.
 3. Daarna pas fase 5 (presentaties) aanvatten; foundation-onderdelen uit fase 1 (productie-Compose, back-up/herstel) blijven daarvoor nog steeds open.
+
+## Aanvulling — alternatieven, prijsbron en monsterstatus
+
+Een materiaalkeuze heeft nu een prijsbron, een prijsdatum en een eenheidsprijs, een monsterstatus met eigen datum, en een lijst alternatieven. Een alternatief is een volwaardig productvoorstel met eigen naam, leverancier, collectie, artikelnummer, kleurcode, prijsbron, prijsdatum, eenheidsprijs en notitie; maximaal tien per keuze.
+
+Prijsregels zijn bewust streng: een eenheidsprijs zonder bron én datum wordt geweigerd, en een prijsdatum zonder bron ook. Dat geldt voor de gekozen optie en voor elk alternatief. Zo komt er geen bedrag in het systeem waarvan niemand meer weet waar het vandaan komt. De lijst toont een indicatiebedrag (hoeveelheid × eenheidsprijs, `packages/domain/src/pricing.ts`, decimalrekenwerk, half naar boven op hele centen) met daarboven één zin dat dit geen offerteregel is: geen korting, belasting of prijsbevriezing. Het bedrag wordt nergens opgeslagen; het is afgeleid.
+
+Monsterstatus staat los van de keuzestatus, zoals de opdracht vraagt. Elke andere status dan "Geen monster" vereist een datum, en de keuzestatus "Monster aangevraagd" mag niet samengaan met monsterstatus "Geen monster" — dat zou een tegenstrijdige registratie zijn.
+
+Kiezen doe je in de lijst met de knop **Kies <naam>**. Het gekozen alternatief schuift naar de hoofdplek, het eerder gekozen product schuift terug naar de alternatieven, en de nieuwe versie legt vast uit welk alternatief de keuze komt. Auteur en tijdstip van dat besluit staan al in de materiaalversie zelf. **De server controleert die herkomst**: het alternatief moet in de vorige versie hebben gestaan én de gekozen productgegevens moeten daar exact mee overeenkomen. Anders kan een client elke willekeurige herkomst claimen. Gevolg voor de gebruiker: eerst kiezen, daarna aanpassen in een volgende versie; de foutmelding zegt dat ook.
+
+Geen databasemigration: alles staat in de bestaande `definition`-JSONB. Materiaalversies van vóór deze wijziging missen de nieuwe sleutels; `withDefaults` vult die bij het lezen aan zonder de bewaarde versie te wijzigen of te valideren. Zo blijft een oude versie precies zoals hij is opgeslagen.
+
+Verificatie 7 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+- **Volledige Vitest-run: 67 tests / 11 bestanden geslaagd, 14,5 s** (was 61). Nieuw: vijf contracttests over prijsregels, monsterregels, alternatieven, `withDefaults` op een oude definitie en het indicatiebedrag, plus één integratietest tegen echte PostgreSQL.
+- Die integratietest toetst: alternatief met prijs bewaren en teruglezen, kiezen op versie 0 geweigerd (409), verzonnen herkomst geweigerd (409), tegelijk de prijs aanpassen geweigerd (409), een andere naam claimen geweigerd (409), geldige promotie geaccepteerd, de omgekeerde alternatievenlijst na promotie, de ongewijzigde versie 1 in de database, en prijs- en monsterregels die het contract afwijst (400).
+- **Volledige browserrun: 7 routes geslaagd, 46,3 s**, inclusief de nieuwe route: prijs zonder bron geweigerd, prijsbron/datum/monster invullen, alternatief toevoegen, bewaren, indicatiebedrag € 2.248,50 bij 30 m², alternatief kiezen, herkomst en omgedraaide lijst zien, en na herladen versie 2 terugvinden.
+- TypeScript strict en Vite-productiebuild geslaagd (7,2 s). Bekende chunkgroottewaarschuwing blijft open.
+- Screenshots `outputs/qa/alternatief-invoeren.png` en `outputs/qa/alternatieven.png` daadwerkelijk geïnspecteerd. De eerste inspectie liet zien dat de foutmelding onder de bewaarknop buiten beeld viel: je drukt op Bewaren en ziet niets gebeuren. De melding staat nu boven de knoppen en is opnieuw visueel gecontroleerd.
+- Playwright draait nu met `locale: "nl-NL"` en `timezoneId: "Europe/Amsterdam"`. Geprobeerd en verworpen: `--lang=nl-NL` op Chromium verandert de weergave van `<input type="date">` in deze container niet, dus die vlag is niet blijven staan. Op screenshots uit deze omgeving staat daardoor mm/dd/jjjj waar een Nederlandse browser dd-mm-jjjj toont; dat verschil zit in de testomgeving, niet in de app. Dit is niet op een Nederlandse desktopbrowser nagemeten.
+
+Open voor de rest van fase 4: textuurafbeeldingen bij een materiaal, prijsgeschiedenis en prijsversies (een offerte moet later een prijs bevriezen; nu bewaart elke materiaalversie alleen de prijs van dat moment), de gordijnberekening met railbreedte/plooi/stofbreedte/banen/zoom/rapport, benoemde persistente ruimtes, elektra- en LED-lengtes, en de koppeling naar 2D/3D/presentaties/offertes. Een geschiedenis-UI per keuze ontbreekt nog: de opeenvolgende versies staan wel in de database, maar de lijst toont alleen de nieuwste. Fase 4 is niet afgerond.
+
+### Eerstvolgende stap na deze aanvulling
+
+1. Benoemde, persistente ruimtes zodat een hoeveelheidsbron een muurwijziging overleeft, met een veilige herkoppeling wanneer de contour verandert.
+2. Daarna de gordijnberekening met eigen invoervelden en een geschiedenis-UI per materiaalkeuze.
+3. Fase 5 (presentaties) blijft daarna aan de beurt; de openstaande fase-1-onderdelen (productie-Compose, back-up/herstel) blijven ongewijzigd open.
