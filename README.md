@@ -43,6 +43,12 @@ Bij het maken van een bibliotheekversie kun je onder **Eigen 2D-symbool** rechth
 
 Open in de bibliotheek **3D-model controleren (GLB)** om een lokaal bestand te inspecteren. De controle ondersteunt statische driehoekmodellen zonder textures, animaties, compressie of externe bronnen, tot 10 MiB en 100.000 driehoeken. Je ziet de berekende breedte, diepte, hoogte en een draaibare preview in een neutrale kleur. Controleer de maten en oriëntatie en vink de bevestiging aan. Klik **Model bewaren en meubel maken**: de server controleert het bestand opnieuw en bewaart de geometrie. Geef het meubel een naam en bewaar de bibliotheekversie. Na plaatsen verschijnt het model ook na herladen in 3D; de geometrie volgt de meubelmaten. De oorspronkelijke GLB en materialen worden niet bewaard. Er geldt een limiet van 100 modellen en een opslagbudget van 200 MiB per werkruimte. De 3D-weergave toont maximaal 500.000 modeldriehoeken; bij ontbrekende of te zware modellen verschijnt een blokvorm met melding.
 
+## Materiaalkeuzes
+
+Open **Materiaalkeuzes** in het ontwerp. De lijst hoort bij het project en wordt gedeeld door alle varianten. Leg categorie (ook vrije invoer), ruimte/oppervlak, leverancier, collectie, artikelnummer en kleurcode vast. Kies een eenheid; een lege hoeveelheid betekent onbekend. Voor een handmatig aantal is een onderbouwing verplicht. Deze hoeveelheden worden niet automatisch uit de plattegrond berekend of bijgewerkt.
+
+De keuzestatus loopt van **Nog te kiezen** via voorstel/monster/gekozen naar eventueel **Door klant bevestigd** of **Vervangen**. Klantbevestiging vereist een datum en bron; dit is een handmatige registratie, geen digitaal akkoord van de klant. Iedere wijziging maakt een nieuwe vaste versie met auteur en tijdstip. Bij gelijktijdige wijzigingen vraagt de app om de nieuwste versie te openen. Maximaal 200 materiaalkeuzes per project; gebruikers met alleen leestoegang kunnen de lijst bekijken.
+
 ## Verifiëren
 
 ```sh

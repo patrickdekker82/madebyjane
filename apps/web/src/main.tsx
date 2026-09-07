@@ -1,3 +1,4 @@
+import { Materials } from "./Materials";
 import { LibraryPanel } from "./LibraryPanel";
 import { Variants, VariantName } from "./Variants";
 import { RoomSummary } from "./RoomSummary";
@@ -939,6 +940,7 @@ function Editor() {
           </button>
         </div>
         <span className="tools-spacer" />
+        <Materials organizationId={org.id} projectId={scene.projectId} canEdit={canWrite(org.role)} />
         <Variants
           organizationId={org.id}
           variantId={variantId}

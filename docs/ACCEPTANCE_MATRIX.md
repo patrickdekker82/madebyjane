@@ -6,6 +6,7 @@ Een rij per bronalinea/bullet; samengestelde eisen zijn pas gereed wanneer alle 
 
 | Component | Implementatiepad | Testbewijs | Status |
 |---|---|---|---|
+| Materiaalkeuzes / handmatige hoeveelheden | Materials; MaterialService; contracts/materials; migration 0009 | schema-/DB-tests en browser: onbekend, onderbouwing, akkoord, versies en herladen | Basis getoetst; formules, alternatieven, textures, offertes en geometriekoppeling open |
 | GLB-opslag / bibliotheekkoppeling / project-3D | ModelAssetService; server-worker; migration 0008; ModelItems | echte worker+DB; quota/retry/rechten; browser upload/plaats/herlaad | Geometrieprofiel getoetst; textures, assetrechten, S3 en opruimen open |
 | GLB-controle en lokale preview | model-import/glb; glb.worker; GlbInspector | glb.test.ts; browser ongeldige header/externe bron/maat/3D-frame | Beperkt geometrieprofiel getoetst; textures/animaties/compressie open |
 | Bibliotheek zoeken / productgegevens | LibraryPanel; LibraryService; catalogSchema; ItemProperties | 51-item DB-proef; tenantisolatie; nieuwste versie; browser zoeken en herladen | Categorie, omschrijving, zoektermen, leverancier en SKU getoetst; prijsbron/rechtenmetadata open |

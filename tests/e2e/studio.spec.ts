@@ -539,3 +539,49 @@ test("muur en raam op maat → ongeldige opening afgewezen → undo → herladen
   expect(symbolSvg).toContain('width="1680" height="760"');
   expect(symbolSvg).toContain('rx="360" ry="237.5"');
 });
+test("materiaalkeuzes → onderbouwde hoeveelheid → interne keuze → vastgelegd klantakkoord", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  const credentials = JSON.parse(await readFile("work/e2e-credentials.json", "utf8"));
+  if (ownerCookies.length) { await page.context().addCookies(ownerCookies); await page.goto("/"); }
+  else {
+    await page.goto("/"); await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page.getByLabel("Wachtwoord", { exact: true }).fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
+  await page.getByLabel("Projectnaam").fill("Materiaalstudio");
+  await page.getByRole("button", { name: "Project aanmaken", exact: true }).click();
+  await page.getByRole("button", { name: "Materiaalkeuzes", exact: true }).click();
+  await page.getByRole("button", { name: "Materiaal toevoegen", exact: true }).click();
+  await page.getByLabel("Materiaal name", { exact: true }).fill("Eiken vloer · naturel");
+  await page.getByLabel("Materiaal room", { exact: true }).fill("Woonkamer");
+  await page.getByLabel("Materiaal supplier", { exact: true }).fill("Fictieve vloermaker");
+  await page.getByLabel("Materiaal sku", { exact: true }).fill("VLOER-01");
+  await page.getByRole("button", { name: "Materiaal bewaren", exact: true }).click();
+  await expect(page.getByText("Hoeveelheid onbekend", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Wijzig Eiken vloer · naturel", exact: true }).click();
+  await page.getByLabel("Materiaal hoeveelheid", { exact: true }).fill("31,5");
+  await page.getByRole("button", { name: "Materiaal bewaren", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Onderbouw de handmatig ingevoerde hoeveelheid");
+  await page.getByLabel("Materiaal onderbouwing", { exact: true }).fill("Ingemeten leverancier: 29,04 m² plus snijverlies.");
+  await page.getByLabel("Materiaal status", { exact: true }).selectOption("chosen");
+  await page.getByRole("button", { name: "Materiaal bewaren", exact: true }).click();
+  await expect(page.getByText("31,5 m² · handmatig", { exact: false })).toBeVisible();
+  await expect(page.getByText("Klantakkoord handmatig vastgelegd", { exact: false })).toHaveCount(0);
+  await page.getByRole("button", { name: "Wijzig Eiken vloer · naturel", exact: true }).click();
+  await page.getByLabel("Materiaal status", { exact: true }).selectOption("client_confirmed");
+  await page.getByLabel("Datum klantakkoord", { exact: true }).fill("2026-09-07");
+  await page.getByLabel("Bron klantakkoord", { exact: true }).fill("Fictieve klant bevestigde per e-mail, onderwerp vloerkeuze.");
+  await page.getByRole("button", { name: "Materiaal bewaren", exact: true }).click();
+  await page.getByRole("button", { name: "Sluiten", exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "Materiaalkeuzes", exact: true }).click();
+  await expect(page.getByText("Klantakkoord handmatig vastgelegd op 2026-09-07:", { exact: false })).toBeVisible();
+  await page.getByLabel("Materialen zoeken", { exact: true }).fill("onvindbaar");
+  await expect(page.getByText("Geen passende materiaalkeuzes.", { exact: true })).toBeVisible();
+  await page.getByLabel("Materialen zoeken", { exact: true }).fill("vloer-01");
+  await expect(page.getByRole("heading", { name: "Eiken vloer · naturel", exact: true })).toBeVisible();
+  await page.screenshot({ path: "outputs/qa/materiaalkeuzes.png" });
+  expect(errors).toEqual([]);
+});

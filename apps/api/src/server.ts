@@ -1,3 +1,4 @@
+import { MaterialService } from "../../../packages/domain/src/materials";
 import { ModelAssetService } from "../../../packages/domain/src/model-assets";
 import { libraryQuerySchema } from "../../../packages/contracts/src/index";
 import { LibraryService } from "../../../packages/domain/src/library";
@@ -200,6 +201,9 @@ export function createServer(config: {
     const model = await models.get(await context(req.headers), assetId);
     return reply.type("application/octet-stream").header("Content-Disposition", 'attachment; filename="geometry.bin"').send(model.positions);
   });
+  const materials = new MaterialService(config.runtime);
+  app.get("/api/v1/projects/:id/materials", async req => materials.list(await context(req.headers), z.object({ id }).parse(req.params).id));
+  app.post("/api/v1/projects/:id/materials", async req => materials.publish(await context(req.headers), z.object({ id }).parse(req.params).id, req.body));
   const library = new LibraryService(config.runtime);
   app.get("/api/v1/library", async (req) => {
     return library.list(await context(req.headers), libraryQuerySchema.parse(req.query));

@@ -78,6 +78,10 @@
     {
       "name": "0008_model_assets.sql",
       "sha256": "745e2215b91cdc116977c81d12bdd5f19e719810ba2799ebb79756a19e9b8484"
+    },
+    {
+      "name": "0009_material_versions.sql",
+      "sha256": "b91e05e73555b6ebb844cac2b8bc944393c19f2c9978ab3b9ef5fd7d268d4140"
     }
   ],
   "containers": {

@@ -611,6 +611,32 @@ test("modeluploads worden hergecontroleerd, begrensd en tenant-geïsoleerd opges
   expect((await request("POST", "/api/v1/model-assets/" + randomUUID(), bytes)).statusCode).toBe(409);
   expect((await request("POST", path, bytes)).statusCode).toBe(200);
 });
+test("materiaalkeuzes bewaren projectisolatie, versies, auteur, retry en versieconflicten", async () => {
+  const project = (await request("POST", "/api/v1/projects", { name: "Materiaalproject", customer: "", description: "", demo: false })).json();
+  const other = (await request("POST", "/api/v1/projects", { name: "Ander materiaalproject", customer: "", description: "", demo: false })).json();
+  const path = `/api/v1/projects/${project.id}/materials`;
+  const definition = { name: "Eiken vloer", category: "Vloer", room: "Woonkamer", supplier: "Vloermaker", collection: "Naturel", sku: "V-01", colorCode: "N10", unit: "m²", quantity: null, quantityReason: "", status: "undecided", confirmationDate: null, confirmationNote: "", notes: "" };
+  const v1 = { entryId: randomUUID(), versionId: randomUUID(), baseVersion: 0, definition };
+  const saved = await Promise.all([request("POST", path, v1), request("POST", path, v1)]);
+  expect(saved.map(r => r.statusCode)).toEqual([200,200]);
+  expect(saved.map(r => r.json().replayed).sort()).toEqual([false,true]);
+  expect((await request("GET", path, undefined, cookieViewer)).json().items[0].definition.quantity).toBeNull();
+  expect((await request("POST", path, v1, cookieViewer)).statusCode).toBe(403);
+  expect((await request("GET", path, undefined, cookieB, orgB)).statusCode).toBe(404);
+  expect((await request("GET", `/api/v1/projects/${other.id}/materials`)).json().items).toEqual([]);
+  const v2 = { ...v1, versionId: randomUUID(), baseVersion: 1, definition: { ...definition, quantity: "31.500", quantityReason: "Leverancier gemeten, inclusief snijverlies", status: "chosen" } };
+  expect((await request("POST", path, v2)).statusCode).toBe(200);
+  expect((await request("POST", path, { ...v2, versionId: randomUUID() })).statusCode).toBe(409);
+  expect((await request("POST", path, { ...v2, definition: { ...v2.definition, name: "Andere inhoud" } })).statusCode).toBe(409);
+  const list = (await request("GET", path)).json().items;
+  expect(list).toHaveLength(1); expect(list[0].version).toBe(2); expect(list[0].user_id).toBeTruthy(); expect(list[0].created_at).toBeTruthy();
+  expect(list[0].definition.confirmationDate).toBeNull();
+  expect((await db.admin.query("SELECT definition FROM material_versions WHERE id=$1", [v1.versionId])).rows[0].definition.quantity).toBeNull();
+  const confirmed = { ...v2, versionId: randomUUID(), baseVersion: 2, definition: { ...v2.definition, status: "client_confirmed" } };
+  expect((await request("POST", path, confirmed)).statusCode).toBe(400);
+  expect((await request("POST", path, { ...confirmed, definition: { ...confirmed.definition, confirmationDate: "2026-09-07", confirmationNote: "Klant akkoord per e-mail" } })).statusCode).toBe(200);
+  await expect(inTenant(db.runtime, project.scene.organizationId, c => c.query("UPDATE material_versions SET version=99"))).rejects.toThrow(/permission denied/);
+});
 test("signout trekt sessie in", async () => {
   expect((await request("POST", "/api/auth/sign-out", {})).statusCode).toBe(
     200,
