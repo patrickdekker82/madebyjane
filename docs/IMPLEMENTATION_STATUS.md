@@ -29,7 +29,7 @@ Omgeving:
 
 Projectbeheer/auth/RLS/audit/private adapter zijn aanwezig. Eerste-eigenaarsetup is transactioneel en tegen concurrente setup beschermd; echte PostgreSQL-restart behoudt data. Uitnodigingen zijn eenmalig, gehasht, 48 uur geldig en intrekbaar. Beheerdersrechten en identiteit worden opnieuw gecontroleerd. MFA heeft TOTP en eenmalige herstelcodes; HTTPS-domeinroutes vereisen MFA. Database-startcontrole weigert ontbrekende, gewijzigde en nieuwere migrationhistorie zonder zelf migrations uit te voeren.
 
-CI, gepind release-manifest en inventaris van 36 directe package-licenties aanwezig. CI nog niet extern uitgevoerd; native/transitieve licentie-inventaris nog niet compleet. Ontwikkelsnelstart in README. De Linux-container is alleen een renderproef.
+CI, gepind release-manifest en inventaris van 36 directe package-licenties aanwezig. CI is op 7 september voor het eerst extern uitgevoerd op ubuntu-24.04 en volledig geslaagd (zie de aanvulling onderaan); de native/transitieve licentie-inventaris is nog niet compleet. Ontwikkelsnelstart in README. De Linux-container is alleen een renderproef.
 
 Open: account recovery/password reset, expliciete projectmembership, volledige rechtenmatrix, productie-Compose/installatie, assetroutes/S3, operationele back-up/restore. Geen productiegeschiktheidsclaim.
 
@@ -196,6 +196,10 @@ Omgeving (afwijkend van eerdere runs op macOS): deze sessie draait als root in e
 Geen databasemigration nodig: de berekening staat in de bestaande `definition`-JSONB van `material_versions`. Materiaalversies van vóór deze wijziging blijven geldig en worden als handmatig getoond. Het release-manifest blijft op negen migrations.
 
 Open voor de rest van fase 4: alternatieven en gekozen alternatief, prijsbron en prijsdatum, monsterstatus als apart veld, gordijnberekening met railbreedte/plooi/stofbreedte/banen/rapport, benoemde persistente ruimtes in plaats van afgeleide sleutels, hoeveelheden over meerdere ruimtes tegelijk, elektra/LED-lengtes, koppeling naar 2D/3D/presentaties/offertes en een geschiedenis-UI per keuze. De ruimtesleutel is afgeleid van de muurpunten: verplaats je een punt dan blijft de sleutel gelijk, verwijder of splits je een muur dan verdwijnt de bron en vraagt de app om een nieuwe keuze. Fase 4 is hiermee niet afgerond en de overige fasen blijven ongewijzigd open.
+
+### CI voor het eerst extern gedraaid
+
+Op 7 september 19:03–19:05 UTC draaide de workflow *Foundation verification* voor het eerst op een GitHub-runner (ubuntu-24.04, Node 24.18.1, pnpm 11.19.0), op commit `deabc13`. Alle stappen slaagden: `pnpm install --frozen-lockfile`, `playwright install --with-deps chromium`, `pnpm build`, `pnpm test`, `pnpm test:e2e` (42 s) en `pnpm audit --audit-level high`. Daarmee is de eerdere aantekening "CI nog niet extern uitgevoerd" achterhaald. De runner installeert zijn eigen Chromium, dus de nieuwe `PLAYWRIGHT_CHROMIUM_EXECUTABLE`-optie is daar niet actief. Er is nog geen securityscan van containers of secrets; de securityrelease-gate uit fase 9 blijft open.
 
 ### Eerstvolgende stap na deze aanvulling
 

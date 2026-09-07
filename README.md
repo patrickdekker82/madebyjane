@@ -70,7 +70,7 @@ Browser- en integratietests gebruiken afzonderlijke lokale databases en fictieve
 
 Met Web Locks hervat dezelfde tab de schrijflease direct na herladen; een gedupliceerde tab blijft in leesmodus. Zonder Web Locks valt de editor veilig terug op een nieuwe lease en kan herladen maximaal 45 seconden wachttijd geven. De 3D-proef gebruikt blokvormige meubels en vloeren volgens herkende kamercontouren; muurverbindingen zijn nog in ontwikkeling. Netto hoeveelheden worden berekend, maar een ruimte wordt nog herkend aan haar muurpunten: verwijder of splits je een muur, dan vraagt de app om de bron opnieuw te kiezen. PDF is een renderproef, nog geen productie-exportqueue. Nog geen productie-Compose, back-up/herstelprocedure of Hyper-V-validatie.
 
-De precieze voortgang, testresultaten en eerstvolgende stappen staan in `docs/IMPLEMENTATION_STATUS.md`. Alle oorspronkelijke eisen staan in `docs/MASTERPROMPT.md` en `docs/ACCEPTANCE_MATRIX.md`. Gepinde dependencies en migrations staan in `release-manifest.json`. `docs/DEPENDENCY_LICENSES.json` inventariseert de licenties van 36 directe packages; transitieve en native licentiebijlagen zijn nog niet compleet. CI is ingecheckt, maar nog niet op een externe runner uitgevoerd.
+De precieze voortgang, testresultaten en eerstvolgende stappen staan in `docs/IMPLEMENTATION_STATUS.md`. Alle oorspronkelijke eisen staan in `docs/MASTERPROMPT.md` en `docs/ACCEPTANCE_MATRIX.md`. Gepinde dependencies en migrations staan in `release-manifest.json`. `docs/DEPENDENCY_LICENSES.json` inventariseert de licenties van 36 directe packages; transitieve en native licentiebijlagen zijn nog niet compleet. CI draait op GitHub Actions (ubuntu-24.04) en voert build, tests, browsertests en `pnpm audit` uit.
 
 ## GitHub en volgende updates
 

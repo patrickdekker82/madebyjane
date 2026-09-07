@@ -29,7 +29,7 @@ Een rij per bronalinea/bullet; samengestelde eisen zijn pas gereed wanneer alle 
 | 500 objecten / 100 muren | packages/test-fixtures; editor-2d | work/performance.json; p95 17,1 ms tijdens discrete panacties | Lokale basisproef; continue drag/inputlatency open |
 | PDF 1:50 | packages/documents; scripts/pdf-probe.ts | scripts/verify-pdf.py; ~99,9983 mm voor 5 m | Numeriek en visueel getoetst |
 | Linux Chromium zonder GPU | infra/docker; scripts/probe-linux.sh | work/linux-probe/pdf-metrics.json; 67 ms, arm64 | Geïsoleerde renderproef; Hyper-V open |
-| Release / licenties / CI | release-manifest.json; docs/DEPENDENCY_LICENSES.json; .github/workflows/ci.yml | Lokale build geslaagd; 36 directe licenties geïnventariseerd | CI niet extern gedraaid; transitieve notices open |
+| Release / licenties / CI | release-manifest.json; docs/DEPENDENCY_LICENSES.json; .github/workflows/ci.yml | CI op ubuntu-24.04 geslaagd voor commit deabc13: build, test, e2e en audit; 36 directe licenties geïnventariseerd | CI extern getoetst; transitieve notices en securityrelease-gate open |
 
 ## Volledige bronregistratie
 
