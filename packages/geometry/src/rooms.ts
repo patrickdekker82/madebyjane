@@ -2,7 +2,10 @@ import type { Point, Scene } from "../../contracts/src/index";
 export type Room = {
   id: string;
   contour: Point[];
+  /** Muurpunten in doorloopvolgorde; nodig om randen aan muren te koppelen. */
+  nodeIds: string[];
   holes: Point[][];
+  holeNodeIds: string[][];
   areaMm2: number;
 };
 export type RoomDetection = { rooms: Room[]; issues: string[] };
@@ -152,7 +155,9 @@ export function detectRooms(
       return {
         id: [...face.ids].sort().join(":"),
         contour: face.contour,
+        nodeIds: face.ids,
         holes: children.map((c) => c.contour),
+        holeNodeIds: children.map((c) => c.ids),
         areaMm2: face.area - children.reduce((n, c) => n + c.area, 0),
       };
     })

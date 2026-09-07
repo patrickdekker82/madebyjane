@@ -45,7 +45,9 @@ Open in de bibliotheek **3D-model controleren (GLB)** om een lokaal bestand te i
 
 ## Materiaalkeuzes
 
-Open **Materiaalkeuzes** in het ontwerp. De lijst hoort bij het project en wordt gedeeld door alle varianten. Leg categorie (ook vrije invoer), ruimte/oppervlak, leverancier, collectie, artikelnummer en kleurcode vast. Kies een eenheid; een lege hoeveelheid betekent onbekend. Voor een handmatig aantal is een onderbouwing verplicht. Deze hoeveelheden worden niet automatisch uit de plattegrond berekend of bijgewerkt.
+Open **Materiaalkeuzes** in het ontwerp. De lijst hoort bij het project en wordt gedeeld door alle varianten. Leg categorie (ook vrije invoer), ruimte/oppervlak, leverancier, collectie, artikelnummer en kleurcode vast. Kies een eenheid; een lege hoeveelheid betekent onbekend. Voor een handmatig aantal is een onderbouwing verplicht.
+
+Zet **Bereken uit de ontwerpgeometrie** aan om de hoeveelheid uit het ontwerp te halen. Kies een herkende ruimte, een bronmaat (netto vloeroppervlak, netto wandoppervlak, netto omtrek of plintlengte), een snijverliespercentage en eventueel een bestelstap. Netto contouren liggen een halve muurdikte binnen de hartlijn; de plintlengte trekt deurbreedtes af en het wandoppervlak trekt alle openingen af. De server rekent bij het bewaren zelf opnieuw en legt bronrevisie, formule-inputs, netto, snijverlies, bruto en bestelhoeveelheid onveranderlijk vast. Wijzigt het ontwerp, dan meldt de lijst **Verouderd** met de oude en nieuwe waarde; **Herbereken** maakt daar een nieuwe materiaalversie van. Een afwijkende hoeveelheid invullen blijft mogelijk en vereist een onderbouwing; die wordt dan niet automatisch herberekend.
 
 De keuzestatus loopt van **Nog te kiezen** via voorstel/monster/gekozen naar eventueel **Door klant bevestigd** of **Vervangen**. Klantbevestiging vereist een datum en bron; dit is een handmatige registratie, geen digitaal akkoord van de klant. Iedere wijziging maakt een nieuwe vaste versie met auteur en tijdstip. Bij gelijktijdige wijzigingen vraagt de app om de nieuwste versie te openen. Maximaal 200 materiaalkeuzes per project; gebruikers met alleen leestoegang kunnen de lijst bekijken.
 
@@ -60,11 +62,13 @@ pnpm probe:pdf
 node scripts/release-manifest.mjs
 ```
 
+Heb je al een Chromium van Playwright op de machine staan, dan kun je de download overslaan met `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/pad/naar/chrome pnpm test:e2e`. Draai je de tests als root, dan start de ingebouwde PostgreSQL onder de bestaande `postgres`-systeemgebruiker; `scripts/local-db.ts` regelt de benodigde rechten op de tijdelijke datadirectory zelf.
+
 Browser- en integratietests gebruiken afzonderlijke lokale databases en fictieve accounts. Playwright bewaart screenshots in `outputs/qa`, overige testdata in `work`. `scripts/verify-pdf.py` vereist Python met pdfplumber en controleert de uiteindelijke PDF-vectoren. Linux-renderproef: `bash scripts/probe-linux.sh` met een actieve Docker-engine. Deze bouwt een lokaal image en voert één geïsoleerde, netwerkloze render uit; geen productie-installatie.
 
 ## Grenzen en vervolg
 
-Met Web Locks hervat dezelfde tab de schrijflease direct na herladen; een gedupliceerde tab blijft in leesmodus. Zonder Web Locks valt de editor veilig terug op een nieuwe lease en kan herladen maximaal 45 seconden wachttijd geven. De 3D-proef gebruikt blokvormige meubels en vloeren volgens herkende kamercontouren; muurverbindingen en netto ruimtegeometrie zijn nog in ontwikkeling. PDF is een renderproef, nog geen productie-exportqueue. Nog geen productie-Compose, back-up/herstelprocedure of Hyper-V-validatie.
+Met Web Locks hervat dezelfde tab de schrijflease direct na herladen; een gedupliceerde tab blijft in leesmodus. Zonder Web Locks valt de editor veilig terug op een nieuwe lease en kan herladen maximaal 45 seconden wachttijd geven. De 3D-proef gebruikt blokvormige meubels en vloeren volgens herkende kamercontouren; muurverbindingen zijn nog in ontwikkeling. Netto hoeveelheden worden berekend, maar een ruimte wordt nog herkend aan haar muurpunten: verwijder of splits je een muur, dan vraagt de app om de bron opnieuw te kiezen. PDF is een renderproef, nog geen productie-exportqueue. Nog geen productie-Compose, back-up/herstelprocedure of Hyper-V-validatie.
 
 De precieze voortgang, testresultaten en eerstvolgende stappen staan in `docs/IMPLEMENTATION_STATUS.md`. Alle oorspronkelijke eisen staan in `docs/MASTERPROMPT.md` en `docs/ACCEPTANCE_MATRIX.md`. Gepinde dependencies en migrations staan in `release-manifest.json`. `docs/DEPENDENCY_LICENSES.json` inventariseert de licenties van 36 directe packages; transitieve en native licentiebijlagen zijn nog niet compleet. CI is ingecheckt, maar nog niet op een externe runner uitgevoerd.
 

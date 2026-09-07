@@ -637,6 +637,82 @@ test("materiaalkeuzes bewaren projectisolatie, versies, auteur, retry en versiec
   expect((await request("POST", path, { ...confirmed, definition: { ...confirmed.definition, confirmationDate: "2026-09-07", confirmationNote: "Klant akkoord per e-mail" } })).statusCode).toBe(200);
   await expect(inTenant(db.runtime, project.scene.organizationId, c => c.query("UPDATE material_versions SET version=99"))).rejects.toThrow(/permission denied/);
 });
+test("berekende hoeveelheden komen van de server, verouderen bij ontwerpwijzigingen en blijven binnen project en werkruimte", async () => {
+  const project = (await request("POST", "/api/v1/projects", { name: "Berekenproject", customer: "", description: "", demo: true })).json();
+  const other = (await request("POST", "/api/v1/projects", { name: "Los project", customer: "", description: "", demo: false })).json();
+  const path = `/api/v1/projects/${project.id}/materials`;
+  const quantityPath = (id: string, v: string) => `/api/v1/projects/${id}/quantities?variantId=${v}`;
+  const measured = (await request("GET", quantityPath(project.id, project.variantId))).json();
+  expect(measured.revision).toBe(0);
+  expect(measured.rooms).toHaveLength(1);
+  const room = measured.rooms[0];
+  expect(room.netFloorAreaMm2).toBe(27154275);
+  expect(room.issues).toEqual([]);
+  // Een variant van een ander project of een andere werkruimte levert geen bronmaten.
+  expect((await request("GET", quantityPath(other.id, project.variantId))).statusCode).toBe(404);
+  expect((await request("GET", quantityPath(project.id, project.variantId), undefined, cookieB, orgB)).statusCode).toBe(404);
+  expect((await request("GET", quantityPath(project.id, project.variantId), undefined, cookieViewer)).statusCode).toBe(200);
+
+  const definition = { name: "Eiken vloer", category: "Vloer", room: "Woonkamer", supplier: "Vloermaker", collection: "Naturel", sku: "V-01", colorCode: "N10", unit: "stuk", quantity: null, quantityReason: "", status: "undecided", confirmationDate: null, confirmationNote: "", notes: "" };
+  const calculation = { variantId: project.variantId, roomId: room.id, basis: "floor_area", wastePercent: "10", orderStep: "0.5" };
+  const v1 = { entryId: randomUUID(), versionId: randomUUID(), baseVersion: 0, definition, calculation };
+  expect((await request("POST", path, v1)).statusCode).toBe(200);
+  const stored = (await request("GET", path)).json().items[0];
+  // 27,154275 m2 netto, 10% snijverlies, bestelstap 0,5 m2.
+  expect(stored.definition.calculation.netQuantity).toBe("27.154");
+  expect(stored.definition.calculation.wasteQuantity).toBe("2.715");
+  expect(stored.definition.calculation.grossQuantity).toBe("29.869");
+  expect(stored.definition.calculation.orderQuantity).toBe("30");
+  expect(stored.definition.calculation.sourceRevision).toBe(0);
+  expect(stored.definition.calculation.inputs.netFloorAreaMm2).toBe(27154275);
+  expect(stored.definition.quantity).toBe("30");
+  // De server negeert de eenheid van de client en gebruikt die van de bronmaat.
+  expect(stored.definition.unit).toBe("m²");
+
+  expect((await request("POST", path, { ...v1, entryId: randomUUID(), versionId: randomUUID(), calculation: { ...calculation, roomId: "onbekend" } })).statusCode).toBe(409);
+  expect((await request("POST", path, { ...v1, entryId: randomUUID(), versionId: randomUUID(), calculation: { ...calculation, variantId: other.variantId } })).statusCode).toBe(404);
+  expect((await request("POST", `/api/v1/projects/${other.id}/materials`, { ...v1, entryId: randomUUID(), versionId: randomUUID() })).statusCode).toBe(404);
+  expect((await request("POST", path, { ...v1, entryId: randomUUID(), versionId: randomUUID() }, cookieViewer)).statusCode).toBe(403);
+  expect((await request("POST", path, { ...v1, entryId: randomUUID(), versionId: randomUUID(), definition: { ...definition, quantity: "40" } })).statusCode).toBe(400);
+
+  // Een afwijkende hoeveelheid blijft staan naast de berekening, mits onderbouwd.
+  const override = { ...v1, versionId: randomUUID(), baseVersion: 1, definition: { ...definition, quantity: "34", quantityReason: "Levering per hele pakken van 2 m²." } };
+  expect((await request("POST", path, override)).statusCode).toBe(200);
+  const overridden = (await request("GET", path)).json().items[0];
+  expect(overridden.definition.quantity).toBe("34");
+  expect(overridden.definition.calculation.orderQuantity).toBe("30");
+
+  // Ontwerpwijziging: dikkere muren geven minder netto vloeroppervlak.
+  const leaseId = randomUUID(), route = "/api/v1/variants/" + project.variantId;
+  expect((await request("POST", route + "/lease", { leaseId })).statusCode).toBe(200);
+  const wall = project.scene.walls[0];
+  expect((await request("POST", route + "/commands", {
+    commandId: randomUUID(), baseRevision: 0, leaseId,
+    operations: [{ type: "ResizeWall", id: wall.id, thickness: 400, height: wall.height }],
+  })).statusCode).toBe(200);
+  const after = (await request("GET", quantityPath(project.id, project.variantId))).json();
+  expect(after.revision).toBe(1);
+  expect(after.rooms[0].id).toBe(room.id);
+  expect(after.rooms[0].netFloorAreaMm2).toBeLessThan(room.netFloorAreaMm2);
+  expect((await request("GET", path)).json().items[0].definition.calculation.sourceRevision).toBe(0);
+
+  const recalculated = { ...v1, versionId: randomUUID(), baseVersion: 2, definition: { ...definition, quantity: null, quantityReason: "" } };
+  expect((await request("POST", path, recalculated)).statusCode).toBe(200);
+  const fresh = (await request("GET", path)).json().items[0];
+  expect(fresh.definition.calculation.sourceRevision).toBe(1);
+  expect(fresh.definition.calculation.inputs.netFloorAreaMm2).toBe(after.rooms[0].netFloorAreaMm2);
+  expect(Number(fresh.definition.quantity)).toBeLessThan(30);
+});
+test("de API overleeft het wegvallen van inactieve databaseverbindingen", async () => {
+  // Zonder error-listener op de pool beeindigt Node het proces bij deze gebeurtenis.
+  const terminated = await db.admin.query(
+    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename IN ('studio_runtime','studio_auth') AND pid<>pg_backend_pid()",
+  );
+  expect(terminated.rowCount).toBeGreaterThan(0);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect((await request("GET", "/api/v1/projects")).statusCode).toBe(200);
+  expect((await request("GET", "/api/v1/me")).statusCode).toBe(200);
+});
 test("signout trekt sessie in", async () => {
   expect((await request("POST", "/api/auth/sign-out", {})).statusCode).toBe(
     200,

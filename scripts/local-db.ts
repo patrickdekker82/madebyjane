@@ -6,11 +6,36 @@ import {
   access,
   mkdtemp,
   rmdir,
+  chmod,
+  chown,
 } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { Pool, migrate } from "../packages/db/src/index";
+import { Pool, guardPool, migrate } from "../packages/db/src/index";
+const run = promisify(execFile);
+// PostgreSQL weigert als root te draaien; embedded-postgres start de server
+// daarom onder de bestaande postgres-systeemgebruiker. Alleen in die situatie
+// hebben de tijdelijke data- en socketdirectory extra toegang nodig. Op een
+// niet-root ontwikkelmachine verandert deze functie niets.
+async function allowPostgresSystemUser(directory: string, socketDir: string) {
+  if (process.getuid?.() !== 0) return;
+  const id = async (flag: string) =>
+    Number.parseInt((await run("id", [flag, "postgres"])).stdout.trim(), 10);
+  const [uid, gid] = await Promise.all([id("-u"), id("-g")]);
+  if (!Number.isInteger(uid) || !Number.isInteger(gid))
+    throw new Error("postgres-systeemgebruiker niet gevonden.");
+  // Alleen doorloopbaar maken: credentials.json blijft 0600 en dus onleesbaar.
+  await chmod(directory, 0o711);
+  const data = resolve(directory, "data");
+  await mkdir(data, { recursive: true });
+  await chown(data, uid, gid);
+  await chmod(data, 0o700);
+  await chown(socketDir, uid, gid);
+  await chmod(socketDir, 0o700);
+}
 export async function localDatabase(directory = "work/local-db", port = 55432) {
   await mkdir(directory, { recursive: true });
   const secretFile = resolve(directory, "credentials.json");
@@ -47,6 +72,7 @@ export async function localDatabase(directory = "work/local-db", port = 55432) {
   const socketDir = await mkdtemp(
     (process.platform === "darwin" ? "/private/tmp" : "/tmp") + "/studio-pg-",
   );
+  await allowPostgresSystemUser(directory, socketDir);
   let startupLog = "";
   const pg = new EmbeddedPostgres({
     databaseDir: resolve(directory, "data"),
@@ -74,7 +100,10 @@ export async function localDatabase(directory = "work/local-db", port = 55432) {
   }
   const url = (user: string, password: string) =>
     `postgresql://${user}:${password}@127.0.0.1:${port}/postgres`;
-  const admin = new Pool({ connectionString: url("postgres", secrets.admin) });
+  const admin = guardPool(
+    new Pool({ connectionString: url("postgres", secrets.admin) }),
+    "admin",
+  );
   try {
     await migrate(admin);
     await admin.query(
@@ -91,14 +120,20 @@ export async function localDatabase(directory = "work/local-db", port = 55432) {
   return {
     pg,
     admin,
-    runtime: new Pool({
-      connectionString: url("studio_runtime", secrets.runtime),
-      max: 5,
-    }),
-    identity: new Pool({
-      connectionString: url("studio_auth", secrets.auth),
-      max: 3,
-    }),
+    runtime: guardPool(
+      new Pool({
+        connectionString: url("studio_runtime", secrets.runtime),
+        max: 5,
+      }),
+      "runtime",
+    ),
+    identity: guardPool(
+      new Pool({
+        connectionString: url("studio_auth", secrets.auth),
+        max: 3,
+      }),
+      "identity",
+    ),
     secret: secrets.session,
     env: {
       DATABASE_URL: url("studio_runtime", secrets.runtime),

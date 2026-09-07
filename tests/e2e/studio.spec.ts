@@ -592,3 +592,54 @@ test("materiaalkeuzes → onderbouwde hoeveelheid → interne keuze → vastgele
   await page.screenshot({ path: "outputs/qa/materiaalkeuzes.png" });
   expect(errors).toEqual([]);
 });
+test("berekende hoeveelheid uit het ontwerp → ontwerp wijzigen → veroudering → herberekenen", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  const credentials = JSON.parse(await readFile("work/e2e-credentials.json", "utf8"));
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) { await page.context().addCookies(ownerCookies); await page.goto("/"); }
+  else {
+    await page.goto("/"); await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page.getByLabel("Wachtwoord", { exact: true }).fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
+  await page.getByLabel("Projectnaam").fill("Hoeveelhedenstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page.getByRole("button", { name: "Project aanmaken", exact: true }).click();
+  await expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+
+  await page.getByRole("button", { name: "Materiaalkeuzes", exact: true }).click();
+  await page.getByRole("button", { name: "Materiaal toevoegen", exact: true }).click();
+  await page.getByLabel("Materiaal name", { exact: true }).fill("Eiken vloerdelen");
+  await page.getByLabel("Bereken uit ontwerp", { exact: true }).check();
+  await expect(page.getByLabel("Bronruimte", { exact: true })).toHaveValue(/.+/);
+  await page.getByLabel("Bestelstap", { exact: true }).fill("0,5");
+  await expect(page.getByLabel("Bestelstap", { exact: true })).toHaveValue("0,5");
+  // 29,04 m² bruto langs de hartlijnen; 27,154275 m² netto binnen muren van 180 mm.
+  await expect(page.getByRole("status")).toContainText("Netto 27,154 m² + snijverlies 2,715 m² = bruto 29,869 m²");
+  await expect(page.getByRole("status")).toContainText("Bestelhoeveelheid 30 m² uit ontwerpversie 0");
+  await page.screenshot({ path: "outputs/qa/hoeveelheid-berekenen.png" });
+  await page.getByRole("button", { name: "Materiaal bewaren", exact: true }).click();
+  await expect(page.getByText("30 m² · berekend uit het ontwerp", { exact: false })).toBeVisible();
+  await expect(page.getByText("Netto vloeroppervlak · netto 27,154 m² + 10% snijverlies · bestelstap 0,5 m² = 30 m² · ontwerpversie 0", { exact: false })).toBeVisible();
+  await page.screenshot({ path: "outputs/qa/berekende-hoeveelheden.png" });
+  await page.getByRole("button", { name: "Sluiten", exact: true }).click();
+
+  await page.getByRole("button", { name: "Muur 1", exact: true }).click();
+  await page.getByLabel("Muurdikte", { exact: true }).fill("400");
+  await page.getByRole("button", { name: "Maten toepassen", exact: true }).click();
+  await expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+
+  await page.getByRole("button", { name: "Materiaalkeuzes", exact: true }).click();
+  await expect(page.getByText("Verouderd: het ontwerp (versie 1) geeft nu", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Herbereken Eiken vloerdelen", exact: true }).click();
+  await expect(page.getByText("· ontwerpversie 1", { exact: false })).toBeVisible();
+  await expect(page.getByText("Verouderd", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("30 m² · berekend uit het ontwerp", { exact: false })).toHaveCount(0);
+  await page.getByRole("button", { name: "Sluiten", exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "Materiaalkeuzes", exact: true }).click();
+  await expect(page.getByText("· ontwerpversie 1", { exact: false })).toBeVisible();
+  expect(errors).toEqual([]);
+});

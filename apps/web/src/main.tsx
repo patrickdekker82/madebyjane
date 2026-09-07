@@ -940,7 +940,7 @@ function Editor() {
           </button>
         </div>
         <span className="tools-spacer" />
-        <Materials organizationId={org.id} projectId={scene.projectId} canEdit={canWrite(org.role)} />
+        <Materials organizationId={org.id} projectId={scene.projectId} variantId={variantId} canEdit={canWrite(org.role)} />
         <Variants
           organizationId={org.id}
           variantId={variantId}

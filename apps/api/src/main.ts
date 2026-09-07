@@ -1,5 +1,6 @@
 import {
   Pool,
+  guardPool,
   assertRuntimeRole,
   assertSchemaCompatible,
 } from "../../../packages/db/src/index";
@@ -10,8 +11,14 @@ if (!DATABASE_URL || !AUTH_DATABASE_URL || !AUTH_SECRET || !PUBLIC_BASE_URL)
   throw new Error(
     "Database- en authconfiguratie ontbreekt. Gebruik pnpm dev of configureer de omgeving.",
   );
-const runtime = new Pool({ connectionString: DATABASE_URL, max: 10 }),
-  identity = new Pool({ connectionString: AUTH_DATABASE_URL, max: 5 });
+const runtime = guardPool(
+    new Pool({ connectionString: DATABASE_URL, max: 10 }),
+    "runtime",
+  ),
+  identity = guardPool(
+    new Pool({ connectionString: AUTH_DATABASE_URL, max: 5 }),
+    "identity",
+  );
 await assertRuntimeRole(runtime);
 await assertSchemaCompatible(runtime);
 const { app } = createServer({

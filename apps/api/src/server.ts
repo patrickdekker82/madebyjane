@@ -203,6 +203,10 @@ export function createServer(config: {
   });
   const materials = new MaterialService(config.runtime);
   app.get("/api/v1/projects/:id/materials", async req => materials.list(await context(req.headers), z.object({ id }).parse(req.params).id));
+  app.get("/api/v1/projects/:id/quantities", async req => {
+    const { variantId } = z.object({ variantId: id }).parse(req.query);
+    return materials.quantities(await context(req.headers), z.object({ id }).parse(req.params).id, variantId);
+  });
   app.post("/api/v1/projects/:id/materials", async req => materials.publish(await context(req.headers), z.object({ id }).parse(req.params).id, req.body));
   const library = new LibraryService(config.runtime);
   app.get("/api/v1/library", async (req) => {

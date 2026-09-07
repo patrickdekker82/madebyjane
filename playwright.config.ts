@@ -8,6 +8,15 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: "http://127.0.0.1:4320",
+    // Sommige omgevingen leveren een eigen Chromium op een vaste plek. Verwijs er
+    // expliciet naar in plaats van een tweede browser te downloaden.
+    ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+      ? {
+          launchOptions: {
+            executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+          },
+        }
+      : {}),
     viewport: { width: 1440, height: 1000 },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
