@@ -558,6 +558,8 @@ test("materiaalkeuzes → onderbouwde hoeveelheid → interne keuze → vastgele
   await page.getByLabel("Materiaal room", { exact: true }).fill("Woonkamer");
   await page.getByLabel("Materiaal supplier", { exact: true }).fill("Fictieve vloermaker");
   await page.getByLabel("Materiaal sku", { exact: true }).fill("VLOER-01");
+  await page.getByLabel("Materiaal collection", { exact: true }).fill("Rustiek Eiken");
+  await page.getByLabel("Materiaal colorCode", { exact: true }).fill("N-204");
   await page.getByRole("button", { name: "Materiaal bewaren", exact: true }).click();
   await expect(page.getByText("Hoeveelheid onbekend", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Wijzig Eiken vloer · naturel", exact: true }).click();
@@ -582,6 +584,11 @@ test("materiaalkeuzes → onderbouwde hoeveelheid → interne keuze → vastgele
   await expect(page.getByText("Geen passende materiaalkeuzes.", { exact: true })).toBeVisible();
   await page.getByLabel("Materialen zoeken", { exact: true }).fill("vloer-01");
   await expect(page.getByRole("heading", { name: "Eiken vloer · naturel", exact: true })).toBeVisible();
+  await expect(page.getByText("Collectie: Rustiek Eiken · Kleurcode: N-204", { exact: true })).toBeVisible();
+  for (const query of ["rustiek", "n-204"]) {
+    await page.getByLabel("Materialen zoeken", { exact: true }).fill(query);
+    await expect(page.getByRole("heading", { name: "Eiken vloer · naturel", exact: true })).toBeVisible();
+  }
   await page.screenshot({ path: "outputs/qa/materiaalkeuzes.png" });
   expect(errors).toEqual([]);
 });

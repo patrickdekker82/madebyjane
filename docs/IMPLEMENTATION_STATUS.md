@@ -165,3 +165,7 @@ Migration 0009_material_versions bewaart immutable projectgebonden versies met a
 Verificatie 7 september: **49 tests / 10 bestanden geslaagd (8,74 s)**; onbekend versus onderbouwd aantal, decimale grenzen, kalenderdatums, klantakkoord, tenant-/projectisolatie, viewerrechten, auteursregistratie, concurrente retries, versieconflict en immutable permissions. **Vijf browserroutes geslaagd (21,0 s)**, inclusief materiaal invoeren, validatiemelding, gekozen versus klantbevestigd, bron/datum vastleggen, zoeken en herladen. Screenshot outputs/qa/materiaalkeuzes.png visueel gecontroleerd. TypeScript strict en productiebuild geslaagd (2,76 s), release-manifest bevat negen migrations. De eerdere tijdelijke testkopie was verdwenen; alle controles draaiden nu succesvol rechtstreeks in de projectmap.
 
 Open voor de volledige materialenmodule: alternatieven en gekozen alternatief, prijsbron/-datum, texturen, afzonderlijke monsterstatus, formule-inputs/netto/snijverlies/bestelmaat, bronrevisie en verouderingsmelding, gordijnberekeningen, koppeling naar offertes/2D/3D/presentaties en geschiedenis-UI. De overige open fases blijven ongewijzigd; dit is geen complete fase-4-oplevering.
+
+## Kleine aanvulling — collectie en kleurcode
+
+Collectie en kleurcode zijn nu zichtbaar in de materiaalkeuzelijst en worden hoofdletterongevoelig meegenomen bij zoeken. Lege velden blijven verborgen. TypeScript strict en de gerichte materiaal-browsertest geslaagd (1,7 s; run 5,2 s), inclusief bewaren/herladen en zoeken op beide velden. Geen database- of afhankelijkheidswijzigingen.

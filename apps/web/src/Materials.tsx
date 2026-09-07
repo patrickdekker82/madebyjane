@@ -15,7 +15,7 @@ export function Materials({ organizationId, projectId, canEdit }: { organization
     finally { setBusy(false); }
   };
   const edit = (row: MaterialVersion | null) => { pending.current = null; setError(""); setStatus(row?.definition.status ?? "undecided"); setEditing(row); };
-  const filtered = rows.filter(row => [row.definition.name, row.definition.category, row.definition.room, row.definition.supplier, row.definition.sku].join(" ").toLocaleLowerCase("nl-NL").includes(search.trim().toLocaleLowerCase("nl-NL")));
+  const filtered = rows.filter(row => [row.definition.name, row.definition.category, row.definition.room, row.definition.supplier, row.definition.sku, row.definition.collection, row.definition.colorCode].join(" ").toLocaleLowerCase("nl-NL").includes(search.trim().toLocaleLowerCase("nl-NL")));
   return <Dialog.Root open={open} onOpenChange={value => {
     if (busy || (editing !== undefined && !value)) return;
     setOpen(value);
@@ -26,7 +26,7 @@ export function Materials({ organizationId, projectId, canEdit }: { organization
       <Dialog.Title>Materiaalkeuzes</Dialog.Title>
       <Dialog.Description>Keuzes voor dit project, gedeeld door alle ontwerpvarianten. Handmatige hoeveelheden; een interne keuze is geen klantakkoord.</Dialog.Description>
       {editing === undefined ? <>
-        <label>Zoeken<input aria-label="Materialen zoeken" value={search} onChange={e => setSearch(e.target.value)} placeholder="Materiaal, ruimte, leverancier of artikelnummer" /></label>
+        <label>Zoeken<input aria-label="Materialen zoeken" value={search} onChange={e => setSearch(e.target.value)} placeholder="Materiaal, ruimte, leverancier, artikelnummer, collectie of kleurcode" /></label>
         {canEdit && <button className="primary" disabled={busy || rows.length >= 200} onClick={() => edit(null)}>Materiaal toevoegen</button>}
         {busy && <p role="status">Materialen laden…</p>}
         {!busy && !filtered.length && <p>{search ? "Geen passende materiaalkeuzes." : "Nog geen materiaalkeuzes vastgelegd."}</p>}
@@ -34,6 +34,9 @@ export function Materials({ organizationId, projectId, canEdit }: { organization
           {filtered.map(row => <li key={row.entry_id} style={{ padding: "16px 0", borderBottom: "1px solid #ddd" }}>
             <h3>{row.definition.name}</h3>
             <p className="small">{[row.definition.category, row.definition.room, row.definition.supplier, row.definition.sku].filter(Boolean).join(" · ")}</p>
+            {(row.definition.collection || row.definition.colorCode) && <p className="small">
+              {[row.definition.collection && `Collectie: ${row.definition.collection}`, row.definition.colorCode && `Kleurcode: ${row.definition.colorCode}`].filter(Boolean).join(" · ")}
+            </p>}
             <p><strong>{materialStatuses[row.definition.status]}</strong> · {row.definition.quantity === null ? "Hoeveelheid onbekend" : `${row.definition.quantity.replace(".", ",")} ${row.definition.unit} · handmatig`}</p>
             {row.definition.quantityReason && <p className="small">Onderbouwing: {row.definition.quantityReason}</p>}
             {row.definition.status === "client_confirmed" && <p className="small">Klantakkoord handmatig vastgelegd op {row.definition.confirmationDate}: {row.definition.confirmationNote}</p>}
