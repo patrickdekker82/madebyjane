@@ -1,0 +1,6 @@
+node_modules
+work
+outputs
+dist
+pnpm-lock.yaml
+docs/MASTERPROMPT.md

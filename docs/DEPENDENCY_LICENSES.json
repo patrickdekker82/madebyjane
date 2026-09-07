@@ -1,0 +1,375 @@
+[
+  {
+    "name": "@fastify/rate-limit",
+    "version": "11.2.0",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/fastify/fastify-rate-limit.git"
+    }
+  },
+  {
+    "name": "@fastify/swagger",
+    "version": "9.8.1",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/fastify/fastify-swagger.git"
+    }
+  },
+  {
+    "name": "@playwright/test",
+    "version": "1.62.1",
+    "license": "Apache-2.0",
+    "scope": "development",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/microsoft/playwright.git"
+    }
+  },
+  {
+    "name": "@radix-ui/react-dialog",
+    "version": "1.1.23",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/radix-ui/primitives.git",
+      "directory": "packages/react/dialog"
+    }
+  },
+  {
+    "name": "@react-three/fiber",
+    "version": "9.7.0",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/pmndrs/react-three-fiber.git"
+    }
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/tailwindlabs/tailwindcss.git",
+      "directory": "packages/@tailwindcss-vite"
+    }
+  },
+  {
+    "name": "@tanstack/react-query",
+    "version": "5.102.8",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/TanStack/query.git",
+      "directory": "packages/react-query"
+    }
+  },
+  {
+    "name": "@tanstack/react-router",
+    "version": "1.170.32",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/TanStack/router.git",
+      "directory": "packages/react-router"
+    }
+  },
+  {
+    "name": "@types/node",
+    "version": "22.20.1",
+    "license": "MIT",
+    "scope": "development",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+      "directory": "types/node"
+    }
+  },
+  {
+    "name": "@types/pg",
+    "version": "8.23.1",
+    "license": "MIT",
+    "scope": "development",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+      "directory": "types/pg"
+    }
+  },
+  {
+    "name": "@types/react",
+    "version": "19.2.18",
+    "license": "MIT",
+    "scope": "development",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+      "directory": "types/react"
+    }
+  },
+  {
+    "name": "@types/react-dom",
+    "version": "19.2.7",
+    "license": "MIT",
+    "scope": "development",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+      "directory": "types/react-dom"
+    }
+  },
+  {
+    "name": "@types/three",
+    "version": "0.185.4",
+    "license": "MIT",
+    "scope": "development",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+      "directory": "types/three"
+    }
+  },
+  {
+    "name": "@vitejs/plugin-react",
+    "version": "5.2.0",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/vitejs/vite-plugin-react.git",
+      "directory": "packages/plugin-react"
+    }
+  },
+  {
+    "name": "better-auth",
+    "version": "1.7.2",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/better-auth/better-auth.git",
+      "directory": "packages/better-auth"
+    }
+  },
+  {
+    "name": "decimal.js",
+    "version": "10.6.0",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/MikeMcl/decimal.js.git"
+    }
+  },
+  {
+    "name": "drizzle-orm",
+    "version": "0.45.2",
+    "license": "Apache-2.0",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/drizzle-team/drizzle-orm.git"
+    }
+  },
+  {
+    "name": "embedded-postgres",
+    "version": "18.4.0-beta.17",
+    "license": "MIT",
+    "scope": "development",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/leinelissen/embedded-postgres"
+    }
+  },
+  {
+    "name": "fast-check",
+    "version": "4.9.0",
+    "license": "MIT",
+    "scope": "development",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/dubzzz/fast-check.git",
+      "directory": "packages/fast-check"
+    }
+  },
+  {
+    "name": "fastify",
+    "version": "5.12.3",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/fastify/fastify.git"
+    }
+  },
+  {
+    "name": "konva",
+    "version": "10.3.3",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/konvajs/konva.git"
+    }
+  },
+  {
+    "name": "lucide-react",
+    "version": "1.41.0",
+    "license": "ISC",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/lucide-icons/lucide.git",
+      "directory": "packages/lucide-react"
+    }
+  },
+  {
+    "name": "pg",
+    "version": "8.23.0",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/brianc/node-postgres.git",
+      "directory": "packages/pg"
+    }
+  },
+  {
+    "name": "pg-boss",
+    "version": "12.30.0",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/timgit/pg-boss.git"
+    }
+  },
+  {
+    "name": "prettier",
+    "version": "3.9.6",
+    "license": "MIT",
+    "scope": "development",
+    "repository": "prettier/prettier"
+  },
+  {
+    "name": "react",
+    "version": "19.2.8",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/react/react.git",
+      "directory": "packages/react"
+    }
+  },
+  {
+    "name": "react-dom",
+    "version": "19.2.8",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/react/react.git",
+      "directory": "packages/react-dom"
+    }
+  },
+  {
+    "name": "react-konva",
+    "version": "19.2.6",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git@github.com:konvajs/react-konva.git"
+    }
+  },
+  {
+    "name": "tailwindcss",
+    "version": "4.3.3",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/tailwindlabs/tailwindcss.git",
+      "directory": "packages/tailwindcss"
+    }
+  },
+  {
+    "name": "three",
+    "version": "0.185.1",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/mrdoob/three.js"
+    }
+  },
+  {
+    "name": "tsx",
+    "version": "4.23.13",
+    "license": "MIT",
+    "scope": "development",
+    "repository": "privatenumber/tsx"
+  },
+  {
+    "name": "typescript",
+    "version": "5.9.3",
+    "license": "Apache-2.0",
+    "scope": "development",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/microsoft/TypeScript.git"
+    }
+  },
+  {
+    "name": "vite",
+    "version": "7.3.6",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/vitejs/vite.git",
+      "directory": "packages/vite"
+    }
+  },
+  {
+    "name": "vitest",
+    "version": "4.1.11",
+    "license": "MIT",
+    "scope": "development",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/vitest-dev/vitest.git",
+      "directory": "packages/vitest"
+    }
+  },
+  {
+    "name": "zod",
+    "version": "4.5.4",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/colinhacks/zod.git"
+    }
+  },
+  {
+    "name": "zustand",
+    "version": "5.0.15",
+    "license": "MIT",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/pmndrs/zustand.git"
+    }
+  }
+]

@@ -1,0 +1,91 @@
+{
+  "name": "interieurstudio",
+  "version": "0.0.1",
+  "status": "development-foundation-not-production",
+  "sceneSchemaVersion": 1,
+  "node": "^22.22.0 || ^24.0.0",
+  "packageManager": "pnpm@11.19.0",
+  "lockfileSha256": "1edd40b6643ddbb00f4e351e0073102bded989bc1d6a723b9a3ae9b810c57673",
+  "dependencies": {
+    "@fastify/rate-limit": "11.2.0",
+    "@fastify/swagger": "9.8.1",
+    "@radix-ui/react-dialog": "1.1.23",
+    "@react-three/fiber": "9.7.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@tanstack/react-query": "5.102.8",
+    "@tanstack/react-router": "1.170.32",
+    "@vitejs/plugin-react": "5.2.0",
+    "better-auth": "1.7.2",
+    "decimal.js": "10.6.0",
+    "drizzle-orm": "0.45.2",
+    "fastify": "5.12.3",
+    "konva": "10.3.3",
+    "lucide-react": "1.41.0",
+    "pg": "8.23.0",
+    "pg-boss": "12.30.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-konva": "19.2.6",
+    "tailwindcss": "4.3.3",
+    "three": "0.185.1",
+    "vite": "7.3.6",
+    "zod": "4.5.4",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/node": "22.20.1",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "@types/three": "0.185.4",
+    "embedded-postgres": "18.4.0-beta.17",
+    "fast-check": "4.9.0",
+    "prettier": "3.9.6",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  },
+  "migrations": [
+    {
+      "name": "0001_foundation.sql",
+      "sha256": "7cf7c61c54a8d7da1fa2eb56ac95a7f7abf1ec160bb9354f497c5105beb0e972"
+    },
+    {
+      "name": "0002_auth_issuer.sql",
+      "sha256": "6ba26e3f49dab809b7287e663a564c936bd5a75cdc820bc3f8e7d891544bcb4b"
+    },
+    {
+      "name": "0003_auth_issuer_constraint.sql",
+      "sha256": "c6f582fe1b223bd4eb154d8570012074a85e5d8f6b7ae7d200de50ddd19fb735"
+    },
+    {
+      "name": "0004_invitations.sql",
+      "sha256": "aac73ae9079d52cf0d9e2889c3cb38b6699c8722a164c638e61915e274435b5d"
+    },
+    {
+      "name": "0005_mfa.sql",
+      "sha256": "7196da7776d00f9754758412acc5c55fff79fc76aa6fa4ca9b2b6b675b233f58"
+    },
+    {
+      "name": "0006_variant_copies.sql",
+      "sha256": "b12bf998f434c77d3293bea209a2ad7981b5ae43778c47c1611cbd77792a16f2"
+    },
+    {
+      "name": "0007_library_versions.sql",
+      "sha256": "ac9ebf31ba495a7f3ea40a8ce28665a9a3b9137645cf6069721a2653225f1c37"
+    },
+    {
+      "name": "0008_model_assets.sql",
+      "sha256": "745e2215b91cdc116977c81d12bdd5f19e719810ba2799ebb79756a19e9b8484"
+    }
+  ],
+  "containers": {
+    "chromiumProbe": "mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e"
+  },
+  "limitations": [
+    "Production API/worker/PostgreSQL/Caddy images are not yet delivered.",
+    "Linux probe tested on arm64 via Colima; Debian 13 on Hyper-V not tested.",
+    "License inventory covers direct installed packages, not bundled native binaries or all transitive notices."
+  ]
+}

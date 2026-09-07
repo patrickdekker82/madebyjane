@@ -1,0 +1,10 @@
+FROM mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
+WORKDIR /app
+RUN npm install --global pnpm@11.19.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY . .
+RUN mkdir -p /app/work /app/outputs && chown -R pwuser:pwuser /app
+USER pwuser
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+CMD ["pnpm", "probe:pdf"]
