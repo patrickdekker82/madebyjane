@@ -293,6 +293,6 @@ Een rij per bronalinea/bullet; samengestelde eisen zijn pas gereed wanneer alle 
 | Eis | Implementatie | Testbewijs / status |
 | --- | --- | --- |
 | Decimale offerterekenkern, korting, correcties, configureerbare belastingcategorieën | packages/contracts/src/quotes.ts; packages/domain/src/quote-calculation.ts | 4 lokale Vitest-tests geslaagd in tests/quotes.test.ts |
-| Conceptformulier, klantgegevens, posten, materiaalbron en bronverschillen | apps/web/src/Quotes.tsx; packages/domain/src/quotes.ts | Typecheck/build geslaagd; nieuwe E2E-route nog niet uitgevoerd |
+| Conceptformulier, klantgegevens, posten, materiaalbron en bronverschillen | apps/web/src/Quotes.tsx; packages/domain/src/quotes.ts | Typecheck/build en afzonderlijke Chrome-UI-proef met gemockte API geslaagd; desktop/mobiel visueel bekeken. Nieuwe echte E2E-route nog niet uitgevoerd |
 | Unieke transactionele nummering, prijsfreeze, immutable opslag, finance-rechten en tenantisolatie | packages/domain/src/quotes.ts; packages/db/migrations/0010_quotes.sql; apps/api/src/server.ts | 4 PostgreSQL/API-tests toegevoegd; lokaal geblokkeerd vóór testuitvoering door embedded-postgres/Windows-accountopvraag |
 | PDF, vaste presentatiebijlagen, vervolgversies, statusovergangen en catalogusprijsversies | Nog te implementeren | Open; fase 6 niet afgerond |

@@ -9,10 +9,11 @@ Migration 0010_quotes bewaart immutable concept-/definitieve snapshots onder FOR
 Lokale verificatie op Windows, 8 september:
 - TypeScript strict geslaagd; Vite-productiebuild met `--configLoader runner` geslaagd (9,49 s). Bekende grote chunks blijven bestaan.
 - Vier nieuwe rekentests geslaagd; bredere run: 31 geslaagd, één bestaande opslagtest faalde bij het aanmaken van een symlink (Windows EPERM). Geen geslaagde volledige suite geclaimd.
-- Vier nieuwe echte PostgreSQL/API-tests en een browserroute toegevoegd. Lokale database-start blokkeert vóór de tests door `uv_os_get_passwd returned ENOMEM` in embedded-postgres. Deze tests zijn dus nog niet geslaagd; browser- en visuele QA staan open.
+- Vier nieuwe echte PostgreSQL/API-tests en een browserroute toegevoegd. Lokale database-start blokkeert vóór de tests door `uv_os_get_passwd returned ENOMEM` in embedded-postgres. Deze integratie- en E2E-tests zijn dus nog niet geslaagd.
+- Afzonderlijke Chrome-schermproef met expliciet gemockte API geslaagd: komma-invoer, totaal 54,44 EUR, concept bewaren, desktop 1440×1000 en mobiel 390×844 zonder horizontale overflow of page errors. Screenshots daadwerkelijk bekeken: velden en acties leesbaar, formulier scrollt binnen het venster. Dit is UI-bewijs met fictieve data, geen bewijs van echte opslag/finalisatie.
 - De normale configbundler kreeg een Windows-maptoegangsfout; Vite/Vitest runner-configloader werkt. Tijdelijke PostgreSQL-map gebruikt nu os.tmpdir(); Unix-socketflags worden op Windows weggelaten. De gepinde Windows-PostgreSQL-build is toegevoegd aan de bestaande allowBuilds-lijst. Geen dependencyversies gewijzigd.
 
-Fase 6 is niet afgerond. Eerstvolgend: PostgreSQL/API- en browsertests op Linux-CI uitvoeren en eventuele fouten oplossen, screenshot daadwerkelijk beoordelen. Daarna offerte-PDF vanuit dezelfde snapshot/rekenuitvoer, immutable presentatiebijlagen (afhankelijk van fase 5), vervolgversies, expliciete statusovergangen, ontwerpbronnen en catalogusprijsversies. Deze stap kent alleen concept en definitief; geen verzonden/acceptatieclaim. Geen productie-uitrol.
+Fase 6 is niet afgerond. Eerstvolgend: PostgreSQL/API- en echte browsertests op Linux-CI uitvoeren en eventuele fouten oplossen. Daarna offerte-PDF vanuit dezelfde snapshot/rekenuitvoer, immutable presentatiebijlagen (afhankelijk van fase 5), vervolgversies, expliciete statusovergangen, ontwerpbronnen en catalogusprijsversies. Deze stap kent alleen concept en definitief; geen verzonden/acceptatieclaim. Geen productie-uitrol.
 
 Bijgewerkt: 6 september 2026. Release 0.0.1 is een ontwikkelbasis, geen productieversie.
 
