@@ -1,4 +1,5 @@
 import { MaterialService } from "../../../packages/domain/src/materials";
+import { QuoteService } from "../../../packages/domain/src/quotes";
 import { ModelAssetService } from "../../../packages/domain/src/model-assets";
 import { libraryQuerySchema } from "../../../packages/contracts/src/index";
 import { LibraryService } from "../../../packages/domain/src/library";
@@ -202,6 +203,16 @@ export function createServer(config: {
     return reply.type("application/octet-stream").header("Content-Disposition", 'attachment; filename="geometry.bin"').send(model.positions);
   });
   const materials = new MaterialService(config.runtime);
+  const quotes = new QuoteService(config.runtime);
+  const quoteParams = (params:unknown) => z.object({id, quoteId:id}).parse(params);
+  app.get("/api/v1/projects/:id/quotes", async req => quotes.list(await context(req.headers), z.object({id}).parse(req.params).id));
+  app.post("/api/v1/projects/:id/quotes", async req => quotes.save(await context(req.headers), z.object({id}).parse(req.params).id, req.body));
+  app.get("/api/v1/projects/:id/quotes/:quoteId/differences", async req => {
+    const p=quoteParams(req.params); return quotes.differences(await context(req.headers),p.id,p.quoteId);
+  });
+  app.post("/api/v1/projects/:id/quotes/:quoteId/finalize", async req => {
+    const p=quoteParams(req.params); return quotes.finalize(await context(req.headers),p.id,p.quoteId,req.body);
+  });
   app.get("/api/v1/projects/:id/materials", async req => materials.list(await context(req.headers), z.object({ id }).parse(req.params).id));
   app.post("/api/v1/projects/:id/materials", async req => materials.publish(await context(req.headers), z.object({ id }).parse(req.params).id, req.body));
   const library = new LibraryService(config.runtime);

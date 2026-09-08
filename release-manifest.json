@@ -5,7 +5,7 @@
   "sceneSchemaVersion": 1,
   "node": "^22.22.0 || ^24.0.0",
   "packageManager": "pnpm@11.19.0",
-  "lockfileSha256": "1edd40b6643ddbb00f4e351e0073102bded989bc1d6a723b9a3ae9b810c57673",
+  "lockfileSha256": "aca6014e019ddfc5757dc35d7d40e088b8bc79ccbf12874aa06d5c909ce19b0b",
   "dependencies": {
     "@fastify/rate-limit": "11.2.0",
     "@fastify/swagger": "9.8.1",
@@ -49,43 +49,47 @@
   "migrations": [
     {
       "name": "0001_foundation.sql",
-      "sha256": "7cf7c61c54a8d7da1fa2eb56ac95a7f7abf1ec160bb9354f497c5105beb0e972"
+      "sha256": "7bae664d51ceb2c0ccbc36a539ecce5217297eb401ec773e6c0f96a0c296ee62"
     },
     {
       "name": "0002_auth_issuer.sql",
-      "sha256": "6ba26e3f49dab809b7287e663a564c936bd5a75cdc820bc3f8e7d891544bcb4b"
+      "sha256": "2900284d2ded3d17ae145eefc26da1bf7a0d932df7b8021388a6e61878ffe486"
     },
     {
       "name": "0003_auth_issuer_constraint.sql",
-      "sha256": "c6f582fe1b223bd4eb154d8570012074a85e5d8f6b7ae7d200de50ddd19fb735"
+      "sha256": "4a6a44442320c01a2c10015522933930cc5b889e56066a58717755940a60115b"
     },
     {
       "name": "0004_invitations.sql",
-      "sha256": "aac73ae9079d52cf0d9e2889c3cb38b6699c8722a164c638e61915e274435b5d"
+      "sha256": "4de01f42f5e02ee97b02817aed81f5b40345b95b5106c29e995a00884344cb13"
     },
     {
       "name": "0005_mfa.sql",
-      "sha256": "7196da7776d00f9754758412acc5c55fff79fc76aa6fa4ca9b2b6b675b233f58"
+      "sha256": "f810e816d0811fd32f3708ddd5ad4bb683a58c37e3f0ee8549c2bd0459372f14"
     },
     {
       "name": "0006_variant_copies.sql",
-      "sha256": "b12bf998f434c77d3293bea209a2ad7981b5ae43778c47c1611cbd77792a16f2"
+      "sha256": "355c7b71b116bf6b96f0c08fc5c46232155dc345e46f600933aebfbe9c46d756"
     },
     {
       "name": "0007_library_versions.sql",
-      "sha256": "ac9ebf31ba495a7f3ea40a8ce28665a9a3b9137645cf6069721a2653225f1c37"
+      "sha256": "f8c9015578bdaf5761059f63486414a299060c6bc03c5d0ec8ed4c9091ece86d"
     },
     {
       "name": "0008_model_assets.sql",
-      "sha256": "745e2215b91cdc116977c81d12bdd5f19e719810ba2799ebb79756a19e9b8484"
+      "sha256": "b0a2627f09f5f3bb57f3d3c2aa86dd559babb8f0917940c95e1c7cc8f102f2f3"
     },
     {
       "name": "0009_material_versions.sql",
-      "sha256": "b91e05e73555b6ebb844cac2b8bc944393c19f2c9978ab3b9ef5fd7d268d4140"
+      "sha256": "aeacc5a759bd6e8146821777e00fdb2dc4a1c27808750be4eab77e980a05097b"
+    },
+    {
+      "name": "0010_quotes.sql",
+      "sha256": "327ae8124ca71f132891f46f2718d64051d50f132453b287b68b6491e2907adf"
     }
   ],
   "containers": {
-    "chromiumProbe": "mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e"
+    "chromiumProbe": "mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e\r"
   },
   "limitations": [
     "Production API/worker/PostgreSQL/Caddy images are not yet delivered.",

@@ -9,6 +9,7 @@ import {
 } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { z } from "zod";
 import { Pool, migrate } from "../packages/db/src/index";
 export async function localDatabase(directory = "work/local-db", port = 55432) {
@@ -45,7 +46,7 @@ export async function localDatabase(directory = "work/local-db", port = 55432) {
     .strict()
     .parse(secrets);
   const socketDir = await mkdtemp(
-    (process.platform === "darwin" ? "/private/tmp" : "/tmp") + "/studio-pg-",
+    resolve(tmpdir(), "studio-pg-"),
   );
   let startupLog = "";
   const pg = new EmbeddedPostgres({
@@ -55,7 +56,7 @@ export async function localDatabase(directory = "work/local-db", port = 55432) {
     port,
     persistent: true,
     authMethod: "scram-sha-256",
-    postgresFlags: ["-h", "127.0.0.1", "-k", socketDir],
+    postgresFlags: ["-h", "127.0.0.1", ...(process.platform === "win32" ? [] : ["-k", socketDir])],
     onLog: (message) => {
       startupLog = (startupLog + message).slice(-8000);
     },
