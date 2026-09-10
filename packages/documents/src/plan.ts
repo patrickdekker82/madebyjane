@@ -1,5 +1,10 @@
 import { symbolSvg } from "../../geometry/src/symbol";
-import { itemLayers, type Scene } from "../../contracts/src/index";
+import {
+  fixtureKinds,
+  itemLayers,
+  type FixtureKind,
+  type Scene,
+} from "../../contracts/src/index";
 import {
   endpoints,
   wallOutlines,
@@ -8,6 +13,8 @@ import {
   ledLengthMm,
   ledCornerCount,
   ledSegments,
+  beamFootprint,
+  beamBounds,
 } from "../../geometry/src/index";
 export const escapeXml = (s: string) =>
   s.replace(
@@ -21,7 +28,20 @@ export const escapeXml = (s: string) =>
         "'": "&apos;",
       })[c]!,
   );
-export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
+export function planSvg(
+  scene: Scene,
+  scale: 20 | 50 | 100 = 50,
+  options: { beams?: boolean } = {},
+) {
+  /**
+   * Bij een armatuur wordt het symbool op zijn papiermaat getekend en niet op
+   * de fysieke maat: een spot van 90 mm zou op 1:50 minder dan twee tienden
+   * millimeter zijn. De fysieke maat blijft in de eigenschappen staan.
+   */
+  const box = (item: Scene["items"][number]) =>
+    item.fixture
+      ? { width: item.fixture.symbolSizeMm, depth: item.fixture.symbolSizeMm }
+      : { width: item.width, depth: item.depth };
   const all = [
     ...scene.nodes,
     ...scene.annotations.flatMap((a) => {
@@ -30,6 +50,19 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
       return [a.from, a.to, d.line.from, d.line.to];
     }),
     ...scene.ledPaths.filter((l) => !l.hidden).flatMap((l) => l.points),
+    ...(options.beams
+      ? scene.items
+          .filter((i) => !i.hidden)
+          .flatMap((i) => {
+            const footprint = beamFootprint(i);
+            if (!footprint) return [];
+            const b = beamBounds(footprint);
+            return [
+              { x: b.minX, y: b.minY },
+              { x: b.maxX, y: b.maxY },
+            ];
+          })
+      : []),
     ...scene.items
       .filter((i) => !i.hidden)
       .flatMap((i) => [
@@ -90,9 +123,39 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
     .filter((i) => !i.hidden)
     .map(
       (i) =>
-        `<g transform="translate(${i.x},${i.y}) rotate(${i.rotation})">${i.symbol ? symbolSvg(i.symbol, i.width, i.depth) : `<rect x="${-i.width / 2}" y="${-i.depth / 2}" width="${i.width}" height="${i.depth}" rx="50" fill="${i.color}" stroke="#4c5148" stroke-width="15"/>`}<text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-size="${2.5 * scale}">${escapeXml(i.name)}</text></g>`,
+        `<g transform="translate(${i.x},${i.y}) rotate(${i.rotation})">${i.symbol ? symbolSvg(i.symbol, box(i).width, box(i).depth) : `<rect x="${-i.width / 2}" y="${-i.depth / 2}" width="${i.width}" height="${i.depth}" rx="50" fill="${i.color}" stroke="#4c5148" stroke-width="15"/>`}${i.fixture ? "" : `<text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-size="${2.5 * scale}">${escapeXml(i.name)}</text>`}</g>`,
     )
     .join("");
+  /**
+   * Lichtbundels: transparante vlakken onder de symbolen, met de richting van
+   * het armatuur. Ze staan alleen op het blad wanneer ze ook in de editor aan
+   * staan, en de legenda zegt erbij dat het een benadering is.
+   */
+  const beamShapes = !options.beams
+    ? ""
+    : scene.items
+        .filter((i) => !i.hidden)
+        .map((i) => {
+          const footprint = beamFootprint(i);
+          if (!footprint) return "";
+          const tint = i.fixture?.colorTemperatureK ? "#ffd9a0" : "#e6d9b8";
+          const opacity = 0.1 + (0.22 * (i.fixture?.dimLevel ?? 100)) / 100;
+          if (footprint.shape === "circle")
+            return `<circle cx="${footprint.x}" cy="${footprint.y}" r="${footprint.radiusMm}" fill="${tint}" opacity="${opacity.toFixed(3)}"/>`;
+          const point = (deg: number) => ({
+            x:
+              footprint.x +
+              footprint.radiusMm * Math.cos((deg * Math.PI) / 180),
+            y:
+              footprint.y +
+              footprint.radiusMm * Math.sin((deg * Math.PI) / 180),
+          });
+          const a = point(footprint.fromDeg),
+            b = point(footprint.toDeg);
+          const large = footprint.toDeg - footprint.fromDeg > 180 ? 1 : 0;
+          return `<path d="M ${footprint.x} ${footprint.y} L ${a.x} ${a.y} A ${footprint.radiusMm} ${footprint.radiusMm} 0 ${large} 1 ${b.x} ${b.y} Z" fill="${tint}" opacity="${opacity.toFixed(3)}"/>`;
+        })
+        .join("");
   /**
    * LED-strips: een doorlopende lijn met ronde hoeken in de kleur van de strip,
    * met de gemeten lengte erbij. De lijndikte is een papiermaat en zegt niets
@@ -171,6 +234,29 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
   const legendRows = [...byLayer]
     .filter(([, counts]) => counts.shown || counts.hidden)
     .sort(([a], [b]) => a.localeCompare(b, "nl-NL"));
+  /**
+   * Symbolenlegenda: elk soort punt dat op dit blad staat, met het teken zelf
+   * ernaast. Zo hoeft niemand te raden wat een rondje met een kruis betekent.
+   * Dit stond sinds fase 2 open en kon pas met deze symbolen worden gemaakt.
+   */
+  const kinds = new Map<FixtureKind, number>();
+  for (const item of scene.items)
+    if (item.fixture && !item.hidden)
+      kinds.set(item.fixture.kind, (kinds.get(item.fixture.kind) ?? 0) + 1);
+  const symbolLegend = [...kinds]
+    .sort(([a], [b]) => fixtureKinds[a].localeCompare(fixtureKinds[b], "nl-NL"))
+    .map(([kind, count], index) => {
+      const y = 188 + index * 4;
+      const shapes = scene.items.find(
+        (i) => i.fixture?.kind === kind && i.symbol && !i.hidden,
+      )?.symbol;
+      // Het teken wordt op 3,2 mm getekend en op de tekstregel gecentreerd.
+      const drawing = shapes
+        ? `<g transform="translate(205 ${y - 2.4}) scale(0.0032)">${symbolSvg(shapes, 1000, 1000)}</g>`
+        : "";
+      return `${drawing}<text x="210" y="${y}" font-size="3">${escapeXml(fixtureKinds[kind])} × ${count}</text>`;
+    })
+    .join("");
   const legend = legendRows
     .map(([label, counts], index) => {
       // shown = -1 markeert een regel die het aantal al in het label draagt.
@@ -178,8 +264,8 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
         counts.shown === -1
           ? `${label}${counts.hidden ? `, ${counts.hidden} verborgen` : ""}`
           : `${label}: ${counts.shown} getoond${counts.hidden ? `, ${counts.hidden} verborgen` : ""}`;
-      return `<text x="90" y="${188 + index * 4}" font-size="3">${escapeXml(text)}</text>`;
+      return `<text x="120" y="${188 + index * 4}" font-size="3">${escapeXml(text)}</text>`;
     })
     .join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="297mm" height="210mm" viewBox="0 0 297 210"><rect width="297" height="210" fill="white"/><g font-family="Arial,sans-serif" transform="translate(10 12) scale(${1 / scale}) translate(${-minX} ${-minY})">${walls}${cuts}${openings}${leds}${items}${annotations}</g><g font-family="Arial,sans-serif" fill="#343b32"><line x1="10" y1="180" x2="287" y2="180" stroke="#9b9c92" stroke-width="0.3"/><text x="10" y="190" font-size="5">STUDIO / Ontwerpblad</text><text x="10" y="198" font-size="3">Revisie ${scene.revision} · 1:${scale} · A4 liggend · Print op 100%</text><line id="scale-reference-${referenceMm}mm" x1="175" y1="195" x2="${175 + referenceMm / scale}" y2="195" stroke="#343b32" stroke-width="0.5"/><text x="175" y="191" font-size="3">${referenceMm.toLocaleString("nl-NL")} mm</text><text x="90" y="184" font-size="3" fill="#697164">LEGENDA</text>${legend}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="297mm" height="210mm" viewBox="0 0 297 210"><rect width="297" height="210" fill="white"/><g font-family="Arial,sans-serif" transform="translate(10 12) scale(${1 / scale}) translate(${-minX} ${-minY})">${walls}${cuts}${openings}${beamShapes}${leds}${items}${annotations}</g><g font-family="Arial,sans-serif" fill="#343b32"><line x1="10" y1="180" x2="287" y2="180" stroke="#9b9c92" stroke-width="0.3"/><text x="10" y="190" font-size="5">STUDIO / Ontwerpblad</text><text x="10" y="197" font-size="3">Revisie ${scene.revision} · 1:${scale} · A4 liggend · Print op 100%</text>${options.beams ? `<text x="10" y="202" font-size="3" fill="#697164">Lichtbundels getoond: visuele benadering, geen lichtberekening.</text>` : ""}<text x="10" y="205.5" font-size="3">${referenceMm.toLocaleString("nl-NL")} mm</text><line id="scale-reference-${referenceMm}mm" x1="10" y1="208" x2="${10 + referenceMm / scale}" y2="208" stroke="#343b32" stroke-width="0.5"/><text x="120" y="184" font-size="3" fill="#697164">LEGENDA</text>${legend}${kinds.size ? `<text x="205" y="184" font-size="3" fill="#697164">SYMBOLEN</text>${symbolLegend}` : ""}</g></svg>`;
 }

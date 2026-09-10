@@ -2422,13 +2422,14 @@ test("LED-strip tekenen → lengte uit de tekening → bestellengte → planblad
   if (ownerCookies.length) await page.context().addCookies(ownerCookies);
   await page.goto("/");
   // De herstelroute meldt zich af, dus een bewaarde sessie kan verlopen zijn.
-  // Staat het aanmeldscherm er, dan meldt deze route zich gewoon zelf aan.
-  if (
-    await page
+  // Eerst wachten tot de app iets laat zien: het aanmeldscherm of de projecten.
+  await expect(
+    page
       .getByLabel("E-mailadres")
-      .isVisible()
-      .catch(() => false)
-  ) {
+      .or(page.getByRole("button", { name: "Nieuw project", exact: true }))
+      .first(),
+  ).toBeVisible();
+  if (await page.getByLabel("E-mailadres").isVisible()) {
     await page.getByLabel("E-mailadres").fill(credentials.email);
     await page
       .getByLabel("Wachtwoord", { exact: true })
@@ -2542,5 +2543,135 @@ test("LED-strip tekenen → lengte uit de tekening → bestellengte → planblad
   await saved();
   await page.getByRole("button", { name: "Keukenlijst", exact: true }).click();
   expect(await measured()).toBe(metres.toFixed(3).replace(".", ","));
+  expect(errors).toEqual([]);
+});
+
+test("spot en wandcontact plaatsen → bundel tonen → symbolenlegenda op het blad", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) await page.context().addCookies(ownerCookies);
+  await page.goto("/");
+  // Wachten tot de app iets toont, anders is niet te zien of aanmelden nodig is.
+  await expect(
+    page
+      .getByLabel("E-mailadres")
+      .or(page.getByRole("button", { name: "Nieuw project", exact: true }))
+      .first(),
+  ).toBeVisible();
+  if (await page.getByLabel("E-mailadres").isVisible()) {
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+    ownerCookies = await page.context().cookies();
+  }
+  await page
+    .getByRole("button", { name: "Nieuw project", exact: true })
+    .click();
+  await page.getByLabel("Projectnaam").fill("Elektrastudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+
+  // Een spot: verlichting, met een bundel die uit hoogte en hoek volgt.
+  // De knop draagt ook zijn ondertitel, dus hier geen exacte naam.
+  await page.getByRole("button", { name: "Spot" }).click();
+  await saved();
+  await expect(page.getByRole("heading", { name: "Inbouwspot" })).toBeVisible();
+  await expect(page.getByLabel("Montagehoogte", { exact: true })).toHaveValue(
+    "2700",
+  );
+  await expect(page.getByLabel("Bundelhoek", { exact: true })).toHaveValue(
+    "36",
+  );
+  // Papiermaat en fysieke maat zijn verschillende dingen en staan er allebei.
+  await expect(page.locator(".properties")).toContainText(
+    "Symbool 300 mm op papier",
+  );
+  await expect(page.locator(".properties")).toContainText(
+    "90 × 90 mm in het echt",
+  );
+  // 2 x 2700 x tan(18 graden) = 1755 mm.
+  await expect(page.locator(".properties")).toContainText("1755 mm doorsnede");
+  await expect(page.locator(".properties")).toContainText(
+    "Geen lux, geen lichtberekening",
+  );
+
+  // Hoger hangen maakt de bundel groter; de formule staat erbij.
+  await page.getByLabel("Montagehoogte", { exact: true }).fill("3000");
+  await page.getByLabel("Groep", { exact: true }).fill("Groep 2");
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  await expect(page.locator(".properties")).toContainText("1950 mm doorsnede");
+  await expect(page.getByLabel("Groep", { exact: true })).toHaveValue(
+    "Groep 2",
+  );
+
+  // Elektra straalt niet en heeft dus geen bundelvelden.
+  await page.getByRole("button", { name: "Wandcontact" }).click();
+  await saved();
+  await expect(
+    page.getByRole("heading", { name: "Wandcontactdoos" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Bundelhoek", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".properties")).not.toContainText(
+    "Bundel op de vloer",
+  );
+
+  // De bundels aanzetten en het blad ophalen: alleen dan staan ze erop.
+  const sheet = async (name: string) => {
+    const download = page.waitForEvent("download");
+    await page
+      .getByRole("button", { name: "Planblad SVG", exact: true })
+      .click();
+    await (await download).saveAs(name);
+    return readFile(name, "utf8");
+  };
+  const zonder = await sheet("outputs/elektra-zonder-bundel.svg");
+  expect(zonder).not.toContain("Lichtbundels getoond");
+  expect(zonder).toContain("SYMBOLEN");
+  expect(zonder).toContain("Inbouwspot × 1");
+  expect(zonder).toContain("Wandcontactdoos × 1");
+
+  await page
+    .getByRole("button", { name: "Lichtbundels uit", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Lichtbundels aan", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  await page.screenshot({ path: "outputs/qa/lichtbundel.png" });
+  const met = await sheet("outputs/elektra-met-bundel.svg");
+  expect(met).toContain("Lichtbundels getoond");
+  expect(met).toContain("visuele benadering, geen lichtberekening");
+  // De bundel is een cirkel met de straal die het paneel noemt.
+  const circle = /<circle cx="([-\d.]+)" cy="([-\d.]+)" r="([\d.]+)"/.exec(met);
+  if (!circle) throw new Error("Geen lichtbundel op het planblad gevonden");
+  expect(Number(circle[3])).toBeCloseTo(
+    3000 * Math.tan((18 * Math.PI) / 180),
+    3,
+  );
+
+  // Herladen: het punt en zijn groep staan op de server.
+  await page.reload();
+  await saved();
+  await page.getByRole("button", { name: "Inbouwspot", exact: true }).click();
+  await expect(page.getByLabel("Groep", { exact: true })).toHaveValue(
+    "Groep 2",
+  );
+  await expect(page.getByLabel("Montagehoogte", { exact: true })).toHaveValue(
+    "3000",
+  );
   expect(errors).toEqual([]);
 });

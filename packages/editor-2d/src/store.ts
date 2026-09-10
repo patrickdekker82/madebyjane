@@ -29,6 +29,9 @@ export const useEditor = create<{
    */
   ledDraft: { x: number; y: number }[];
   setLedDraft: (points: { x: number; y: number }[]) => void;
+  /** Lichtbundels tonen; een visuele benadering, geen lichtberekening. */
+  beams: boolean;
+  toggleBeams: () => void;
   setTool: (tool: Tool) => void;
   select: (id: string | null) => void;
   /** Voegt toe of haalt weg, voor shift- of ctrl-klikken. */
@@ -49,6 +52,8 @@ export const useEditor = create<{
   objectSnap: true,
   ledDraft: [],
   setLedDraft: (ledDraft) => set({ ledDraft }),
+  beams: false,
+  toggleBeams: () => set((s) => ({ beams: !s.beams })),
   setTool: (tool) => set({ tool, selected: [], ledDraft: [] }),
   select: (id) => set({ selected: id ? [id] : [] }),
   toggleSelected: (id) =>

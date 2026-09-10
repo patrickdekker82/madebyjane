@@ -1,7 +1,7 @@
 import { MaterialService } from "../../../packages/domain/src/materials";
 import { QuoteService } from "../../../packages/domain/src/quotes";
-import {QuoteResources} from "../../../packages/domain/src/quote-resources";
-import {QuoteDelivery} from "../../../packages/domain/src/quote-delivery";
+import { QuoteResources } from "../../../packages/domain/src/quote-resources";
+import { QuoteDelivery } from "../../../packages/domain/src/quote-delivery";
 import { ModelAssetService } from "../../../packages/domain/src/model-assets";
 import { UnderlayAssetService } from "../../../packages/domain/src/underlay-assets";
 import { libraryQuerySchema } from "../../../packages/contracts/src/index";
@@ -186,82 +186,285 @@ export function createServer(config: {
     },
   );
   const models = new ModelAssetService(config.runtime);
-  app.addContentTypeParser("application/octet-stream", { parseAs: "buffer" }, (_req, body, done) => done(null, body));
-  app.post("/api/v1/model-assets/:id", {
-    bodyLimit: 10485760,
-    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
-    onRequest: async req => {
-      const ctx = await context(req.headers);
-      if (!canWrite(ctx.role)) throw new DomainError("FORBIDDEN", "Je hebt alleen leestoegang.", 403);
-      z.object({ id }).parse(req.params);
+  app.addContentTypeParser(
+    "application/octet-stream",
+    { parseAs: "buffer" },
+    (_req, body, done) => done(null, body),
+  );
+  app.post(
+    "/api/v1/model-assets/:id",
+    {
+      bodyLimit: 10485760,
+      config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+      onRequest: async (req) => {
+        const ctx = await context(req.headers);
+        if (!canWrite(ctx.role))
+          throw new DomainError(
+            "FORBIDDEN",
+            "Je hebt alleen leestoegang.",
+            403,
+          );
+        z.object({ id }).parse(req.params);
+      },
     },
-  }, async req => {
-    const assetId = z.object({ id }).parse(req.params).id;
-    if (!Buffer.isBuffer(req.body)) throw new DomainError("INVALID_MODEL", "Upload het GLB-bestand als binair bestand.", 415);
-    return models.upload(await context(req.headers), assetId, req.body);
-  });
+    async (req) => {
+      const assetId = z.object({ id }).parse(req.params).id;
+      if (!Buffer.isBuffer(req.body))
+        throw new DomainError(
+          "INVALID_MODEL",
+          "Upload het GLB-bestand als binair bestand.",
+          415,
+        );
+      return models.upload(await context(req.headers), assetId, req.body);
+    },
+  );
   app.get("/api/v1/model-assets/:id", async (req, reply) => {
     const assetId = z.object({ id }).parse(req.params).id;
     const model = await models.get(await context(req.headers), assetId);
-    return reply.type("application/octet-stream").header("Content-Disposition", 'attachment; filename="geometry.bin"').send(model.positions);
+    return reply
+      .type("application/octet-stream")
+      .header("Content-Disposition", 'attachment; filename="geometry.bin"')
+      .send(model.positions);
   });
   const underlays = new UnderlayAssetService(config.runtime);
-  app.post("/api/v1/underlay-assets/:id", {
-    bodyLimit: 16777216,
-    config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
-    onRequest: async req => {
-      const ctx = await context(req.headers);
-      if (!canWrite(ctx.role)) throw new DomainError("FORBIDDEN", "Je hebt alleen leestoegang.", 403);
-      z.object({ id }).parse(req.params);
+  app.post(
+    "/api/v1/underlay-assets/:id",
+    {
+      bodyLimit: 16777216,
+      config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+      onRequest: async (req) => {
+        const ctx = await context(req.headers);
+        if (!canWrite(ctx.role))
+          throw new DomainError(
+            "FORBIDDEN",
+            "Je hebt alleen leestoegang.",
+            403,
+          );
+        z.object({ id }).parse(req.params);
+      },
     },
-  }, async req => {
-    const assetId = z.object({ id }).parse(req.params).id;
-    if (!Buffer.isBuffer(req.body)) throw new DomainError("INVALID_IMAGE", "Upload de afbeelding als binair bestand.", 415);
-    return underlays.upload(await context(req.headers), assetId, req.body);
-  });
+    async (req) => {
+      const assetId = z.object({ id }).parse(req.params).id;
+      if (!Buffer.isBuffer(req.body))
+        throw new DomainError(
+          "INVALID_IMAGE",
+          "Upload de afbeelding als binair bestand.",
+          415,
+        );
+      return underlays.upload(await context(req.headers), assetId, req.body);
+    },
+  );
   app.get("/api/v1/underlay-assets/:id", async (req, reply) => {
     const assetId = z.object({ id }).parse(req.params).id;
     const image = await underlays.get(await context(req.headers), assetId);
     // Vast content-type uit de gelezen bestandskop, nooit uit de invoer van de
     // client; met nosniff kan de browser er niets anders van maken.
-    return reply.type(image.mime).header("Content-Security-Policy", "default-src 'none'").send(image.bytes);
+    return reply
+      .type(image.mime)
+      .header("Content-Security-Policy", "default-src 'none'")
+      .send(image.bytes);
   });
   const materials = new MaterialService(config.runtime);
   const quotes = new QuoteService(config.runtime);
-  const resources=new QuoteResources(config.runtime),delivery=new QuoteDelivery(config.runtime,config.secret);
-  const versionParams=(params:unknown)=>z.object({id,quoteId:id,version:z.coerce.number().int().min(1).max(500)}).parse(params);
-  app.get("/api/v1/projects/:id/quote-resources",async req=>resources.list(await context(req.headers),z.object({id}).parse(req.params).id));
-  app.post("/api/v1/projects/:id/quote-prices",async req=>resources.price(await context(req.headers),z.object({id}).parse(req.params).id,req.body));
-  app.post("/api/v1/projects/:id/quote-attachments",async req=>resources.attachment(await context(req.headers),z.object({id}).parse(req.params).id,req.body));
-  app.get("/api/v1/projects/:id/quote-design/:revisionId",async req=>{const p=z.object({id,revisionId:id}).parse(req.params);return resources.design(await context(req.headers),p.id,p.revisionId);});
-  const quoteParams = (params:unknown) => z.object({id, quoteId:id}).parse(params);
-  app.get("/api/v1/projects/:id/quotes", async req => quotes.list(await context(req.headers), z.object({id}).parse(req.params).id));
-  app.post("/api/v1/projects/:id/quotes", async req => quotes.save(await context(req.headers), z.object({id}).parse(req.params).id, req.body));
-  app.get("/api/v1/projects/:id/quotes/:quoteId/differences", async req => {
-    const p=quoteParams(req.params); return quotes.differences(await context(req.headers),p.id,p.quoteId);
+  const resources = new QuoteResources(config.runtime),
+    delivery = new QuoteDelivery(config.runtime, config.secret);
+  const versionParams = (params: unknown) =>
+    z
+      .object({
+        id,
+        quoteId: id,
+        version: z.coerce.number().int().min(1).max(500),
+      })
+      .parse(params);
+  app.get("/api/v1/projects/:id/quote-resources", async (req) =>
+    resources.list(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+    ),
+  );
+  app.post("/api/v1/projects/:id/quote-prices", async (req) =>
+    resources.price(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+      req.body,
+    ),
+  );
+  app.post("/api/v1/projects/:id/quote-attachments", async (req) =>
+    resources.attachment(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+      req.body,
+    ),
+  );
+  app.get("/api/v1/projects/:id/quote-design/:revisionId", async (req) => {
+    const p = z.object({ id, revisionId: id }).parse(req.params);
+    return resources.design(await context(req.headers), p.id, p.revisionId);
   });
-  app.post("/api/v1/projects/:id/quotes/:quoteId/finalize", async req => {
-    const p=quoteParams(req.params); return quotes.finalize(await context(req.headers),p.id,p.quoteId,req.body);
+  const quoteParams = (params: unknown) =>
+    z.object({ id, quoteId: id }).parse(params);
+  app.get("/api/v1/projects/:id/quotes", async (req) =>
+    quotes.list(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+    ),
+  );
+  app.post("/api/v1/projects/:id/quotes", async (req) =>
+    quotes.save(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+      req.body,
+    ),
+  );
+  app.get("/api/v1/projects/:id/quotes/:quoteId/differences", async (req) => {
+    const p = quoteParams(req.params);
+    return quotes.differences(await context(req.headers), p.id, p.quoteId);
   });
-  app.get("/api/v1/projects/:id/quotes/:quoteId/history",async req=>{const p=quoteParams(req.params);return quotes.history(await context(req.headers),p.id,p.quoteId);});
-  app.get("/api/v1/projects/:id/quotes/:quoteId/versions/:version",async req=>{const p=versionParams(req.params);return quotes.get(await context(req.headers),p.id,p.quoteId,p.version);});
-  app.post("/api/v1/projects/:id/quotes/:quoteId/revise",async req=>{const p=quoteParams(req.params);return quotes.revise(await context(req.headers),p.id,p.quoteId,req.body);});
-  app.get("/api/v1/projects/:id/quotes/:quoteId/versions/:version/events",async req=>{const p=versionParams(req.params);return quotes.events(await context(req.headers),p.id,p.quoteId,p.version);});
-  app.post("/api/v1/projects/:id/quotes/:quoteId/versions/:version/events",async req=>{const p=versionParams(req.params);return quotes.transition(await context(req.headers),p.id,p.quoteId,p.version,req.body);});
-  app.get("/api/v1/projects/:id/quotes/:quoteId/versions/:version/pdf",{config:{rateLimit:{max:10,timeWindow:"1 minute"}}},async(req,reply)=>{const p=versionParams(req.params),r=await delivery.export(await context(req.headers),p.id,p.quoteId,p.version);return reply.type("application/pdf").header("Content-Disposition",`attachment; filename="offerte-v${p.version}.pdf"`).header("X-Content-SHA256",r.pdf_hash).send(r.pdf);});
-  app.get("/api/v1/projects/:id/quotes/:quoteId/versions/:version/shares",async req=>{const p=versionParams(req.params);return delivery.shares(await context(req.headers),p.id,p.quoteId,p.version);});
-  app.post("/api/v1/projects/:id/quotes/:quoteId/versions/:version/shares",{config:{rateLimit:{max:10,timeWindow:"1 minute"}}},async req=>{const p=versionParams(req.params);return delivery.share(await context(req.headers),p.id,p.quoteId,p.version,req.body);});
-  app.post("/api/v1/quote-shares/:id/revoke",async req=>delivery.revoke(await context(req.headers),z.object({id}).parse(req.params).id));
-  app.get("/api/v1/quote-shares/:organization/:token",{config:{rateLimit:{max:30,timeWindow:"1 minute"}}},async(req,reply)=>{const p=z.object({organization:id,token:z.string().regex(/^[A-Za-z0-9_-]{43}$/)}).parse(req.params),r=await delivery.publicPdf(p.organization,p.token);return reply.type("application/pdf").header("Content-Disposition",'attachment; filename="offerte.pdf"').send(r.pdf);});
-  app.get("/api/v1/projects/:id/materials", async req => materials.list(await context(req.headers), z.object({ id }).parse(req.params).id));
-  app.get("/api/v1/projects/:id/quantities", async req => {
+  app.post("/api/v1/projects/:id/quotes/:quoteId/finalize", async (req) => {
+    const p = quoteParams(req.params);
+    return quotes.finalize(
+      await context(req.headers),
+      p.id,
+      p.quoteId,
+      req.body,
+    );
+  });
+  app.get("/api/v1/projects/:id/quotes/:quoteId/history", async (req) => {
+    const p = quoteParams(req.params);
+    return quotes.history(await context(req.headers), p.id, p.quoteId);
+  });
+  app.get(
+    "/api/v1/projects/:id/quotes/:quoteId/versions/:version",
+    async (req) => {
+      const p = versionParams(req.params);
+      return quotes.get(await context(req.headers), p.id, p.quoteId, p.version);
+    },
+  );
+  app.post("/api/v1/projects/:id/quotes/:quoteId/revise", async (req) => {
+    const p = quoteParams(req.params);
+    return quotes.revise(await context(req.headers), p.id, p.quoteId, req.body);
+  });
+  app.get(
+    "/api/v1/projects/:id/quotes/:quoteId/versions/:version/events",
+    async (req) => {
+      const p = versionParams(req.params);
+      return quotes.events(
+        await context(req.headers),
+        p.id,
+        p.quoteId,
+        p.version,
+      );
+    },
+  );
+  app.post(
+    "/api/v1/projects/:id/quotes/:quoteId/versions/:version/events",
+    async (req) => {
+      const p = versionParams(req.params);
+      return quotes.transition(
+        await context(req.headers),
+        p.id,
+        p.quoteId,
+        p.version,
+        req.body,
+      );
+    },
+  );
+  app.get(
+    "/api/v1/projects/:id/quotes/:quoteId/versions/:version/pdf",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const p = versionParams(req.params),
+        r = await delivery.export(
+          await context(req.headers),
+          p.id,
+          p.quoteId,
+          p.version,
+        );
+      return reply
+        .type("application/pdf")
+        .header(
+          "Content-Disposition",
+          `attachment; filename="offerte-v${p.version}.pdf"`,
+        )
+        .header("X-Content-SHA256", r.pdf_hash)
+        .send(r.pdf);
+    },
+  );
+  app.get(
+    "/api/v1/projects/:id/quotes/:quoteId/versions/:version/shares",
+    async (req) => {
+      const p = versionParams(req.params);
+      return delivery.shares(
+        await context(req.headers),
+        p.id,
+        p.quoteId,
+        p.version,
+      );
+    },
+  );
+  app.post(
+    "/api/v1/projects/:id/quotes/:quoteId/versions/:version/shares",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (req) => {
+      const p = versionParams(req.params);
+      return delivery.share(
+        await context(req.headers),
+        p.id,
+        p.quoteId,
+        p.version,
+        req.body,
+      );
+    },
+  );
+  app.post("/api/v1/quote-shares/:id/revoke", async (req) =>
+    delivery.revoke(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+    ),
+  );
+  app.get(
+    "/api/v1/quote-shares/:organization/:token",
+    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const p = z
+          .object({
+            organization: id,
+            token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+          })
+          .parse(req.params),
+        r = await delivery.publicPdf(p.organization, p.token);
+      return reply
+        .type("application/pdf")
+        .header("Content-Disposition", 'attachment; filename="offerte.pdf"')
+        .send(r.pdf);
+    },
+  );
+  app.get("/api/v1/projects/:id/materials", async (req) =>
+    materials.list(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+    ),
+  );
+  app.get("/api/v1/projects/:id/quantities", async (req) => {
     const { variantId } = z.object({ variantId: id }).parse(req.query);
-    return materials.quantities(await context(req.headers), z.object({ id }).parse(req.params).id, variantId);
+    return materials.quantities(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+      variantId,
+    );
   });
-  app.post("/api/v1/projects/:id/materials", async req => materials.publish(await context(req.headers), z.object({ id }).parse(req.params).id, req.body));
+  app.post("/api/v1/projects/:id/materials", async (req) =>
+    materials.publish(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+      req.body,
+    ),
+  );
   const library = new LibraryService(config.runtime);
   app.get("/api/v1/library", async (req) => {
-    return library.list(await context(req.headers), libraryQuerySchema.parse(req.query));
+    return library.list(
+      await context(req.headers),
+      libraryQuerySchema.parse(req.query),
+    );
   });
   app.post("/api/v1/library", async (req) =>
     library.publish(await context(req.headers), req.body),
@@ -330,14 +533,23 @@ export function createServer(config: {
       await context(req.headers),
       variant(req.params),
     );
-    const scale = z
-      .object({ scale: z.enum(["20", "50", "100"]).default("50") })
-      .parse(req.query).scale;
+    const options = z
+      .object({
+        scale: z.enum(["20", "50", "100"]).default("50"),
+        // De bundels zijn een weergavekeuze in de editor; het blad volgt wat
+        // daar aan staat, zodat wat je ziet is wat er op papier komt.
+        beams: z.enum(["0", "1"]).default("0"),
+      })
+      .parse(req.query);
     try {
       return reply
         .type("image/svg+xml")
         .header("Content-Disposition", 'attachment; filename="ontwerpblad.svg"')
-        .send(planSvg(scene, Number(scale) as 20 | 50 | 100));
+        .send(
+          planSvg(scene, Number(options.scale) as 20 | 50 | 100, {
+            beams: options.beams === "1",
+          }),
+        );
     } catch (e) {
       throw new DomainError(
         "PLAN_DOES_NOT_FIT",

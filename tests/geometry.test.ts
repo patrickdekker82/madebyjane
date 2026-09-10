@@ -151,7 +151,11 @@ test("vectorplan heeft fysieke mm, correcte 5m referentie en weigert niet-passen
     svg = planSvg(s);
   expect(svg).toContain('width="297mm" height="210mm"');
   expect(svg).toContain("scale(0.02)");
-  expect(svg).toContain('x2="275"');
+  // De 5 m referentie moet op papier precies 100 mm lang zijn; waar hij in het
+  // titelblok staat mag veranderen, zijn lengte niet.
+  const reference =
+    /id="scale-reference-5000mm" x1="([\d.]+)"[^/]*x2="([\d.]+)"/.exec(svg)!;
+  expect(Number(reference[2]) - Number(reference[1])).toBeCloseTo(100, 6);
   expect(() => planSvg(s, 20)).toThrow(/past niet/);
 });
 

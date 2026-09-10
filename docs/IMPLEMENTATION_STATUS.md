@@ -577,3 +577,48 @@ De browsertest vergelijkt de lengte in het paneel met de lengte die uit het plan
 ### Nog open in fase 4
 
 **Elektra- en lichtsymbolen** (wandcontactdozen, schakelaars, lichtpunten, spots, wandarmaturen) met hoogte, oriëntatie, label en groep; **armatuurvelden** (bundelhoek, kleurtemperatuur, dimniveau, fabrikantwaarden als losse grootheden); **circuits en lichtscènes**; en de **2D-uitstraling** met sectoren en legenda. Fase 4 is daarmee niet afgerond. De symbolenlegenda op het planblad wacht nog steeds op die symbolen.
+
+## Aanvulling 10 september 2026 — fase 4: elektra, armaturen en lichtbundels
+
+De tweede helft van het lichtplan. Zes soorten punten zijn te plaatsen: wandcontactdoos, schakelaar, lichtpunt plafond, inbouwspot, wandarmatuur en hanglamp. Elektra komt op de laag Elektra, verlichting op de laag Verlichting.
+
+### Papier en werkelijkheid uit elkaar
+
+Het masterprompt vraagt expliciet om verschil tussen de symbolische grootte op papier en de fysieke maat van een armatuur. Een armatuur heeft daarom **twee maten die niets met elkaar te maken hebben**: `width`/`depth` blijven de echte inbouwmaat (een spot is 90 mm), en `symbolSizeMm` is de maat waarop het teken op de plattegrond staat (300 mm). Zonder dat onderscheid zou een spot op 1:50 minder dan twee tienden millimeter groot zijn. Het eigenschappenpaneel toont beide naast elkaar en zegt erbij dat het symbool een tekenafspraak is en geen maatvoering.
+
+De symbolen zelf gebruiken dezelfde veilige primitieven als de symbooleditor uit fase 3 — rechthoek, ellips en lijn in een genormaliseerd vierkant — dus er komt geen JavaScript of losse HTML aan te pas. Een test controleert dat elk vast symbool door hetzelfde schema komt als een zelfgemaakt symbool.
+
+### Lichtbundels als benadering, en niet meer dan dat
+
+De 2D-uitstraling is schakelbaar met **Lichtbundels** in de statusbalk. Een plafondpunt, spot of hanglamp levert een cirkel, een wandarmatuur een sector rond zijn eigen richting. De straal volgt uit één formule die nergens verstopt zit:
+
+    straal = (montagehoogte − werkvlak) × tan(bundelhoek / 2)
+
+Het paneel toont die formule bij de uitkomst. Er komt **geen lux uit, geen luxkaart en geen UGR-waarde**; het blad zegt dat er ook bij zodra bundels getoond worden. Lichtstroom (lumen) en opgenomen vermogen (watt) staan als losse fabrikantwaarden naast elkaar en worden niet uit elkaar afgeleid — dat zijn verschillende grootheden.
+
+Het planblad volgt wat er in de editor aan staat: de exportknop stuurt de keuze mee. Wat je op het scherm ziet, komt op papier.
+
+### De symbolenlegenda die sinds fase 2 openstond
+
+Het tekenblad heeft nu een tweede legendakolom **SYMBOLEN** met het teken zelf naast de naam en het aantal. Die stond open sinds fase 2 en kon pas met deze symbolen gemaakt worden. Het titelblok is daarvoor opnieuw ingedeeld in drie kolommen — titel met schaalbalk links, lagenlegenda in het midden, symbolen rechts — omdat de nieuwe kolom anders over de schaalbalk heen viel.
+
+### Drie fouten onderweg
+
+- **Streepdikte buiten het schema.** De vaste symbolen gebruikten dikten tot 60 waar het symboolschema er hoogstens 30 toestaat. De eerste test viel er meteen op; de symbolen zijn nu binnen de grenzen die ook voor zelfgemaakte symbolen gelden.
+- **"L I C H T" onder elk armatuur.** Elk object krijgt op het canvas een woord in het midden. In een tekstvak van 90 mm breed brak "LICHT" af tot losse letters onder de spot. Een armatuur draagt nu geen woord meer in de tekening: het symbool is het label en de naam staat in de objectlijst. Op het blad gold hetzelfde.
+- **Punten die op elkaar stapelden.** Elk nieuw punt kwam op dezelfde plek, zodat het tweede onzichtbaar onder het eerste lag. Ze komen nu trapsgewijs naast elkaar.
+
+De eerste twee zijn gevonden door een schermafbeelding te bekijken, niet door een test.
+
+### Verificatie 10 september, Linux x64, Node 22.22.2
+
+- **187 tests / 24 bestanden geslaagd, 34,5 s** (was 173). Veertien nieuwe tests: elk vast symbool geldig volgens het symboolschema, de cirkel van een spot met narekenbare straal, de sector van een wandarmatuur rond zijn richting, elektra dat niet straalt, geen bundel zonder hoek of onder het werkvlak, een hoger werkvlak dat de bundel evenredig verkleint, de omhullende doos, een eigenschapstest met 200 gevallen dat de straal met hoogte én hoek groeit, de juiste laag en het onderscheid tussen papier- en fysieke maat, `SetFixture` dat alleen op een punt werkt en niet op een meubel of een vergrendeld object, bundels die alleen op het blad staan als erom gevraagd is, en de symbolenlegenda die precies noemt wat er getoond wordt.
+- **19 browserroutes geslaagd, 2,5 min.** De nieuwe route plaatst een spot, controleert dat papiermaat en fysieke maat allebei benoemd staan, rekent de bundeldoorsnede na (2 × 2700 × tan 18° = 1755 mm), hangt hem hoger en ziet 1950 mm, plaatst een wandcontactdoos en controleert dat elektra geen bundelvelden heeft, haalt het blad op zonder en met bundels, en meet de straal van de cirkel op het blad na.
+- TypeScript strict en productiebuild geslaagd (12,0 s).
+- Canvas en het naar afbeelding gerenderde planblad bekeken, drie keer: bij het vinden van de letterfout, na het opschonen, en na het herindelen van het titelblok.
+
+Een bestaande test op het planblad prikte op de exacte x-positie van de schaalreferentie. Die controleert nu de **lengte** van de lijn — 100 mm bij 1:50 — want dat is wat er moet kloppen; waar hij in het titelblok staat mag veranderen.
+
+### Nog open in fase 4
+
+Circuits en lichtscènes zijn nu vrije tekstvelden per punt; er is nog geen overzicht dat een groep of scène als geheel toont of schakelt. De 3D-uitstraling (lichtbronnen, schaduwen, emissieve stripmaterialen) hoort bij fase 7. Fase 4 is daarmee dicht bij afronding maar niet afgerond.

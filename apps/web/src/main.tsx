@@ -63,6 +63,11 @@ import {
   Armchair,
   HardDriveDownload,
   Zap,
+  Lightbulb,
+  Plug,
+  ToggleLeft,
+  Sun,
+  Lamp,
 } from "lucide-react";
 import { api, login, logout, authRequest, ApiError } from "./api";
 import { Arrange } from "./Arrange";
@@ -71,6 +76,8 @@ import { LayerPanel } from "./Layers";
 import { UnderlayPanel } from "./Underlay";
 import { DimensionProperties, NoteProperties } from "./DimensionProperties";
 import { LedProperties } from "./LedProperties";
+import { FixtureProperties } from "./FixtureProperties";
+import { newFixtureItem } from "../../../packages/editor-2d/src/fixture-draft";
 import { newLedPath } from "../../../packages/editor-2d/src/led-draft";
 import { ledLengthMm } from "../../../packages/geometry/src/index";
 import { formatMm } from "../../../packages/geometry/src/index";
@@ -832,6 +839,8 @@ function Editor() {
     selectMany,
     ledDraft,
     setLedDraft,
+    beams,
+    toggleBeams,
   } = useEditor();
   useEffect(() => {
     if (query.data) {
@@ -1165,9 +1174,15 @@ function Editor() {
   const download = async () => {
     setError("");
     try {
-      const r = await fetch("/api/v1/variants/" + variantId + "/plan.svg", {
-        headers: { "x-organization-id": org.id },
-      });
+      const r = await fetch(
+        "/api/v1/variants/" +
+          variantId +
+          "/plan.svg?beams=" +
+          (beams ? "1" : "0"),
+        {
+          headers: { "x-organization-id": org.id },
+        },
+      );
       if (!r.ok) throw new Error((await r.json()).message);
       saveBlob(await r.blob(), "ontwerpblad-1-50.svg");
     } catch (e) {
@@ -1484,6 +1499,40 @@ function Editor() {
               select(id);
             }}
           />
+          <span className="eyebrow">ELEKTRA EN VERLICHTING</span>
+          <div className="library-grid">
+            {(
+              [
+                { kind: "socket", label: "Wandcontact", icon: Plug },
+                { kind: "switch", label: "Schakelaar", icon: ToggleLeft },
+                { kind: "ceiling", label: "Lichtpunt", icon: Lightbulb },
+                { kind: "spot", label: "Spot", icon: Sun },
+                { kind: "wall", label: "Wandarmatuur", icon: Lamp },
+                { kind: "pendant", label: "Hanglamp", icon: Lightbulb },
+              ] as const
+            ).map((x) => (
+              <button
+                key={x.kind}
+                disabled={disabled}
+                onClick={() => {
+                  // Elk volgend punt komt een halve meter verderop, anders
+                  // stapelen ze precies op elkaar en lijkt er niets te gebeuren.
+                  const step = scene.items.filter((i) => i.fixture).length % 8;
+                  const point = newFixtureItem(
+                    x.kind,
+                    1500 + step * 500,
+                    1500 + step * 300,
+                  );
+                  command([{ type: "PlaceItem", item: point }]);
+                  select(point.id);
+                }}
+              >
+                <x.icon size={22} strokeWidth={1.2} />
+                <span>{x.label}</span>
+                <small>Symbool op papier</small>
+              </button>
+            ))}
+          </div>
           <span className="eyebrow">MEUBELS TOEVOEGEN</span>
           <div className="library-grid">
             {(
@@ -1631,7 +1680,14 @@ function Editor() {
             <h2>Eigenschappen</h2>
             <MousePointer2 size={15} />
           </div>
-          {item ? (
+          {item?.fixture ? (
+            <FixtureProperties
+              key={item.id + ":" + scene.revision}
+              item={{ ...item, fixture: item.fixture }}
+              disabled={disabled}
+              onCommand={command}
+            />
+          ) : item ? (
             <ItemProperties
               key={
                 item.id +
@@ -1747,6 +1803,14 @@ function Editor() {
           >
             <Magnet size={13} />
             {objectSnap ? "Vangen aan objecten" : "Vangen uit"}
+          </button>
+          <button
+            className={beams ? "active" : ""}
+            onClick={toggleBeams}
+            title="Toont waar het licht ongeveer op de vloer valt. Een visuele benadering, geen lichtberekening."
+          >
+            <Lightbulb size={13} />
+            {beams ? "Lichtbundels aan" : "Lichtbundels uit"}
           </button>
           <button
             className={localRecovery ? "active" : ""}

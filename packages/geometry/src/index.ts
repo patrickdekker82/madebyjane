@@ -137,6 +137,8 @@ export {
   type Calibration,
 } from "./underlay";
 export { ledLengthMm, ledSegments, ledCornerCount, ledBounds } from "./led";
+export { beamFootprint, beamBounds, type BeamFootprint } from "./beam";
+export { fixtureSymbols, defaultSymbolSizeMm } from "./fixture-symbols";
 export {
   dimensionGeometry,
   formatMm,

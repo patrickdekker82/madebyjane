@@ -164,6 +164,18 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
           s.walls.some((w) => w.startId === n.id || w.endId === n.id),
         );
         break;
+      case "SetFixture": {
+        const item = s.items.find((i) => i.id === op.id);
+        if (!item) throw new Error("Dit punt bestaat niet meer.");
+        if (item.locked)
+          throw new Error(
+            "Dit punt is vergrendeld. Ontgrendel het eerst om het te wijzigen.",
+          );
+        if (!item.fixture)
+          throw new Error("Dit object is geen elektra- of verlichtingspunt.");
+        item.fixture = structuredClone(op.fixture);
+        break;
+      }
       case "AddLedPath":
         if (s.ledPaths.some((l) => l.id === op.path.id))
           throw new Error("Deze LED-strip bestaat al.");

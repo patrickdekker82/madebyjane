@@ -108,6 +108,64 @@ export const itemLayerSchema = z.enum([
   "technical",
 ]);
 export type ItemLayer = z.infer<typeof itemLayerSchema>;
+/**
+ * Elektra en verlichting.
+ *
+ * `symbolSizeMm` is de maat waarop het symbool op papier wordt getekend en
+ * staat nadrukkelijk los van `width` en `depth`, die de fysieke maat van het
+ * armatuur blijven. Een wandcontactdoos van 80 mm zou op 1:50 anderhalve
+ * millimeter groot zijn en dus onleesbaar; een spot van 90 mm hetzelfde. Het
+ * symbool is een tekenafspraak, geen maatvoering.
+ *
+ * Lumen en milliwatt staan als losse fabrikantwaarden naast elkaar. Er wordt
+ * nergens tussen omgerekend en er komt geen lux uit: dat zijn verschillende
+ * grootheden en deze app dimensioneert geen installatie.
+ */
+export const fixtureKinds = {
+  socket: "Wandcontactdoos",
+  switch: "Schakelaar",
+  ceiling: "Lichtpunt plafond",
+  spot: "Inbouwspot",
+  wall: "Wandarmatuur",
+  pendant: "Hanglamp",
+} as const;
+export const fixtureKindSchema = z.enum([
+  "socket",
+  "switch",
+  "ceiling",
+  "spot",
+  "wall",
+  "pendant",
+]);
+export type FixtureKind = z.infer<typeof fixtureKindSchema>;
+/** Welke soorten licht geven; de rest is elektra en heeft geen bundel. */
+export const lightingKinds: readonly FixtureKind[] = [
+  "ceiling",
+  "spot",
+  "wall",
+  "pendant",
+];
+export const fixtureSchema = z
+  .object({
+    kind: fixtureKindSchema,
+    /** Hoogte van het punt zelf boven de vloer. */
+    mountHeightMm: z.number().int().min(0).max(20000),
+    symbolSizeMm: z.number().int().min(50).max(2000),
+    /** Groep waar dit punt op zit; vrije tekst, geen installatieberekening. */
+    circuit: z.string().trim().max(60),
+    /** Lichtscene waar dit armatuur in meedoet. */
+    scene: z.string().trim().max(60),
+    /** Bundelhoek in graden; null bij elektra en bij onbekende armaturen. */
+    beamAngle: z.number().int().min(1).max(180).nullable(),
+    colorTemperatureK: z.number().int().min(1000).max(10000).nullable(),
+    dimLevel: z.number().int().min(0).max(100),
+    /** Fabrikantwaarde: lichtstroom. */
+    lumen: z.number().int().min(0).max(200000).nullable(),
+    /** Fabrikantwaarde: opgenomen vermogen, in milliwatt voor hele getallen. */
+    milliwatt: z.number().int().min(0).max(2000000).nullable(),
+  })
+  .strict();
+export type Fixture = z.infer<typeof fixtureSchema>;
 export const itemSchema = z
   .object({
     id,
@@ -141,6 +199,8 @@ export const itemSchema = z
       .strict()
       .optional(),
     kind: z.enum(["sofa", "table", "cabinet", "light"]),
+    /** Aanwezig bij elektra- en verlichtingspunten; ontbreekt bij meubels. */
+    fixture: fixtureSchema.optional(),
   })
   .strict();
 /**
@@ -424,6 +484,10 @@ export const operationSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   z.object({ type: z.literal("AddLedPath"), path: ledPathSchema }).strict(),
+  /** Elektra- en armatuurvelden van een bestaand punt bijwerken. */
+  z
+    .object({ type: z.literal("SetFixture"), id, fixture: fixtureSchema })
+    .strict(),
   /**
    * Een strip bijwerken. De hoekpunten en de losse velden gaan in een opdracht,
    * zodat een sleep met meerdere gewijzigde punten een stap terug is.
