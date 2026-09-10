@@ -1671,3 +1671,123 @@ test("notitie plaatsen → laagpreset → legenda op het planblad", async ({
   expect(complete).toContain("Bank · linnen naturel");
   expect(errors).toEqual([]);
 });
+
+test("meubels groeperen → samen verslepen → groep opheffen", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
+  await page.getByLabel("Projectnaam").fill("Groepstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+  /**
+   * Posities uit het geexporteerde planblad lezen. Een gegroepeerd meubel
+   * aanwijzen selecteert de hele groep, dus het eigenschappenpaneel toont dan
+   * geen losse coordinaten meer; het blad is bovendien echte uitvoer.
+   */
+  let sheet = 0;
+  const positions = async () => {
+    const download = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Planblad SVG", exact: true }).click();
+    const file = `outputs/groepstudio-${sheet++}.svg`;
+    await (await download).saveAs(file);
+    const svg = await readFile(file, "utf8");
+    const read = (name: string) => {
+      const match = new RegExp(
+        `translate\\(([-\\d.]+),([-\\d.]+)\\) rotate\\([^)]*\\)">(?:(?!</g>)[^])*?>${name}<`,
+      ).exec(svg);
+      if (!match) throw new Error("Niet op het planblad gevonden: " + name);
+      return { x: Number(match[1]), y: Number(match[2]) };
+    };
+    return {
+      sofa: read("Bank · linnen naturel"),
+      table: read("Salontafel · eiken"),
+      dining: read("Eettafel · rond"),
+    };
+  };
+  const before = await positions();
+
+  // Bank en salontafel groeperen.
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Salontafel · eiken", exact: true })
+    .click({ modifiers: ["Shift"] });
+  await page.getByRole("button", { name: "Groeperen", exact: true }).click();
+  await saved();
+  await expect(
+    page.getByText("Deze meubels vormen een groep en bewegen samen.", { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: "outputs/qa/groeperen.png" });
+
+  // Eén lid aanwijzen pakt de hele groep; de eettafel blijft erbuiten.
+  await page.getByRole("button", { name: "Eettafel · rond", exact: true }).click();
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "2 meubels geselecteerd", exact: true }),
+  ).toBeVisible();
+
+  // Samen verslepen: beide schuiven even ver op, de eettafel niet.
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  const canvas = page.locator(".canvas-wrap canvas").first();
+  const box = (await canvas.boundingBox())!;
+  const fit = Math.min((box.width - 120) / 6200, (box.height - 120) / 4800);
+  const at = (x: number, y: number) => ({
+    x: box.x + 60 + x * fit,
+    y: box.y + 60 + y * fit,
+  });
+  const grip = at(before.sofa.x, before.sofa.y);
+  await page.mouse.move(grip.x, grip.y);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + 30, grip.y, { steps: 4 });
+  await page.mouse.move(grip.x + 60, grip.y, { steps: 4 });
+  await page.screenshot({ path: "outputs/qa/groep-slepen.png" });
+  await page.mouse.up();
+  await saved();
+  const after = await positions();
+  expect(after.sofa.x).not.toBe(before.sofa.x);
+  expect(after.table.x - before.table.x).toBe(after.sofa.x - before.sofa.x);
+  expect(after.table.y).toBe(before.table.y);
+  expect(after.dining).toEqual(before.dining);
+
+  // Eén stap terug zet de hele groep terug.
+  await page.getByRole("button", { name: "Ongedaan maken", exact: true }).click();
+  await saved();
+  const restored = await positions();
+  expect(restored.sofa).toEqual(before.sofa);
+  expect(restored.table).toEqual(before.table);
+
+  // Opheffen: de bank beweegt weer alleen.
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  await page.getByRole("button", { name: "Groep opheffen", exact: true }).click();
+  await saved();
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Bank · linnen naturel", exact: true }),
+  ).toBeVisible();
+
+  await page.reload();
+  await page.getByRole("button", { name: "Salontafel · eiken", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Salontafel · eiken", exact: true }),
+  ).toBeVisible();
+  expect(errors).toEqual([]);
+});

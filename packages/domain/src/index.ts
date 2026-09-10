@@ -6,6 +6,7 @@ import {
 } from "../../contracts/src/index";
 import { validateGeometry } from "../../geometry/src/index";
 import { reorder } from "./order";
+import { singletonGroupMembers } from "../../geometry/src/grouping";
 export class DomainError extends Error {
   constructor(
     public code: string,
@@ -93,6 +94,17 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
         annotation.text = op.text;
         break;
       }
+      case "SetItemGroup": {
+        const targets = s.items.filter((i) => op.ids.includes(i.id));
+        if (targets.length !== op.ids.length)
+          throw new Error("Meubel niet gevonden.");
+        if (op.groupId !== null && targets.length < 2)
+          throw new Error("Een groep heeft minimaal twee meubels nodig.");
+        for (const item of targets)
+          if (op.groupId === null) delete item.groupId;
+          else item.groupId = op.groupId;
+        break;
+      }
       case "SetItemDisplay": {
         const targets = s.items.filter((i) => op.ids.includes(i.id));
         if (targets.length !== op.ids.length)
@@ -155,6 +167,12 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
         Object.assign(s, structuredClone(op.content));
         break;
     }
+  }
+  // Een groep van een enkel object groepeert niets; die verwijzing hoort weg,
+  // bijvoorbeeld nadat de andere leden verwijderd zijn.
+  for (const id of singletonGroupMembers(s.items)) {
+    const item = s.items.find((i) => i.id === id);
+    if (item) delete item.groupId;
   }
   s.revision++;
   return validateScene(s);

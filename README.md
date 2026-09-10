@@ -43,6 +43,8 @@ Een bewaarde maatlijn kun je selecteren in de plattegrond of in de objectlijst (
 
 Met het gereedschap **Selecteren** trek je op leeg vlak een kader om meerdere meubels tegelijk te pakken; alles wat het kader raakt komt in de selectie. Een klik zonder slepen heft de selectie op.
 
+Selecteer twee of meer meubels en klik **Groeperen**; daarna pakt één aanwijzen de hele groep en bewegen ze samen, als één stap terug. **Groep opheffen** maakt ze weer los. Een groep is alleen een gedeelde verwijzing op de meubels zelf: blijft er nog maar één over, dan verdwijnt de groep vanzelf.
+
 Sneltoetsen: `v` selecteren, `m` muur, `d` deur, `r` raam, `t` maat. Escape gaat terug naar selecteren, Delete verwijdert de selectie, Ctrl of Cmd met `z` is een stap terug en met shift erbij opnieuw. In invoervelden blijven de toetsen gewoon typen.
 
 ## Notities en het tekenblad

@@ -111,6 +111,8 @@ export const itemSchema = z
     layer: itemLayerSchema.optional(),
     /** Vergrendelde objecten blijven zichtbaar maar zijn niet te verplaatsen of te verwijderen. */
     locked: z.boolean().optional(),
+    /** Gedeelde verwijzing tussen objecten die als geheel bewegen. */
+    groupId: id.optional(),
     hidden: z.boolean().optional(),
     x: mm,
     y: mm,
@@ -295,6 +297,13 @@ export const operationSchema = z.discriminatedUnion("type", [
       type: z.literal("SetAnnotationOffset"),
       id,
       offset: z.number().int().min(-10000).max(10000),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SetItemGroup"),
+      ids: z.array(id).min(1).max(500),
+      groupId: id.nullable(),
     })
     .strict(),
   z

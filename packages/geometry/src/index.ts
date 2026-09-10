@@ -119,6 +119,12 @@ export function validateGeometry(scene: Scene) {
 export { detectRooms, type Room, type RoomDetection } from "./rooms";
 export { wallOutlines, type WallOutline } from "./walls";
 export {
+  expandSelection,
+  groupsIn,
+  singletonGroupMembers,
+  type Groupable,
+} from "./grouping";
+export {
   underlayScale,
   underlayPlacement,
   underlayToWorld,

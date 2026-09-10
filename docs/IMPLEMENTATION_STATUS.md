@@ -410,3 +410,20 @@ Verificatie 10 september, Linux x64, Node 22.22.2:
 - Het geëxporteerde blad is naar afbeelding gerenderd en bekeken, vóór en na de correctie.
 
 Nog open in fase 2: groeperen; opt-in lokaal herstel via IndexedDB; de onderlegger verslepen en draaien; PDF-pagina als onderlegger; EXIF verwijderen. De legenda somt lagen en aantallen op, nog geen symbolen; dat wordt pas zinvol met de elektra- en lichtsymbolen uit fase 4. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — groeperen
+
+Objecten met dezelfde `groupId` horen bij elkaar. **Er is bewust geen aparte groepenlijst**: een groep is niet meer dan een gedeelde verwijzing op de objecten zelf. Dat scheelt een tweede administratie die uit de pas kan lopen met de objecten, en een groep verdwijnt vanzelf zodra er te weinig leden over zijn. `applyOperations` maakt na elke opdracht een groepsverwijzing los die nog maar één object heeft, zodat er nooit een groep achterblijft die niets groepeert. De opdracht `SetItemGroup` groepeert of heft op en weigert een groep van één.
+
+Eén lid aanwijzen pakt de hele groep — op het canvas, met het sleepkader en in de objectlijst. Die laatste is het gelijkwaardige alternatief voor aanwijzen op het canvas en moest zich dus hetzelfde gedragen; dat was eerst niet zo en is hersteld toen de browsertest erop viel.
+
+Slepen verplaatst alle leden met dezelfde verschuiving, als één batch en dus één stap terug. Konva verplaatst alleen het aangewezen object; de groepsgenoten krijgen tijdens de sleep dezelfde verschuiving mee, anders valt de groep visueel uit elkaar tot de opdracht landt. Een vergrendeld lid laat de hele verplaatsing afwijzen — dat is dezelfde transactionele regel als elders, met een leesbare melding.
+
+Verificatie 10 september, Linux x64, Node 22.22.2:
+- **139 tests / 23 bestanden geslaagd, 28,2 s** (was 132). Zeven groepstests: selectie uitbreiden, losse objecten met rust laten, twee groepen tegelijk, groeperen en opheffen via opdrachten, de weigering van een groep van één, en het opruimen van een groepsverwijzing nadat leden verwijderd zijn.
+- **16 browserroutes geslaagd, 1,9 min.** De nieuwe route groepeert twee meubels, controleert dat één aanwijzen de groep pakt, sleept ze samen, controleert dat de derde niet meebeweegt, zet het met één stap terug en heft de groep weer op.
+- Schermopname midden in de sleep bekeken: beide leden schuiven mee, de eettafel blijft staan.
+
+De browsertest leest de posities uit het geëxporteerde planblad in plaats van uit het eigenschappenpaneel. Een gegroepeerd meubel aanwijzen toont namelijk het groepspaneel zonder losse coördinaten — dat is juist gedrag, maar de test moest zich eraan aanpassen. Uit het blad lezen toetst meteen de echte uitvoer.
+
+Nog open in fase 2: opt-in lokaal herstel via IndexedDB; de onderlegger verslepen en draaien; PDF-pagina als onderlegger; EXIF verwijderen. Fase 2 is niet afgerond.

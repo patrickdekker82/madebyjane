@@ -18,6 +18,7 @@ import {
   endpoints,
   snapPoint,
   itemsInRect,
+  expandSelection,
   wallOutlines,
   underlayPlacement,
   worldToUnderlay,
@@ -60,6 +61,17 @@ export function PlanCanvas({
   const [underlayImage, setUnderlayImage] = useState<HTMLImageElement | null>(
     null,
   );
+  /**
+   * Lopende sleep van een groep. Konva verplaatst alleen het aangewezen object;
+   * de groepsgenoten krijgen dezelfde verschuiving mee zolang de sleep duurt,
+   * zodat de groep niet uit elkaar lijkt te vallen.
+   */
+  const [dragging, setDragging] = useState<{
+    leader: string;
+    ids: string[];
+    dx: number;
+    dy: number;
+  } | null>(null);
   /** Sleepkader in wereldcoordinaten; alleen actief met het gereedschap Selecteren. */
   const [band, setBand] = useState<{
     x1: number;
@@ -342,7 +354,8 @@ export function PlanCanvas({
             Math.abs(band.x2 - band.x1) > 5 / zoom ||
             Math.abs(band.y2 - band.y1) > 5 / zoom;
           // Een klik zonder sleep blijft gewoon de selectie opheffen.
-          if (dragged) selectMany(itemsInRect(visible, band));
+          if (dragged)
+            selectMany(expandSelection(scene.items, itemsInRect(visible, band)));
           else select(null);
           setBand(null);
         }}
@@ -495,44 +508,74 @@ export function PlanCanvas({
           {visible.map((i) => (
             <Group
               key={i.id}
-              x={i.x}
-              y={i.y}
+              x={
+                dragging && dragging.ids.includes(i.id) && dragging.leader !== i.id
+                  ? i.x + dragging.dx
+                  : i.x
+              }
+              y={
+                dragging && dragging.ids.includes(i.id) && dragging.leader !== i.id
+                  ? i.y + dragging.dy
+                  : i.y
+              }
               rotation={i.rotation}
               draggable={!disabled && tool === "select" && !i.locked}
               onClick={(e) => {
                 if (tool !== "select") return;
+                const group = expandSelection(scene.items, [i.id]);
                 if (e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey)
-                  toggleSelected(i.id);
-                else select(i.id);
+                  selectMany(
+                    selected.includes(i.id)
+                      ? selected.filter((id) => !group.includes(id))
+                      : [...new Set([...selected, ...group])],
+                  );
+                else selectMany(group);
               }}
               onTap={() => select(i.id)}
               onDragStart={() => {
-                if (!useEditor.getState().selected.includes(i.id)) select(i.id);
+                const group = expandSelection(scene.items, [i.id]);
+                if (!useEditor.getState().selected.includes(i.id))
+                  selectMany(group);
+                setDragging({ leader: i.id, ids: group, dx: 0, dy: 0 });
               }}
               onDragMove={(e) => {
-                setSnapped(
-                  snapTo({ x: e.target.x(), y: e.target.y() }, [i.id]).targets,
-                );
+                const moving = expandSelection(scene.items, [i.id]);
+                setSnapped(snapTo({ x: e.target.x(), y: e.target.y() }, moving).targets);
+                if (moving.length > 1)
+                  setDragging({
+                    leader: i.id,
+                    ids: moving,
+                    dx: e.target.x() - i.x,
+                    dy: e.target.y() - i.y,
+                  });
               }}
               onDragEnd={(e) => {
+                // Het gesleepte object en zijn groepsgenoten vangen niet aan
+                // zichzelf; ze bewegen allemaal met dezelfde verschuiving.
+                const moving = expandSelection(scene.items, [i.id]);
                 const { x, y } = snapTo(
                   { x: e.target.x(), y: e.target.y() },
-                  [i.id],
+                  moving,
                 );
                 e.target.position({ x, y });
                 setSnapped([]);
-                onCommand([
-                  {
-                    type: "TransformItem",
-                    id: i.id,
-                    x,
-                    y,
-                    width: i.width,
-                    depth: i.depth,
-                    rotation: i.rotation,
-                    custom: i.custom,
-                  },
-                ]);
+                setDragging(null);
+                const dx = x - i.x,
+                  dy = y - i.y;
+                onCommand(
+                  scene.items
+                    .filter((other) => moving.includes(other.id))
+                    .map((other) => ({
+                      type: "TransformItem" as const,
+                      id: other.id,
+                      x: other.id === i.id ? x : other.x + dx,
+                      y: other.id === i.id ? y : other.y + dy,
+                      width: other.width,
+                      depth: other.depth,
+                      rotation: other.rotation,
+                      custom: other.custom,
+                    })),
+                );
               }}
             >
               {i.symbol ? (

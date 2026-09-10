@@ -64,6 +64,7 @@ import {
 } from "lucide-react";
 import { api, login, logout, authRequest, ApiError } from "./api";
 import { Arrange } from "./Arrange";
+import { expandSelection } from "../../../packages/geometry/src/grouping";
 import { LayerPanel } from "./Layers";
 import { UnderlayPanel } from "./Underlay";
 import { DimensionProperties, NoteProperties } from "./DimensionProperties";
@@ -640,6 +641,7 @@ function Editor() {
     objectSnap,
     toggleObjectSnap,
     toggleSelected,
+    selectMany,
   } = useEditor();
   useEffect(() => {
     if (query.data) {
@@ -1181,11 +1183,18 @@ function Editor() {
               <button
                 className={selected.includes(i.id) ? "selected" : ""}
                 key={i.id}
-                onClick={(event) =>
-                  event.shiftKey || event.metaKey || event.ctrlKey
-                    ? toggleSelected(i.id)
-                    : select(i.id)
-                }
+                onClick={(event) => {
+                  // De objectlijst is het gelijkwaardige alternatief voor
+                  // aanwijzen op het canvas en pakt dus ook hele groepen.
+                  const group = expandSelection(scene.items, [i.id]);
+                  if (event.shiftKey || event.metaKey || event.ctrlKey)
+                    selectMany(
+                      selected.includes(i.id)
+                        ? selected.filter((id) => !group.includes(id))
+                        : [...new Set([...selected, ...group])],
+                    );
+                  else selectMany(group);
+                }}
               >
                 <span className="color-dot" style={{ background: i.color }} />
                 {i.name}
