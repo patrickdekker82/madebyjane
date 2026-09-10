@@ -670,3 +670,41 @@ Materiaalcatalogus, ruimte- en oppervlakkoppeling, keuzestatussen, alternatieven
 De exitcriteria: het demoproject levert uitlegbare vloer-, plint- en LED-hoeveelheden; wijzigingen tonen veroudering; handmatige overrides blijven begrijpelijk met hun onderbouwing; en lichtbundels zijn visueel en gelabeld — met de formule erbij en zonder luxclaim.
 
 Bewust buiten deze fase gelaten en als zodanig genoteerd: de **3D-uitstraling** (lichtbronnen, schaduwen, emissieve stripmaterialen) hoort bij fase 7, en een **gecertificeerde lux- of elektraberekening** is in het masterprompt een expliciete vervolgmodule.
+
+## Aanvulling 10 september 2026 — fase 5, eerste deel: documentmodel, sjablonen en schaalvaste PDF
+
+Fase 5 stond nog op nul. Dit is de eerste helft: het documentmodel, drie sjablonen, de PDF en de maatvastheid. Opslaan, publiceren, deellinks, PPTX en de exportworker volgen hierna.
+
+### Twee gescheiden dingen
+
+Een presentatie bestaat uit een **definitie** die de gebruiker instelt en een **inhoud** die bij het publiceren uit het ontwerp wordt gehaald. Een blok zegt dus welk planblad op welke schaal en welk papier getoond wordt; wát er op dat blad stond op het moment van publiceren zit in de bevroren inhoud, mét de bronrevisie. Daardoor kan een gedeelde presentatie nooit vanzelf meeveranderen met het ontwerp, en is achteraf vast te stellen welke revisie de klant heeft gezien.
+
+Negen bloktypen: omslag, tekst, planblad, moodboard, materiaalstaat, lichtplan, productlijst, prijsblok en afsluiting. **Het 3D-camerablok is er bewust niet**: er is nog geen 3D-render om in te zetten, en een blok dat een leeg kader oplevert doet alsof er iets werkt. Dat komt bij fase 7.
+
+Drie sjablonen die niet alleen anders ogen maar ook andere blokken tonen: een compact voorstel is een korte pitch, een uitgebreid interieurplan neemt de klant mee door het hele ontwerp, en een technisch planpakket is voor de uitvoerder — planbladen, lichtplan, productlijst en een colofon met bronrevisies, zonder verkooptekst.
+
+### Het planblad kan nu op elk papier
+
+`planSvg` rekende alles uit in vaste getallen voor A4 liggend. Papiermaat en richting zijn nu instelbaar (A4/A3, staand/liggend) en het hele titelblok rekent in millimeters van het gekozen blad. De datum staat erbij, zoals het masterprompt vraagt.
+
+**Past een tekening niet, dan gaat de presentatie gewoon door en staat de reden in het document.** Kleiner tekenen met hetzelfde schaallabel eronder zou een onjuiste maat naar een klant sturen; dat is precies wat het masterprompt verbiedt. De melding noemt het papier en de schaal: "Ontwerp past niet op A4 liggend bij 1:20. Kies een kleinere schaal of een groter blad."
+
+### Twee vondsten in de PDF-opmaak
+
+- **Een benoemde pagina blijft plakken.** Chromium houdt de paginastijl van een planblad vast tot een volgend blok er zélf een kiest; `page:auto` zet hem niet terug. De materiaalstaat kwam daardoor op A4 liggend te staan. Tekstpagina's noemen nu hun eigen pagina.
+- **Een inline SVG is een regel tekst, geen blok.** Zelfs mét een eigen paginanaam bleef het blok ná een planblad diens papiermaat erven — maar alleen bij een `<svg>`, niet bij een `<div>` met dezelfde afmetingen. Met `display:block` op de SVG klopt zowel de paginamaat als de schaal. Dit is de tweede keer dat een inline SVG de paginaopmaak van Chromium van slag brengt; de eerste was de gekrompen offerte-PDF, met een andere oorzaak en een andere oplossing.
+
+Beide zijn gevonden door de gemaakte PDF na te meten, niet door de code te lezen.
+
+Verder aangepast: het titelblok houdt nu de onderste 11 mm vrij, want daar zet de PDF-renderer het paginanummer neer. Zonder die marge liep het nummer door de legenda.
+
+### Verificatie 10 september, Linux x64, Node 22.22.2
+
+- **213 tests / 26 bestanden geslaagd, 37,7 s** (was 197). Zestien nieuwe tests: papiermaten per richting, wat elk sjabloon toont, geldigheid van alle drie de sjablonen, weigering van een tweede omslag, het planblad met bronrevisie en maat, een blok zonder gegevens dat niets verzint, filteren op ruimte in de materiaalstaat, de productlijst zonder armaturen en verborgen objecten, het lichtplan met groepen en LED, de inhoudshash die op ontwerp én inhoud reageert, één benoemde pagina per papiermaat, het colofon alleen in het technische pakket, het planblad op A3 staand met dezelfde exacte schaalbalk, de foutmelding bij een te krap blad, de datum in het titelblok, en een presentatie die doorgaat wanneer een blad niet past.
+- **`pnpm probe:presentation` gevolgd door `scripts/verify-presentation-pdf.py`**: 8 pagina's, staande tekstpagina's en één liggend planblad, geen lege pagina's, geen tekst buiten de pagina, en een schaalreferentie van **99,998 mm** waar 100 mm hoort. Beide stappen draaien nu in de bouwstraat.
+- TypeScript strict geslaagd.
+- Omslag, materiaalstaat en planblad naar afbeelding gerenderd en bekeken, na elke correctie opnieuw.
+
+### Nog open in fase 5
+
+Opslaan en bewerken van presentaties in de app, **publiceren als onveranderlijke momentopname** met inhoudshash en vastgelegde assets, intrekbare deellinks met een webviewer, de **PPTX-uitvoer** via PptxGenJS, en de **exportworker** die idempotent en herstartbaar is. Fase 5 is dus bepaald niet afgerond; wat er nu ligt is het document en de PDF eronder.

@@ -1,4 +1,5 @@
 import { symbolSvg } from "../../geometry/src/symbol";
+import { sheetSize } from "../../contracts/src/presentations";
 import {
   fixtureKinds,
   itemLayers,
@@ -28,11 +29,42 @@ export const escapeXml = (s: string) =>
         "'": "&apos;",
       })[c]!,
   );
+/**
+ * Het planblad.
+ *
+ * Papiermaat en richting zijn instelbaar; alle plaatsing rekent in millimeters
+ * van het gekozen blad, zodat een A3 hetzelfde titelblok krijgt op zijn eigen
+ * maat. De tekening staat altijd op ware schaal: past hij niet, dan gaat er
+ * een fout uit in plaats van dat het blad stilletjes kleiner wordt getekend
+ * terwijl het schaallabel blijft staan.
+ */
 export function planSvg(
   scene: Scene,
   scale: 20 | 50 | 100 = 50,
-  options: { beams?: boolean } = {},
+  options: {
+    beams?: boolean;
+    paper?: "A4" | "A3";
+    orientation?: "portrait" | "landscape";
+    /** Datum in het titelblok; leeg laat hem weg. */
+    date?: string;
+  } = {},
 ) {
+  const sheet = sheetSize(
+    options.paper ?? "A4",
+    options.orientation ?? "landscape",
+  );
+  const W = sheet.width,
+    H = sheet.height;
+  /**
+   * Het titelblok beslaat de onderste 32 mm en houdt de laatste 11 mm vrij.
+   * Daar zet een PDF-renderer het paginanummer neer; zonder die marge loopt
+   * het door de legenda heen zodra een blad meer lagen telt.
+   */
+  const titleTop = H - 32;
+  const drawWidth = W - 20,
+    drawHeight = titleTop - 15;
+  const legendX = Math.round(W * 0.4),
+    symbolX = Math.round(W * 0.69);
   /**
    * Bij een armatuur wordt het symbool op zijn papiermaat getekend en niet op
    * de fysieke maat: een spot van 90 mm zou op 1:50 minder dan twee tienden
@@ -80,9 +112,9 @@ export function planSvg(
     minY = Math.min(0, ...all.map((p) => p.y)) - 500,
     maxX = Math.max(0, ...all.map((p) => p.x)) + 500,
     maxY = Math.max(0, ...all.map((p) => p.y)) + 500;
-  if ((maxX - minX) / scale > 277 || (maxY - minY) / scale > 165)
+  if ((maxX - minX) / scale > drawWidth || (maxY - minY) / scale > drawHeight)
     throw new Error(
-      "Ontwerp past niet op A4 liggend bij deze schaal. Kies een kleinere schaal.",
+      `Ontwerp past niet op ${options.paper ?? "A4"} ${options.orientation === "portrait" ? "staand" : "liggend"} bij 1:${scale}. Kies een kleinere schaal of een groter blad.`,
     );
   const referenceMm = scale === 20 ? 1000 : 5000;
   // Versneden contouren in plaats van dikke lijnen: stompe uiteinden laten in
@@ -246,13 +278,13 @@ export function planSvg(
   const symbolLegend = [...kinds]
     .sort(([a], [b]) => fixtureKinds[a].localeCompare(fixtureKinds[b], "nl-NL"))
     .map(([kind, count], index) => {
-      const y = 188 + index * 4;
+      const y = titleTop + 4 + index * 3.6;
       const shapes = scene.items.find(
         (i) => i.fixture?.kind === kind && i.symbol && !i.hidden,
       )?.symbol;
       // Het teken wordt op 3,2 mm getekend en op de tekstregel gecentreerd.
       const drawing = shapes
-        ? `<g transform="translate(205 ${y - 2.4}) scale(0.0032)">${symbolSvg(shapes, 1000, 1000)}</g>`
+        ? `<g transform="translate(${symbolX} ${y - 2.4}) scale(0.0032)">${symbolSvg(shapes, 1000, 1000)}</g>`
         : "";
       return `${drawing}<text x="210" y="${y}" font-size="3">${escapeXml(fixtureKinds[kind])} × ${count}</text>`;
     })
@@ -264,8 +296,8 @@ export function planSvg(
         counts.shown === -1
           ? `${label}${counts.hidden ? `, ${counts.hidden} verborgen` : ""}`
           : `${label}: ${counts.shown} getoond${counts.hidden ? `, ${counts.hidden} verborgen` : ""}`;
-      return `<text x="120" y="${188 + index * 4}" font-size="3">${escapeXml(text)}</text>`;
+      return `<text x="${legendX}" y="${titleTop + 4 + index * 3.6}" font-size="3">${escapeXml(text)}</text>`;
     })
     .join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="297mm" height="210mm" viewBox="0 0 297 210"><rect width="297" height="210" fill="white"/><g font-family="Arial,sans-serif" transform="translate(10 12) scale(${1 / scale}) translate(${-minX} ${-minY})">${walls}${cuts}${openings}${beamShapes}${leds}${items}${annotations}</g><g font-family="Arial,sans-serif" fill="#343b32"><line x1="10" y1="180" x2="287" y2="180" stroke="#9b9c92" stroke-width="0.3"/><text x="10" y="190" font-size="5">STUDIO / Ontwerpblad</text><text x="10" y="197" font-size="3">Revisie ${scene.revision} · 1:${scale} · A4 liggend · Print op 100%</text>${options.beams ? `<text x="10" y="202" font-size="3" fill="#697164">Lichtbundels getoond: visuele benadering, geen lichtberekening.</text>` : ""}<text x="10" y="205.5" font-size="3">${referenceMm.toLocaleString("nl-NL")} mm</text><line id="scale-reference-${referenceMm}mm" x1="10" y1="208" x2="${10 + referenceMm / scale}" y2="208" stroke="#343b32" stroke-width="0.5"/><text x="120" y="184" font-size="3" fill="#697164">LEGENDA</text>${legend}${kinds.size ? `<text x="205" y="184" font-size="3" fill="#697164">SYMBOLEN</text>${symbolLegend}` : ""}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="white"/><g font-family="Arial,sans-serif" transform="translate(10 12) scale(${1 / scale}) translate(${-minX} ${-minY})">${walls}${cuts}${openings}${beamShapes}${leds}${items}${annotations}</g><g font-family="Arial,sans-serif" fill="#343b32"><line x1="10" y1="${titleTop}" x2="${W - 10}" y2="${titleTop}" stroke="#9b9c92" stroke-width="0.3"/><text x="10" y="${titleTop + 8}" font-size="5">STUDIO / Ontwerpblad</text><text x="10" y="${titleTop + 13.5}" font-size="3">Revisie ${scene.revision} · 1:${scale} · ${options.paper ?? "A4"} ${options.orientation === "portrait" ? "staand" : "liggend"}${options.date ? ` · ${escapeXml(options.date)}` : ""} · Print op 100%</text>${options.beams ? `<text x="10" y="${titleTop + 17.5}" font-size="3" fill="#697164">Lichtbundels getoond: visuele benadering, geen lichtberekening.</text>` : ""}<line id="scale-reference-${referenceMm}mm" x1="10" y1="${titleTop + 21}" x2="${10 + referenceMm / scale}" y2="${titleTop + 21}" stroke="#343b32" stroke-width="0.5"/><text x="${13 + referenceMm / scale}" y="${titleTop + 22}" font-size="3">${referenceMm.toLocaleString("nl-NL")} mm</text><text x="${legendX}" y="${titleTop}" font-size="3" fill="#697164">LEGENDA</text>${legend}${kinds.size ? `<text x="${symbolX}" y="${titleTop}" font-size="3" fill="#697164">SYMBOLEN</text>${symbolLegend}` : ""}</g></svg>`;
 }

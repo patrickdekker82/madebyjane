@@ -20,7 +20,8 @@
     "setup": "tsx scripts/setup.ts",
     "check": "pnpm build && pnpm test",
     "probe:pdf": "tsx scripts/pdf-probe.ts",
-    "probe:quote": "tsx scripts/quote-pdf-probe.ts"
+    "probe:quote": "tsx scripts/quote-pdf-probe.ts",
+    "probe:presentation": "tsx scripts/presentation-probe.ts"
   },
   "dependencies": {
     "@fastify/rate-limit": "11.2.0",
