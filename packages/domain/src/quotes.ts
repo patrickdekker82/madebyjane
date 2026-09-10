@@ -11,7 +11,7 @@ import {
 import { DomainError, type Role } from "./index";
 import type { Context } from "./projects";
 import { calculateQuote } from "./quote-calculation";
-import { resourceCheck, digest } from "./quote-resources";
+import { resourceCheck, digest, quoteContentHash } from "./quote-resources";
 export const canFinance = (role: Role) =>
   ["owner", "admin", "finance"].includes(role);
 export class QuoteService {
@@ -283,7 +283,7 @@ export class QuoteService {
               digest({ replacement: row.version }),
               ctx.userId,
               `Vervangen door offerte ${number}, versie ${row.version}`,
-              prior.content_hash ?? digest(prior.definition),
+              quoteContentHash(prior),
               ctx.userId,
             ],
           );
@@ -521,7 +521,7 @@ export class QuoteService {
             v.occurredOn,
             v.actor,
             v.evidence,
-            q.content_hash ?? digest(q.definition),
+            quoteContentHash(q),
             ctx.userId,
           ],
         )

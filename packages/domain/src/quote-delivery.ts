@@ -7,7 +7,7 @@ import type { Context } from "./projects";
 import { QuoteService } from "./quotes";
 import { quoteHtml, quoteTemplateVersion } from "../../documents/src/quote";
 import { renderQuotePdf } from "../../documents/src/quote-pdf";
-import { requireFinance, digest } from "./quote-resources";
+import { requireFinance, digest, quoteContentHash } from "./quote-resources";
 import { DomainError } from "./index";
 export class QuoteDelivery {
   constructor(
@@ -41,14 +41,7 @@ export class QuoteDelivery {
         ).rows[0],
     );
     if (existing) return existing as { pdf: Buffer; pdf_hash: string };
-    const contentHash =
-      q.content_hash ??
-      digest({
-        number: q.number,
-        definition: q.definition,
-        totals: q.totals,
-        frozen: q.frozen,
-      });
+    const contentHash = quoteContentHash(q);
     q.content_hash = contentHash;
     const pdf = await this.render(quoteHtml(q));
     const pdfHash = createHash("sha256").update(pdf).digest("hex");

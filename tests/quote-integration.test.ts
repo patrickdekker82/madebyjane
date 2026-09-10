@@ -575,6 +575,19 @@ test("expliciete statusovergangen, bewijs, herhaalveiligheid en finance-rechten"
       actor: "Fictieve studio",
       evidence: "Handmatig verstuurd per e-mail, onderwerp Offerte",
     };
+  // Migration 0011 leaves pre-existing commercial snapshots intact, without a hash.
+  await db.admin.query(
+    "UPDATE quote_versions SET content_hash=NULL WHERE id=$1 AND version=2",
+    [d.id],
+  );
+  const pdf = await call("GET", `${path}/${d.id}/versions/2/pdf`);
+  expect(pdf.statusCode, pdf.body.slice(0, 100)).toBe(200);
+  const exportedHash = (
+    await db.admin.query(
+      "SELECT content_hash FROM quote_exports WHERE quote_id=$1 AND quote_version=2",
+      [d.id],
+    )
+  ).rows[0].content_hash;
   expect(
     (await call("POST", endpoint, { ...event, status: "accepted" })).json()
       .code,
@@ -587,6 +600,7 @@ test("expliciete statusovergangen, bewijs, herhaalveiligheid en finance-rechten"
   );
   const r = await call("POST", endpoint, event, "finance");
   expect(r.statusCode, r.body).toBe(200);
+  expect(r.json().content_hash).toBe(exportedHash);
   expect(
     (await call("POST", endpoint, event, "finance")).json().event_version,
   ).toBe(1);

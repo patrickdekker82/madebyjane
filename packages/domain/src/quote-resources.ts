@@ -5,6 +5,7 @@ import {
   attachmentInput,
   priceInput,
   type QuoteDefinition,
+  type QuoteRecord,
   type AttachmentSnapshot,
 } from "../../contracts/src/quotes";
 import { planSvg, escapeXml as esc } from "../../documents/src/plan";
@@ -15,6 +16,14 @@ export const digest = (v: unknown) =>
   createHash("sha256")
     .update(typeof v === "string" ? v : JSON.stringify(v))
     .digest("hex");
+export const quoteContentHash = (q: QuoteRecord) =>
+  q.content_hash ??
+  digest({
+    number: q.number,
+    definition: q.definition,
+    totals: q.totals,
+    frozen: q.frozen,
+  });
 export const requireFinance = (ctx: Context) => {
   if (!["owner", "admin", "finance"].includes(ctx.role))
     throw new DomainError(
