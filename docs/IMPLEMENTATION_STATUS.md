@@ -537,3 +537,43 @@ Dat een verkeerde maat in een document dat naar een klant gaat als "geverifieerd
 - Pagina 1 en het planblad van `outputs/qa/offerte-demo.pdf` naar afbeelding gerenderd en bekeken: marges kloppen, het planblad staat compleet op één pagina met tekening, titelblok, legenda en schaalbalk.
 
 **Deze verificatie is niet als root gedraaid.** Chromium weigert te sandboxen als root, dus de testronde is uitgevoerd onder een gewone gebruiker in dezelfde container. Als root falen twee offertetests op het starten van de browser; dat is een eigenschap van deze omgeving, niet van de code. Of de sysctl-instelling op de GitHub-runner het beoogde effect heeft, is hier niet na te bootsen en moet uit de bouwstraat zelf blijken.
+
+## Aanvulling 10 september 2026 — fase 4: LED-paden
+
+Fase 4 had de materiaalkant al (catalogus, keuzestatussen, alternatieven, hoeveelheden). Dit is de eerste helft van het lichtplan: **LED-strips als bewerkbare polyline**.
+
+### Het model
+
+`ledPaths` is een nieuwe verzameling in de scene, met een standaardwaarde, dus bestaande scenes blijven geldig zonder scene-migratie. Een strip heeft hoekpunten, montagehoogte, profiel, richting, kleur, kleurtemperatuur, vermogen per meter, aansluiting en notitie — precies de velden die het masterprompt noemt.
+
+**De lengte staat er niet in.** Die volgt uit de hoekpunten, net zoals de lengte van een maatlijn uit haar twee punten volgt. Een strip kan daardoor nooit een andere lengte beweren dan hij op de tekening heeft, ook niet nadat iemand een hoekpunt heeft verschoven. Wat er wél in staat is de **bestel- of kniplengte**: dat is een besluit van de gebruiker en geen meting, en het verschil tussen die twee is juist wat iemand wil zien voordat hij bestelt. Te kort besteld staat als fout in beeld, niet stilzwijgend aangevuld.
+
+Vermogen is een expliciete vermenigvuldiging: lengte in meters maal vermogen per meter. Er wordt niets omgerekend tussen watt, lumen, candela en lux; dat zijn verschillende grootheden en de app doet niet alsof ze uit elkaar volgen. Afronding volgt hetzelfde beleid als de vloer- en plinthoeveelheden: meters op drie decimalen, half naar boven, omdat het in dezelfde offerte terechtkomt.
+
+Hoeken tellen alleen mee wanneer de strip er werkelijk buigt. Een extra sleeppunt midden op een rechte lijn buigt niets en zet dus geen hoekprofiel op de stuklijst; terugvouwen over dezelfde lijn telt wel als hoek.
+
+Twee opdrachten: `AddLedPath` en `UpdateLedPath` (die laatste staat met die naam in het masterprompt). `DeleteSelection` ruimt strips mee op, net als annotaties.
+
+### De bediening
+
+Gereedschap **LED-strip**: hoekpunten aanklikken, twee keer op hetzelfde punt klikken rondt af, of de knop **Strip afronden** in de balk erboven. Tijdens het tekenen loopt de lopende lengte mee. Een afgeronde strip is aanwijsbaar; als hij geselecteerd is, zijn de hoekpunten los te verslepen. Een hoekpunt op zijn buurman leggen zou de strip ongeldig maken en wordt geweigerd: het punt springt terug.
+
+Op het planblad staat de strip als doorlopende lijn in zijn eigen kleur met de gemeten lengte erbij, en de legenda meldt hoeveel strips, hoeveel meter en hoeveel hoeken erop staan.
+
+### Twee fouten onderweg
+
+- **Punten in plaats van komma's.** Het LED-paneel toonde `37.200 W` waar de rest van de app `37,200 W` schrijft. De browsertest viel erop. Nu gebruikt het paneel dezelfde `decimals`-hulp als het materialenpaneel.
+- **Een blijvende vanghulplijn.** Dit bleek een bestaande fout, die pas bij het bekijken van een schermafbeelding opviel: `world()` zet de vangdoelen, maar alleen het slepen van een meubel maakte ze weer leeg. Na een muur, een maatlijn of een notitie bleef er dus een streepjeslijn naar een meubel op het canvas staan tot de volgende sleep. Die wordt nu opgeruimd zodra een handeling af is en bij het wisselen van gereedschap. Dit is met het oog vastgesteld, niet met een geautomatiseerde controle; de bestaande vangtest bewaakt wel dat de hulplijnen tijdens het slepen nog verschijnen.
+
+### Verificatie 10 september, Linux x64, Node 22.22.2
+
+- **173 tests / 23 bestanden geslaagd, 32,5 s** (was 160). Dertien nieuwe LED-tests: lengte uit de punten, segmenten, alleen echte knikken als hoek, het omhullende vierkant, meters en watt, de bestellengte in beide richtingen, afronding op drie decimalen, totalen, opdrachten voor plaatsen/bijwerken/verwijderen, dubbele identiteit en samenvallende punten weigeren, en dat scenes van voor deze stap geldig blijven. Plus een eigenschapstest met 200 gevallen: de lengte is nooit negatief en verandert niet als je de punten omdraait.
+- **18 browserroutes geslaagd, 2,4 min.** De nieuwe route tekent een strip met een hoek, rondt hem af, vergelijkt wat het paneel zegt met de polyline op het geëxporteerde planblad, controleert de legenda, vult een te ruime en een te krappe bestellengte in, wijzigt naam en vermogen en vindt alles terug na herladen.
+- TypeScript strict en productiebuild geslaagd (11,4 s).
+- Schermafbeelding van het canvas en het naar afbeelding gerenderde planblad daadwerkelijk bekeken, voor en na de correctie van de hulplijn en van de labelplaatsing.
+
+De browsertest vergelijkt de lengte in het paneel met de lengte die uit het planblad terugkomt. Dat toetst de hele keten — canvas, server, export — op dezelfde meting, in plaats van de rekenformule tegen zichzelf.
+
+### Nog open in fase 4
+
+**Elektra- en lichtsymbolen** (wandcontactdozen, schakelaars, lichtpunten, spots, wandarmaturen) met hoogte, oriëntatie, label en groep; **armatuurvelden** (bundelhoek, kleurtemperatuur, dimniveau, fabrikantwaarden als losse grootheden); **circuits en lichtscènes**; en de **2D-uitstraling** met sectoren en legenda. Fase 4 is daarmee niet afgerond. De symbolenlegenda op het planblad wacht nog steeds op die symbolen.

@@ -7,7 +7,8 @@ export type Tool =
   | "measure"
   | "note"
   | "calibrate"
-  | "underlay";
+  | "underlay"
+  | "led";
 export const useEditor = create<{
   hasPending: boolean;
   setPending: (value: boolean) => void;
@@ -21,6 +22,13 @@ export const useEditor = create<{
   grid: boolean;
   /** Vangen aan muurpunten, muren en meubels; staat los van het raster. */
   objectSnap: boolean;
+  /**
+   * Hoekpunten van de LED-strip die op dit moment getekend wordt. Staat hier en
+   * niet in het canvas, zodat het paneel ernaast kan tonen hoeveel punten er
+   * liggen en de strip kan afronden of weggooien.
+   */
+  ledDraft: { x: number; y: number }[];
+  setLedDraft: (points: { x: number; y: number }[]) => void;
   setTool: (tool: Tool) => void;
   select: (id: string | null) => void;
   /** Voegt toe of haalt weg, voor shift- of ctrl-klikken. */
@@ -39,7 +47,9 @@ export const useEditor = create<{
   zoom: 0.09,
   grid: true,
   objectSnap: true,
-  setTool: (tool) => set({ tool, selected: [] }),
+  ledDraft: [],
+  setLedDraft: (ledDraft) => set({ ledDraft }),
+  setTool: (tool) => set({ tool, selected: [], ledDraft: [] }),
   select: (id) => set({ selected: id ? [id] : [] }),
   toggleSelected: (id) =>
     set((s) => ({

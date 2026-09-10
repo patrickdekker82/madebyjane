@@ -2409,3 +2409,138 @@ test("lokaal herstel: mislukt opslaan → herladen → terughalen → conflict �
   ).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("LED-strip tekenen → lengte uit de tekening → bestellengte → planblad", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) await page.context().addCookies(ownerCookies);
+  await page.goto("/");
+  // De herstelroute meldt zich af, dus een bewaarde sessie kan verlopen zijn.
+  // Staat het aanmeldscherm er, dan meldt deze route zich gewoon zelf aan.
+  if (
+    await page
+      .getByLabel("E-mailadres")
+      .isVisible()
+      .catch(() => false)
+  ) {
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+    ownerCookies = await page.context().cookies();
+  }
+  await page
+    .getByRole("button", { name: "Nieuw project", exact: true })
+    .click();
+  await page.getByLabel("Projectnaam").fill("Lichtstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  const canvas = page.locator(".canvas-wrap canvas").first();
+  const box = (await canvas.boundingBox())!;
+  const at = (x: number, y: number) => ({ x: box.x + x, y: box.y + y });
+
+  // Een strip met een hoek: drie punten, daarna afronden.
+  await page.getByRole("button", { name: "LED-strip", exact: true }).click();
+  await expect(
+    page.getByText("Klik de hoekpunten van de strip aan"),
+  ).toBeVisible();
+  for (const [x, y] of [
+    [160, 160],
+    [420, 160],
+    [420, 300],
+  ] as const) {
+    const p = at(x, y);
+    await page.mouse.click(p.x, p.y);
+  }
+  await expect(page.getByText("3 punten", { exact: false })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Strip afronden", exact: true })
+    .click();
+  await saved();
+
+  // De gemeten lengte komt uit de tekening; het paneel toont hem als uitkomst.
+  const readout = page.locator(".led-readout div");
+  const measured = async () =>
+    (await readout.nth(0).locator("dd").innerText()).replace(" m", "").trim();
+  expect(Number((await measured()).replace(",", "."))).toBeGreaterThan(0);
+  await expect(readout.nth(1).locator("dd")).toHaveText("1");
+
+  // Het planblad moet dezelfde strip tekenen, met dezelfde lengte.
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Planblad SVG", exact: true }).click();
+  await (await download).saveAs("outputs/lichtstudio.svg");
+  const svg = await readFile("outputs/lichtstudio.svg", "utf8");
+  const points = /<polyline points="([^"]+)"/.exec(svg)?.[1];
+  if (!points) throw new Error("Geen LED-strip op het planblad gevonden");
+  const parsed = points.split(" ").map((pair) => {
+    const [x, y] = pair.split(",").map(Number);
+    return { x: x!, y: y! };
+  });
+  expect(parsed).toHaveLength(3);
+  let fromSheet = 0;
+  for (let i = 1; i < parsed.length; i++)
+    fromSheet += Math.hypot(
+      parsed[i]!.x - parsed[i - 1]!.x,
+      parsed[i]!.y - parsed[i - 1]!.y,
+    );
+  // Wat het paneel zegt en wat er op papier staat is dezelfde meting.
+  expect(Number((await measured()).replace(",", "."))).toBeCloseTo(
+    fromSheet / 1000,
+    3,
+  );
+  // De legenda noemt de strip, de meters en de hoek.
+  expect(svg).toContain("LED-strips: 1 ·");
+  expect(svg).toContain("1 hoek");
+
+  // De bestellengte staat los van de meting en toont het verschil beide kanten op.
+  const metres = Number((await measured()).replace(",", "."));
+  await page
+    .getByLabel("LED bestellengte", { exact: true })
+    .fill(String(metres + 1.5).replace(".", ","));
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  await expect(
+    page.getByText("blijft 1,500 m over", { exact: false }),
+  ).toBeVisible();
+  await page
+    .getByLabel("LED bestellengte", { exact: true })
+    .fill(String(metres - 0.5).replace(".", ","));
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  await expect(
+    page.getByText("0,500 m te weinig besteld", { exact: false }),
+  ).toBeVisible();
+
+  // Naam en vermogen invullen; het vermogen is lengte maal watt per meter.
+  await page.getByLabel("LED naam", { exact: true }).fill("Keukenlijst");
+  await page.getByLabel("LED vermogen per meter", { exact: true }).fill("12");
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  await expect(readout.nth(2).locator("dd")).toHaveText(
+    (metres * 12).toFixed(3).replace(".", ",") + " W",
+  );
+  // De maat op het planblad staat er maar een keer, met een eenheid.
+  expect(svg).not.toContain("mm mm");
+  await page.screenshot({ path: "outputs/qa/led-strip.png" });
+
+  // Herladen: de strip staat op de server, met naam en alles erop.
+  await page.reload();
+  await saved();
+  await page.getByRole("button", { name: "Keukenlijst", exact: true }).click();
+  expect(await measured()).toBe(metres.toFixed(3).replace(".", ","));
+  expect(errors).toEqual([]);
+});

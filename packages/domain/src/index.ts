@@ -154,6 +154,7 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
           );
         s.items = s.items.filter((i) => !op.ids.includes(i.id));
         s.annotations = s.annotations.filter((a) => !op.ids.includes(a.id));
+        s.ledPaths = s.ledPaths.filter((l) => !op.ids.includes(l.id));
         s.walls = s.walls.filter((w) => !op.ids.includes(w.id));
         s.openings = s.openings.filter(
           (o) =>
@@ -163,6 +164,19 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
           s.walls.some((w) => w.startId === n.id || w.endId === n.id),
         );
         break;
+      case "AddLedPath":
+        if (s.ledPaths.some((l) => l.id === op.path.id))
+          throw new Error("Deze LED-strip bestaat al.");
+        s.ledPaths.push(structuredClone(op.path));
+        break;
+      case "UpdateLedPath": {
+        const index = s.ledPaths.findIndex((l) => l.id === op.id);
+        if (index < 0) throw new Error("Deze LED-strip bestaat niet meer.");
+        if (op.path.id !== op.id)
+          throw new Error("Een LED-strip kan niet van identiteit wisselen.");
+        s.ledPaths[index] = structuredClone(op.path);
+        break;
+      }
       case "RestoreContent":
         Object.assign(s, structuredClone(op.content));
         break;
@@ -183,9 +197,18 @@ export const contentOf = ({
   openings,
   items,
   annotations,
+  ledPaths,
   underlay,
 }: Scene) =>
-  structuredClone({ nodes, walls, openings, items, annotations, underlay });
+  structuredClone({
+    nodes,
+    walls,
+    openings,
+    items,
+    annotations,
+    ledPaths,
+    underlay,
+  });
 export type Role = "owner" | "admin" | "designer" | "finance" | "viewer";
 export function canWrite(role: Role) {
   return ["owner", "admin", "designer"].includes(role);

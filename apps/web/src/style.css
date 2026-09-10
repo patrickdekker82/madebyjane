@@ -512,6 +512,26 @@ form {
   color: #7c8475;
   margin-bottom: 24px;
 }
+.led-readout {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 10px 0 8px;
+}
+.led-readout div {
+  min-width: 62px;
+}
+.led-readout dt {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #a1a897;
+}
+.led-readout dd {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #27392f;
+}
 .draft-list {
   list-style: none;
   padding: 0;

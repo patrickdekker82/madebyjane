@@ -5,6 +5,9 @@ import {
   wallOutlines,
   dimensionGeometry,
   formatMm,
+  ledLengthMm,
+  ledCornerCount,
+  ledSegments,
 } from "../../geometry/src/index";
 export const escapeXml = (s: string) =>
   s.replace(
@@ -26,16 +29,19 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
       const d = dimensionGeometry(a.from, a.to, a.offset);
       return [a.from, a.to, d.line.from, d.line.to];
     }),
-    ...scene.items.filter((i) => !i.hidden).flatMap((i) => [
-      {
-        x: i.x - i.width / 2 - i.depth / 2,
-        y: i.y - i.width / 2 - i.depth / 2,
-      },
-      {
-        x: i.x + i.width / 2 + i.depth / 2,
-        y: i.y + i.width / 2 + i.depth / 2,
-      },
-    ]),
+    ...scene.ledPaths.filter((l) => !l.hidden).flatMap((l) => l.points),
+    ...scene.items
+      .filter((i) => !i.hidden)
+      .flatMap((i) => [
+        {
+          x: i.x - i.width / 2 - i.depth / 2,
+          y: i.y - i.width / 2 - i.depth / 2,
+        },
+        {
+          x: i.x + i.width / 2 + i.depth / 2,
+          y: i.y + i.width / 2 + i.depth / 2,
+        },
+      ]),
   ];
   const minX = Math.min(0, ...all.map((p) => p.x)) - 500,
     minY = Math.min(0, ...all.map((p) => p.y)) - 500,
@@ -50,7 +56,9 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
   // elke hoek een hap open. Alle muurvlakken gaan er eerst op, daarna pas de
   // doorsnede op 1.200 mm, zodat een aangrenzende muur nooit een opening dicht
   // tekent die vlak bij een hoek ligt.
-  const outlines = new Map(wallOutlines(scene).map((o) => [o.wallId, o.points]));
+  const outlines = new Map(
+    wallOutlines(scene).map((o) => [o.wallId, o.points]),
+  );
   const walls = scene.walls
     .map(
       (w) =>
@@ -85,6 +93,27 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
         `<g transform="translate(${i.x},${i.y}) rotate(${i.rotation})">${i.symbol ? symbolSvg(i.symbol, i.width, i.depth) : `<rect x="${-i.width / 2}" y="${-i.depth / 2}" width="${i.width}" height="${i.depth}" rx="50" fill="${i.color}" stroke="#4c5148" stroke-width="15"/>`}<text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-size="${2.5 * scale}">${escapeXml(i.name)}</text></g>`,
     )
     .join("");
+  /**
+   * LED-strips: een doorlopende lijn met ronde hoeken in de kleur van de strip,
+   * met de gemeten lengte erbij. De lijndikte is een papiermaat en zegt niets
+   * over de fysieke breedte van de strip; die staat in de eigenschappen.
+   */
+  const leds = scene.ledPaths
+    .filter((l) => !l.hidden)
+    .map((l) => {
+      const points = l.points.map((p) => `${p.x},${p.y}`).join(" ");
+      // Het label komt midden op het langste stuk: daar is de meeste ruimte,
+      // en niet in een hoek waar het over de knik heen valt.
+      const longest = ledSegments(l.points).reduce((a, b) =>
+        b.lengthMm > a.lengthMm ? b : a,
+      );
+      const middle = {
+        x: (longest.from.x + longest.to.x) / 2,
+        y: (longest.from.y + longest.to.y) / 2,
+      };
+      return `<g><polyline points="${points}" fill="none" stroke="${escapeXml(l.color)}" stroke-width="${1.4 * scale}" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/><polyline points="${points}" fill="none" stroke="#6b5b3a" stroke-width="${0.25 * scale}" stroke-dasharray="${2 * scale} ${1.2 * scale}" stroke-linecap="round" stroke-linejoin="round"/><text x="${middle.x}" y="${middle.y}" dy="${-1.6 * scale}" text-anchor="middle" font-size="${2.2 * scale}" fill="#6b5b3a">${escapeXml(l.name)} · ${escapeXml(formatMm(Math.round(ledLengthMm(l.points))))}</text></g>`;
+    })
+    .join("");
   // Maatlijnen horen op het tekenblad; lijndikte en tekstgrootte volgen de schaal
   // zodat ze op papier leesbaar blijven en niet met de tekening meeschalen.
   const annotations = scene.annotations
@@ -117,14 +146,40 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
     entry[item.hidden ? "hidden" : "shown"] += 1;
     byLayer.set(label, entry);
   }
+  /**
+   * LED-strips staan niet in de laagtelling van meubels, maar horen wel in de
+   * legenda: het lichtplan is juist wat een lezer op dit blad zoekt.
+   */
+  const shownLeds = scene.ledPaths.filter((l) => !l.hidden);
+  const hiddenLeds = scene.ledPaths.length - shownLeds.length;
+  if (scene.ledPaths.length) {
+    const metres = (
+      shownLeds.reduce((total, l) => total + ledLengthMm(l.points), 0) / 1000
+    ).toLocaleString("nl-NL", {
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 3,
+    });
+    const corners = shownLeds.reduce(
+      (total, l) => total + ledCornerCount(l.points),
+      0,
+    );
+    byLayer.set(
+      `LED-strips: ${shownLeds.length} · ${metres} m · ${corners} ${corners === 1 ? "hoek" : "hoeken"}`,
+      { shown: -1, hidden: hiddenLeds },
+    );
+  }
   const legendRows = [...byLayer]
     .filter(([, counts]) => counts.shown || counts.hidden)
     .sort(([a], [b]) => a.localeCompare(b, "nl-NL"));
   const legend = legendRows
-    .map(
-      ([label, counts], index) =>
-        `<text x="90" y="${188 + index * 4}" font-size="3">${escapeXml(label)}: ${counts.shown} getoond${counts.hidden ? `, ${counts.hidden} verborgen` : ""}</text>`,
-    )
+    .map(([label, counts], index) => {
+      // shown = -1 markeert een regel die het aantal al in het label draagt.
+      const text =
+        counts.shown === -1
+          ? `${label}${counts.hidden ? `, ${counts.hidden} verborgen` : ""}`
+          : `${label}: ${counts.shown} getoond${counts.hidden ? `, ${counts.hidden} verborgen` : ""}`;
+      return `<text x="90" y="${188 + index * 4}" font-size="3">${escapeXml(text)}</text>`;
+    })
     .join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="297mm" height="210mm" viewBox="0 0 297 210"><rect width="297" height="210" fill="white"/><g font-family="Arial,sans-serif" transform="translate(10 12) scale(${1 / scale}) translate(${-minX} ${-minY})">${walls}${cuts}${openings}${items}${annotations}</g><g font-family="Arial,sans-serif" fill="#343b32"><line x1="10" y1="180" x2="287" y2="180" stroke="#9b9c92" stroke-width="0.3"/><text x="10" y="190" font-size="5">STUDIO / Ontwerpblad</text><text x="10" y="198" font-size="3">Revisie ${scene.revision} · 1:${scale} · A4 liggend · Print op 100%</text><line id="scale-reference-${referenceMm}mm" x1="175" y1="195" x2="${175 + referenceMm / scale}" y2="195" stroke="#343b32" stroke-width="0.5"/><text x="175" y="191" font-size="3">${referenceMm.toLocaleString("nl-NL")} mm</text><text x="90" y="184" font-size="3" fill="#697164">LEGENDA</text>${legend}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="297mm" height="210mm" viewBox="0 0 297 210"><rect width="297" height="210" fill="white"/><g font-family="Arial,sans-serif" transform="translate(10 12) scale(${1 / scale}) translate(${-minX} ${-minY})">${walls}${cuts}${openings}${leds}${items}${annotations}</g><g font-family="Arial,sans-serif" fill="#343b32"><line x1="10" y1="180" x2="287" y2="180" stroke="#9b9c92" stroke-width="0.3"/><text x="10" y="190" font-size="5">STUDIO / Ontwerpblad</text><text x="10" y="198" font-size="3">Revisie ${scene.revision} · 1:${scale} · A4 liggend · Print op 100%</text><line id="scale-reference-${referenceMm}mm" x1="175" y1="195" x2="${175 + referenceMm / scale}" y2="195" stroke="#343b32" stroke-width="0.5"/><text x="175" y="191" font-size="3">${referenceMm.toLocaleString("nl-NL")} mm</text><text x="90" y="184" font-size="3" fill="#697164">LEGENDA</text>${legend}</g></svg>`;
 }

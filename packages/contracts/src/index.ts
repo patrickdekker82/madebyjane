@@ -225,6 +225,76 @@ export const underlaySchema = z
       });
   });
 export type Underlay = z.infer<typeof underlaySchema>;
+/**
+ * LED-strip als bewerkbare polyline.
+ *
+ * De lengte staat er niet in: die volgt uit de hoekpunten, zodat een strip
+ * nooit een andere lengte kan beweren dan hij op de tekening heeft. Wat er wel
+ * in staat is de gekozen bestel- of kniplengte, want dat is een besluit van de
+ * gebruiker en geen meting; die twee horen apart zichtbaar te zijn.
+ *
+ * Vermogen staat in milliwatt per meter zodat het een geheel getal blijft,
+ * net als alle andere maten in dit model.
+ */
+export const ledProfiles = {
+  none: "Geen profiel",
+  surface: "Opbouwprofiel",
+  recessed: "Inbouwprofiel",
+  corner: "Hoekprofiel",
+} as const;
+export const ledProfileSchema = z.enum([
+  "none",
+  "surface",
+  "recessed",
+  "corner",
+]);
+export type LedProfile = z.infer<typeof ledProfileSchema>;
+export const ledDirections = {
+  up: "Omhoog",
+  down: "Omlaag",
+  forward: "Vooruit",
+} as const;
+export const ledDirectionSchema = z.enum(["up", "down", "forward"]);
+export type LedDirection = z.infer<typeof ledDirectionSchema>;
+export const ledPathSchema = z
+  .object({
+    id,
+    name: z.string().trim().min(1).max(120),
+    /** Hoekpunten in wereldmillimeters; minstens twee, dus altijd een lijn. */
+    points: z
+      .array(z.object({ x: mm, y: mm }).strict())
+      .min(2)
+      .max(200),
+    /** Montagehoogte boven de vloer. */
+    heightMm: z.number().int().min(0).max(20000),
+    profile: ledProfileSchema,
+    direction: ledDirectionSchema,
+    /** Lichtkleur zoals hij op de tekening staat. */
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    /** Kleurtemperatuur in kelvin; los begrip, wordt nergens omgerekend. */
+    colorTemperatureK: z.number().int().min(1000).max(10000).nullable(),
+    /** Vermogen per meter in milliwatt. */
+    wattPerMeterMw: z.number().int().min(0).max(200000),
+    connection: z.string().trim().max(200),
+    note: z.string().trim().max(300),
+    /** Gekozen bestel- of kniplengte; null wanneer die nog niet gekozen is. */
+    orderLengthMm: z.number().int().min(0).max(100000).nullable(),
+    hidden: z.boolean().optional(),
+  })
+  .strict()
+  .superRefine((path, ctx) => {
+    for (let i = 1; i < path.points.length; i++)
+      if (
+        path.points[i]!.x === path.points[i - 1]!.x &&
+        path.points[i]!.y === path.points[i - 1]!.y
+      )
+        ctx.addIssue({
+          code: "custom",
+          message:
+            "Een LED-strip mag geen twee dezelfde punten na elkaar hebben.",
+        });
+  });
+export type LedPath = z.infer<typeof ledPathSchema>;
 export const sceneSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -238,6 +308,8 @@ export const sceneSchema = z
     openings: z.array(openingSchema).max(500),
     items: z.array(itemSchema).max(2000),
     annotations: z.array(annotationSchema).max(500).default([]),
+    /** Standaardwaarde, dus scenes van voor fase 4 blijven geldig zonder migratie. */
+    ledPaths: z.array(ledPathSchema).max(200).default([]),
     underlay: underlaySchema.nullable().default(null),
   })
   .strict();
@@ -351,6 +423,18 @@ export const operationSchema = z.discriminatedUnion("type", [
       ids: z.array(id).min(1).max(100),
     })
     .strict(),
+  z.object({ type: z.literal("AddLedPath"), path: ledPathSchema }).strict(),
+  /**
+   * Een strip bijwerken. De hoekpunten en de losse velden gaan in een opdracht,
+   * zodat een sleep met meerdere gewijzigde punten een stap terug is.
+   */
+  z
+    .object({
+      type: z.literal("UpdateLedPath"),
+      id,
+      path: ledPathSchema,
+    })
+    .strict(),
   z
     .object({
       type: z.literal("RestoreContent"),
@@ -360,6 +444,7 @@ export const operationSchema = z.discriminatedUnion("type", [
         openings: true,
         items: true,
         annotations: true,
+        ledPaths: true,
         underlay: true,
       }),
     })

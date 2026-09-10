@@ -136,6 +136,7 @@ export {
   type UnderlayLike,
   type Calibration,
 } from "./underlay";
+export { ledLengthMm, ledSegments, ledCornerCount, ledBounds } from "./led";
 export {
   dimensionGeometry,
   formatMm,

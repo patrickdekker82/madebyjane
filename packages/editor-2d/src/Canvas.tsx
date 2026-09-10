@@ -22,12 +22,15 @@ import {
   wallOutlines,
   underlayPlacement,
   underlayCorners,
+  ledBounds,
+  ledLengthMm,
   worldToUnderlay,
   dimensionGeometry,
   formatMm,
   type SnapTarget,
 } from "../../geometry/src/index";
 import { useEditor } from "./store";
+import { newLedPath } from "./led-draft";
 export function PlanCanvas({
   scene,
   onCommand,
@@ -53,6 +56,8 @@ export function PlanCanvas({
     zoom,
     grid,
     objectSnap,
+    ledDraft,
+    setLedDraft,
     select,
     toggleSelected,
     selectMany,
@@ -107,6 +112,14 @@ export function PlanCanvas({
     const points = [
       ...scene.nodes,
       ...corners,
+      ...scene.ledPaths.flatMap((led) =>
+        led.hidden
+          ? []
+          : (({ minX, minY, maxX, maxY }) => [
+              { x: minX, y: minY },
+              { x: maxX, y: maxY },
+            ])(ledBounds(led)),
+      ),
       ...scene.annotations.flatMap((a) => {
         if (a.type === "note") return [{ x: a.x, y: a.y }];
         const d = dimensionGeometry(a.from, a.to, a.offset);
@@ -184,6 +197,14 @@ export function PlanCanvas({
     setSnapped(result.targets);
     return { x: result.x, y: result.y };
   };
+  /**
+   * Vanghulplijnen horen bij de handeling die bezig is. Wisselen van gereedschap
+   * beeindigt die handeling, dus dan gaan ze weg; anders blijft er een lijn naar
+   * een meubel staan waar niemand meer iets mee doet.
+   */
+  useEffect(() => {
+    setSnapped([]);
+  }, [tool]);
   const wallClick = (wallId: string) => {
     if (disabled) return;
     if (tool === "door" || tool === "window") {
@@ -241,6 +262,7 @@ export function PlanCanvas({
         },
       ]);
       setStart(null);
+      setSnapped([]);
     } else if (tool === "measure") {
       const p = world();
       if (!p) return;
@@ -264,6 +286,7 @@ export function PlanCanvas({
         },
       ]);
       setStart(null);
+      setSnapped([]);
     } else if (tool === "note") {
       const p = world();
       if (!p) return;
@@ -280,7 +303,19 @@ export function PlanCanvas({
         },
       ]);
       // Meteen terug naar selecteren, zodat de tekst direct te bewerken is.
+      setSnapped([]);
       useEditor.getState().setTool("select");
+    } else if (tool === "led") {
+      const p = world();
+      if (!p) return;
+      const last = ledDraft.at(-1);
+      // Nog eens op hetzelfde punt klikken rondt de strip af; een dubbelklik
+      // komt daar met rastervangen vanzelf op uit.
+      if (last && last.x === p.x && last.y === p.y) {
+        finishLed();
+        return;
+      }
+      setLedDraft([...ledDraft, p]);
     } else if (tool === "calibrate") {
       const underlay = scene.underlay;
       if (!underlay) return;
@@ -299,6 +334,25 @@ export function PlanCanvas({
       );
       setStart(null);
     } else if (tool === "select") select(null);
+  };
+  /**
+   * De getekende punten worden pas een strip wanneer er een lijn ligt. Een
+   * enkele klik levert dus niets op; dat is beter dan een strip van nul meter
+   * die alleen in de weg staat.
+   */
+  const finishLed = () => {
+    const points = useEditor.getState().ledDraft;
+    setSnapped([]);
+    if (points.length < 2) {
+      setLedDraft([]);
+      return;
+    }
+    const path = newLedPath(points);
+    onCommand([{ type: "AddLedPath", path }]);
+    setLedDraft([]);
+    // Meteen terug naar selecteren, zodat de eigenschappen in te vullen zijn.
+    useEditor.getState().setTool("select");
+    select(path.id);
   };
   const wheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
@@ -343,6 +397,7 @@ export function PlanCanvas({
           if ((tool === "wall" || tool === "measure") && start)
             setCursor(world());
           if (tool === "calibrate" && start) setCursor(rawWorld());
+          if (tool === "led" && ledDraft.length) setCursor(world());
           if (band) {
             const p = rawWorld();
             if (p) setBand({ ...band, x2: p.x, y2: p.y });
@@ -368,7 +423,8 @@ export function PlanCanvas({
             tool === "measure" ||
             tool === "wall" ||
             tool === "note" ||
-            tool === "calibrate"
+            tool === "calibrate" ||
+            tool === "led"
           )
             return click();
           if (e.target !== stage.current) return;
@@ -727,6 +783,117 @@ export function PlanCanvas({
               strokeWidth={180}
               opacity={0.5}
             />
+          )}
+          {scene.ledPaths
+            .filter((led) => !led.hidden)
+            .map((led) => {
+              const chosen = selected.includes(led.id);
+              const flat = led.points.flatMap((p) => [p.x, p.y]);
+              return (
+                <Group key={led.id}>
+                  {/* Een strip is dun; deze lichte onderlaag maakt hem op het
+                      scherm herkenbaar zonder de werkelijke maat te suggereren. */}
+                  <Line
+                    listening={false}
+                    points={flat}
+                    stroke={led.color}
+                    strokeWidth={60}
+                    opacity={0.45}
+                    lineCap="round"
+                    lineJoin="round"
+                  />
+                  <Line
+                    points={flat}
+                    stroke={chosen ? "#a36432" : "#6b5b3a"}
+                    strokeWidth={(chosen ? 2.5 : 1.5) / zoom}
+                    dash={[10 / zoom, 6 / zoom]}
+                    lineCap="round"
+                    lineJoin="round"
+                    hitStrokeWidth={20 / zoom}
+                    onClick={() => tool === "select" && select(led.id)}
+                    onTap={() => tool === "select" && select(led.id)}
+                  />
+                  {chosen &&
+                    tool === "select" &&
+                    led.points.map((point, index) => (
+                      <Circle
+                        key={index}
+                        x={point.x}
+                        y={point.y}
+                        radius={6 / zoom}
+                        fill="#ffffff"
+                        stroke="#a36432"
+                        strokeWidth={1.5 / zoom}
+                        draggable={!disabled}
+                        onDragEnd={(event) => {
+                          const snapped = snapTo({
+                            x: event.target.x(),
+                            y: event.target.y(),
+                          });
+                          const points = led.points.map((p, i) =>
+                            i === index ? { x: snapped.x, y: snapped.y } : p,
+                          );
+                          // Een hoekpunt op zijn buurman leggen zou de strip
+                          // ongeldig maken; dan blijft hij staan waar hij lag.
+                          const collapses = points.some(
+                            (p, i) =>
+                              i > 0 &&
+                              p.x === points[i - 1]!.x &&
+                              p.y === points[i - 1]!.y,
+                          );
+                          if (collapses) {
+                            event.target.position({
+                              x: point.x,
+                              y: point.y,
+                            });
+                            return;
+                          }
+                          onCommand([
+                            {
+                              type: "UpdateLedPath",
+                              id: led.id,
+                              path: { ...led, points },
+                            },
+                          ]);
+                        }}
+                      />
+                    ))}
+                </Group>
+              );
+            })}
+          {tool === "led" && ledDraft.length > 0 && (
+            <Group listening={false}>
+              <Line
+                points={[
+                  ...ledDraft.flatMap((p) => [p.x, p.y]),
+                  ...(cursor ? [cursor.x, cursor.y] : []),
+                ]}
+                stroke="#a36432"
+                strokeWidth={2 / zoom}
+                dash={[10 / zoom, 6 / zoom]}
+              />
+              {ledDraft.map((point, index) => (
+                <Circle
+                  key={index}
+                  x={point.x}
+                  y={point.y}
+                  radius={5 / zoom}
+                  fill="#a36432"
+                />
+              ))}
+              {cursor && (
+                <Text
+                  x={cursor.x}
+                  y={cursor.y}
+                  offsetY={24 / zoom}
+                  text={formatMm(
+                    Math.round(ledLengthMm([...ledDraft, cursor])),
+                  )}
+                  fontSize={12 / zoom}
+                  fill="#a36432"
+                />
+              )}
+            </Group>
           )}
           {scene.annotations.map((annotation) => {
             const chosen = selected.includes(annotation.id);

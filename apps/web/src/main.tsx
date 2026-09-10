@@ -62,6 +62,7 @@ import {
   X,
   Armchair,
   HardDriveDownload,
+  Zap,
 } from "lucide-react";
 import { api, login, logout, authRequest, ApiError } from "./api";
 import { Arrange } from "./Arrange";
@@ -69,6 +70,10 @@ import { expandSelection } from "../../../packages/geometry/src/grouping";
 import { LayerPanel } from "./Layers";
 import { UnderlayPanel } from "./Underlay";
 import { DimensionProperties, NoteProperties } from "./DimensionProperties";
+import { LedProperties } from "./LedProperties";
+import { newLedPath } from "../../../packages/editor-2d/src/led-draft";
+import { ledLengthMm } from "../../../packages/geometry/src/index";
+import { formatMm } from "../../../packages/geometry/src/index";
 import { PlanCanvas } from "../../../packages/editor-2d/src/Canvas";
 import { useEditor, type Tool } from "../../../packages/editor-2d/src/store";
 import {
@@ -825,6 +830,8 @@ function Editor() {
     toggleObjectSnap,
     toggleSelected,
     selectMany,
+    ledDraft,
+    setLedDraft,
   } = useEditor();
   useEffect(() => {
     if (query.data) {
@@ -1186,6 +1193,7 @@ function Editor() {
   const dimension = annotation?.type === "dimension" ? annotation : undefined;
   const note = annotation?.type === "note" ? annotation : undefined;
   const item = single ? scene.items.find((i) => i.id === single) : undefined;
+  const led = single ? scene.ledPaths.find((l) => l.id === single) : undefined;
   const selectedItems = scene.items.filter((i) => selected.includes(i.id));
   const disabled = busy || !!pending.current || !lease || !canWrite(org.role);
   const state = saveState({
@@ -1255,6 +1263,7 @@ function Editor() {
               { id: "window", icon: AppWindow, label: "Raam" },
               { id: "measure", icon: Ruler, label: "Maat" },
               { id: "note", icon: StickyNote, label: "Notitie" },
+              { id: "led", icon: Zap, label: "LED-strip" },
             ] as const
           ).map((t) => (
             <button
@@ -1369,6 +1378,35 @@ function Editor() {
             }}
           >
             Lokaal werk verwijderen
+          </button>
+        </div>
+      )}
+      {tool === "led" && (
+        <div className="editor-message" role="status">
+          <span>
+            {ledDraft.length === 0
+              ? "Klik de hoekpunten van de strip aan. Twee keer op hetzelfde punt klikken rondt hem af."
+              : `${ledDraft.length} ${ledDraft.length === 1 ? "punt" : "punten"} · ${formatMm(Math.round(ledLengthMm(ledDraft)))}`}
+          </span>
+          <button
+            disabled={disabled || ledDraft.length < 2}
+            onClick={() => {
+              const path = newLedPath(ledDraft);
+              command([{ type: "AddLedPath", path }]);
+              setLedDraft([]);
+              setTool("select");
+              select(path.id);
+            }}
+          >
+            Strip afronden
+          </button>
+          <button
+            onClick={() => {
+              setLedDraft([]);
+              setTool("select");
+            }}
+          >
+            Annuleren
           </button>
         </div>
       )}
@@ -1489,7 +1527,8 @@ function Editor() {
               {scene.walls.length +
                 scene.items.length +
                 scene.openings.length +
-                scene.annotations.length}
+                scene.annotations.length +
+                scene.ledPaths.length}
             </span>
           </div>
           <div className="object-list">
@@ -1534,6 +1573,17 @@ function Editor() {
               >
                 <DoorOpen size={14} />
                 {o.kind === "door" ? "Deur" : "Raam"} {i + 1}
+              </button>
+            ))}
+            {scene.ledPaths.map((l) => (
+              <button
+                key={l.id}
+                className={selected.includes(l.id) ? "selected" : ""}
+                onClick={() => select(l.id)}
+              >
+                <span className="color-dot" style={{ background: l.color }} />
+                {l.name}
+                {l.hidden && <EyeOff size={12} />}
               </button>
             ))}
             {scene.annotations.map((a, i) => {
@@ -1602,6 +1652,13 @@ function Editor() {
             <NoteProperties
               key={note.id + ":" + scene.revision}
               annotation={note}
+              disabled={disabled}
+              onCommand={command}
+            />
+          ) : led ? (
+            <LedProperties
+              key={led.id + ":" + scene.revision}
+              led={led}
               disabled={disabled}
               onCommand={command}
             />
@@ -1968,4 +2025,3 @@ createRoot(document.getElementById("root")!).render(
     <RouterProvider router={router} />
   </QueryClientProvider>,
 );
-
