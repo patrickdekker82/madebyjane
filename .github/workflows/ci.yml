@@ -16,7 +16,21 @@ jobs:
       - run: npm install --global pnpm@11.19.0
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
+      # Ubuntu 24.04 verbiedt onbevoorrechte gebruikersnamespaces via AppArmor,
+      # waardoor Chromium zijn sandbox niet kan opzetten. De offerte-PDF wordt
+      # bewust met sandbox gemaakt; die zetten we niet uit om de bouwstraat
+      # tevreden te stellen. Chromium noemt dit zelf de aangewezen oplossing:
+      # richt de omgeving in op sandboxen.
+      - name: Sta de Chromium-sandbox toe op de runner
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: pnpm build
+      - run: pnpm probe:quote
+      # De offerte-PDF wordt niet alleen gemaakt maar ook nagemeten: unieke
+      # posten, het exacte totaal, geen lege pagina en een schaalbalk die op
+      # papier werkelijk 100 mm lang is. Zonder deze stap kan een lay-outfout
+      # het planblad ongemerkt verkleinen.
+      - run: pip install --disable-pip-version-check pdfplumber==0.11.10
+      - run: python3 scripts/verify-quote-pdf.py
       - run: pnpm test
       - run: pnpm test:e2e
       - run: pnpm audit --audit-level high

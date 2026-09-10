@@ -1292,7 +1292,11 @@ function Editor() {
           canEdit={canWrite(org.role)}
         />
         {["owner", "admin", "finance"].includes(org.role) && (
-          <Quotes organizationId={org.id} projectId={scene.projectId} />
+          <Quotes
+            organizationId={org.id}
+            organizationName={org.name}
+            projectId={scene.projectId}
+          />
         )}
         <Variants
           organizationId={org.id}
@@ -1964,3 +1968,4 @@ createRoot(document.getElementById("root")!).render(
     <RouterProvider router={router} />
   </QueryClientProvider>,
 );
+

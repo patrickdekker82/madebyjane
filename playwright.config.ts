@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 process.env.PLAYWRIGHT_BROWSERS_PATH ??= resolve("work/browsers");
 export default defineConfig({
   testDir: "tests/e2e",
+  globalTeardown: "./scripts/e2e-teardown.ts",
   timeout: 45000,
   workers: 1,
   reporter: [["list"], ["html", { open: "never" }]],
@@ -16,11 +17,14 @@ export default defineConfig({
     locale: "nl-NL",
     timezoneId: "Europe/Amsterdam",
     // Sommige omgevingen leveren een eigen Chromium op een vaste plek. Verwijs er
-    // expliciet naar in plaats van een tweede browser te downloaden.
-    ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+    // expliciet naar in plaats van een tweede browser te downloaden. Beide namen
+    // zijn in gebruik geweest; de eerste die gezet is wint.
+    ...((process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ??
+    process.env.PLAYWRIGHT_EXECUTABLE_PATH)
       ? {
           launchOptions: {
-            executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+            executablePath: (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ??
+              process.env.PLAYWRIGHT_EXECUTABLE_PATH)!,
           },
         }
       : {}),
@@ -29,7 +33,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: {
-    command: "pnpm exec tsx scripts/e2e-server.ts",
+    command: `"${process.execPath}" "${resolve("node_modules/tsx/dist/cli.mjs")}" scripts/e2e-server.ts`,
     url: "http://127.0.0.1:4320",
     reuseExistingServer: false,
     timeout: 60000,

@@ -90,6 +90,10 @@
     {
       "name": "0011_underlay_assets.sql",
       "sha256": "9a1a520447d99d4e4fa3b863b8359840d5b4f42f17811c2eb14ba72588ce3bc2"
+    },
+    {
+      "name": "0012_quote_workflow.sql",
+      "sha256": "0bd30383b7a570a26f7af69730159feebc8159a2267533fcbca21f8037fdc103"
     }
   ],
   "containers": {

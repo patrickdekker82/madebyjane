@@ -10,10 +10,10 @@ import {
   chown,
 } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
+import { resolve, dirname } from "node:path";
+import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { resolve } from "node:path";
-import { tmpdir } from "node:os";
 import { z } from "zod";
 import { Pool, guardPool, migrate } from "../packages/db/src/index";
 const run = promisify(execFile);
@@ -70,9 +70,7 @@ export async function localDatabase(directory = "work/local-db", port = 55432) {
     })
     .strict()
     .parse(secrets);
-  const socketDir = await mkdtemp(
-    resolve(tmpdir(), "studio-pg-"),
-  );
+  const socketDir = await mkdtemp(resolve(tmpdir(), "studio-pg-"));
   await allowPostgresSystemUser(directory, socketDir);
   let startupLog = "";
   const pg = new EmbeddedPostgres({
@@ -82,7 +80,12 @@ export async function localDatabase(directory = "work/local-db", port = 55432) {
     port,
     persistent: true,
     authMethod: "scram-sha-256",
-    postgresFlags: ["-h", "127.0.0.1", ...(process.platform === "win32" ? [] : ["-k", socketDir])],
+    initdbFlags: ["--encoding=UTF8", "--locale=C"],
+    postgresFlags: [
+      "-h",
+      "127.0.0.1",
+      ...(process.platform === "win32" ? [] : ["-k", socketDir]),
+    ],
     onLog: (message) => {
       startupLog = (startupLog + message).slice(-8000);
     },
@@ -98,6 +101,32 @@ export async function localDatabase(directory = "work/local-db", port = 55432) {
   } catch {
     await rmdir(socketDir).catch(() => {});
     throw new Error(startupLog || "PostgreSQL kon niet starten.");
+  }
+  if (process.platform === "win32") {
+    // The pinned package uses taskkill on Windows, which can leave IO workers
+    // holding the listening socket. pg_ctl performs PostgreSQL's own shutdown.
+    const binary = await import(
+      new URL("./binary.js", import.meta.resolve("embedded-postgres")).href
+    );
+    const { postgres } = await binary.default();
+    let stopping: Promise<void> | undefined;
+    pg.stop = () =>
+      (stopping ??= (async () => {
+        await promisify(execFile)(
+          resolve(dirname(postgres), "pg_ctl.exe"),
+          [
+            "-D",
+            resolve(directory, "data"),
+            "-m",
+            "fast",
+            "-w",
+            "-t",
+            "20",
+            "stop",
+          ],
+          { windowsHide: true, timeout: 25000 },
+        );
+      })());
   }
   const url = (user: string, password: string) =>
     `postgresql://${user}:${password}@127.0.0.1:${port}/postgres`;

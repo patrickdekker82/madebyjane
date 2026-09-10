@@ -1,5 +1,21 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 10 september 2026 — afronding offerteworkflow fase 6
+
+Deze aanvulling is leidend voor fase 6; de oudere rapportages hieronder blijven als historische testregistraties staan. De wijzigingen zijn samengevoegd met main cb03021, inclusief de materiaalberekeningen en nieuwe editor-/browsertests. Het eerste offertedeel uit PR #2 staat al in main; de afronding krijgt een afzonderlijke pull request.
+
+Beschikbaar: decimale rekenkern en jaar-/organisatienummering, ontwerp- en materiaalbronnen, bronverschillen, aparte commerciële catalogusprijsversies, dubbele-broncontrole, vaste bedrijfs-/klantgegevens, voorwaarden, tekst-/materiaal-/planbijlagen, PDF-download, vervolgconcepten, versiegeschiedenis, expliciete statusovergangen en intrekbare PDF-deellinks. Migration 0011 voegt immutable prijzen, bijlagen, gebeurtenissen en PDF-bytes toe; FORCE RLS en servercontrole beperken interne toegang tot owner/admin/finance. Deellinks zijn beperkt tot één exacte PDF, gehasht opgeslagen, maximaal 30 dagen via API (7 in UI), intrekbaar en zonder verdere projecttoegang.
+
+Finalisatie bewaart inhoudshash en snapshots. De eerste PDF wordt opgeslagen met templateversie en PDF-hash; volgende downloads gebruiken dezelfde bytes. Een nieuwe definitieve versie krijgt een nieuw nummer en een expliciete vervangen-gebeurtenis bij de vorige versie. Een statusregistratie bevat actor, gebeurtenisdatum, registratie-tijdstip, onderbouwing en inhoudshash. PDF/download/deellink maken verzendt geen e-mail en simuleert geen klantacceptatie.
+
+Bronconsistentie: dezelfde ontwerprevisie per variant; materiaalbladen en posten gebruiken dezelfde materiaalversie. Berekende materiaalhoeveelheden worden ook aan de ontwerprevisies getoetst. Cataloguswijzigingen kunnen een definitieve offerte niet aanpassen. Indicatieve prijzen bij materiaalkeuzes blijven afzonderlijk van de commerciële catalogusprijs; de gebruiker kiest die expliciet. Inkoop/marge worden niet opgeslagen of uitgeleverd.
+
+Verificatie vóór samenvoegen met de nieuwste main: 11 offertests geslaagd met echte PostgreSQL en Chrome; alle 6 browserroutes geslaagd (1,3 min), inclusief PDF, delen/intrekken, statusregistratie en het ongewijzigd openen van oudere versies. De PDF-proef met 40 posten heeft 7 visueel gecontroleerde pagina's, totaal 3508,09 EUR, alle posten precies eenmaal en een 5-meterreferentie die bij 1:50 100 mm meet. De volledige suite na samenvoegen en Linux-CI worden hieronder aangevuld wanneer voltooid. Een bestaande Windows-symlinktest vereist rechten die op deze machine ontbreken; deze test blijft actief voor Linux-CI.
+
+Na samenvoegen met main: TypeScript strict geslaagd; productiebuild geslaagd (14,61 s); alle 10 browserroutes geslaagd (1,3 min). De volledige Vitest-run telde 96 geslaagde tests, één nieuwe fixturefout en de bestaande Windows-symlinkbeperking. Na correctie van het veld keywords zijn alle 8 offerte-integratietests opnieuw geslaagd (15,74 s), inclusief de nieuwe gecombineerde broncontrole. Linux-CI moet de volledige 98-test-suite bevestigen. De Windows-browsertest stopt PostgreSQL nu vóór Playwright de procesboom beëindigt; de vorige force-stop kon een IO-worker achterlaten. De echte API-PDF (3 pagina's) is aanvullend visueel gecontroleerd.
+
+Grenzen buiten deze fase: volledige fase-5-presentatiebouwer/PPTX/beeldimport, productie-exportqueue en opslagadapter, installatie/back-up/herstel en fase-9-hardening. De huidige bijlagen zijn vaste tekst-, materiaal- en planblokken; willekeurige geüploade PDF's en renderbeelden zijn geen ondersteunde bijlagebron. Maximaal 200 posten, 12 bijlagen, 500 versies per offerte, 20 MB per PDF en één actieve render per serverproces. Geen productie-uitrol.
+
 ## Aanvulling 8 september 2026 — fase 6, offerteconcepten en finalisatie
 
 Toegevoegd: offerteformulier met klant-/adresgegevens, datum/geldigheid, voorwaarden, maximaal 200 posten, handmatige prijzen en materiaalkeuzebronnen. EUR-bedragen gebruiken decimal.js met geïsoleerde precisie 40: hoeveelheid × eenheidsprijs × (1 − korting/100), netto per regel op centen ROUND_HALF_UP, daarna belasting over de som per categorie op centen. Negatieve eenheidsprijzen zijn correcties, hoeveelheden zijn niet-negatief. Belastingtarieven zijn per categorie instelbaar. Lege concepten zijn toegestaan, lege finalisatie niet.
@@ -489,3 +505,35 @@ Verificatie 10 september, Linux x64, Node 22.22.2:
 Beperkingen: draaien gaat via het paneel, niet met een greep op het canvas. De draaiing werkt niet door in het planblad of de 3D-weergave, want de onderlegger komt daar bewust niet in voor — het is een natekenhulp, geen tekeninhoud.
 
 Daarmee zijn de openstaande punten van fase 2 afgewerkt. Nog steeds bewust buiten deze fase gelaten: **PDF-pagina als onderlegger** (zie ADR 0004; vraagt een PDF-engine in de browser) en **EXIF-metadata verwijderen** (vraagt opnieuw encoderen en dus een beeldbibliotheek op de server). Beide staan als open punt genoteerd en zijn geen stille weglating. De symbolenlegenda op het planblad wacht op de elektra- en lichtsymbolen uit fase 4.
+
+## Aanvulling 10 september 2026 — fase 6 van Codex samengevoegd, met twee correcties
+
+`codex/phase-6-completion` ([PR #3](https://github.com/patrickdekker82/madebyjane/pull/3)) is met een merge-commit in deze tak gezet, zodat de commits van Codex met hun oorspronkelijke auteurschap in de geschiedenis blijven. De tak vertrok van `main` en wist niets van het fase-2-werk dat daarna is gemaakt. Wat er binnenkomt: offerte-PDF met vaste bijlagen, prijsbronnen, statusovergangen, intrekbare deellinks, vervolgconcepten en een Windows-afsluitpad voor de testdatabase.
+
+### Wat er bij het samenvoegen is opgelost
+
+- **Twee migrations met nummer 0011.** Deze tak had `0011_underlay_assets.sql`, Codex `0011_quote_workflow.sql`. Git ziet dat niet als conflict — de bestandsnamen verschillen — maar de nummering zou stilzwijgend dubbel zijn. Die van Codex is `0012_quote_workflow.sql` geworden; de inhoud en dus de hash zijn ongewijzigd en het release-manifest noemt nu beide.
+- **Twee namen voor hetzelfde Chromium-pad** in `playwright.config.ts` (`PLAYWRIGHT_EXECUTABLE_PATH` van Codex, `PLAYWRIGHT_CHROMIUM_EXECUTABLE` van hier), waarvan er één stil werd overschreven. Beide worden nu geaccepteerd, met één regel die zegt welke voorgaat.
+- Het offertepaneel kreeg een nieuwe eigenschap `organizationName`; die is meegenomen in de samengevoegde editor.
+
+### De offerte-PDF klopte niet
+
+De bouwstraat van PR #3 was rood en bleef dat om een reden die niets met de merge te maken had: `pnpm probe:quote` kan Chromium niet met sandbox starten op ubuntu-24.04, omdat die versie onbevoorrechte gebruikersnamespaces via AppArmor verbiedt. De sandbox uitzetten om de bouwstraat tevreden te stellen is geen optie; CI zet daarom nu `kernel.apparmor_restrict_unprivileged_userns=0`, precies de oplossing die Chromium zelf aanwijst.
+
+Toen de PDF eenmaal gemaakt kon worden, bleek **de bijgeleverde plattegrond niet op schaal te staan**. Codex' eigen controlescript `scripts/verify-quote-pdf.py` viel er meteen op om, maar het stond nergens in de bouwstraat en was dus nooit gedraaid.
+
+Het planblad is A4 liggend van rand tot rand en heeft daarvoor een eigen paginastijl zonder marges. Het omhullende blok had echter zelf `width:297mm;height:210mm;overflow:hidden` gekregen, en daardoor negeerde Chromium die paginastijl: het blad belandde op een gewone pagina met marges van 17 mm, waarna Chromium het **hele document naar 88,6% kromp**. De schaalbalk die 100 mm hoort te zijn mat 88,6 mm; de plattegrond in de offerte was geen 1:50 maar ongeveer 1:56. Bovendien liep het blad over en kwam er een lege pagina achteraan.
+
+De maten op het omhullende blok zijn weg; de tekening zelf houdt haar eigen maat. Nagemeten in de gemaakte PDF: planblad 296,995 × 209,996 mm op één pagina, schaalbalk 99,998 mm, zeven pagina's zonder lege. Het controlescript draait nu in de bouwstraat, met een gepinde `pdfplumber`, zodat een lay-outfout het planblad niet nog eens ongemerkt kan verkleinen.
+
+Dat een verkeerde maat in een document dat naar een klant gaat als "geverifieerd" kon passeren, komt doordat de controle wel geschreven maar niet uitgevoerd was. Dat is precies het soort claim dat het masterprompt verbiedt.
+
+### Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+- **160 tests / 22 bestanden geslaagd, 33,6 s.** Inclusief de acht offerte-integratietests van Codex, met echte PDF-uitvoer.
+- **17 browserroutes geslaagd, 2,3 min.** De offerteroute downloadt nu een echte PDF, maakt een deellink, trekt die in en controleert dat de ingetrokken link 404 geeft.
+- `pnpm probe:quote` gevolgd door `scripts/verify-quote-pdf.py`: 7 pagina's, 40 unieke posten, exact totaal en een schaalbalk van 100 mm.
+- TypeScript strict en productiebuild geslaagd (10,9 s).
+- Pagina 1 en het planblad van `outputs/qa/offerte-demo.pdf` naar afbeelding gerenderd en bekeken: marges kloppen, het planblad staat compleet op één pagina met tekening, titelblok, legenda en schaalbalk.
+
+**Deze verificatie is niet als root gedraaid.** Chromium weigert te sandboxen als root, dus de testronde is uitgevoerd onder een gewone gebruiker in dezelfde container. Als root falen twee offertetests op het starten van de browser; dat is een eigenschap van deze omgeving, niet van de code. Of de sysctl-instelling op de GitHub-runner het beoogde effect heeft, is hier niet na te bootsen en moet uit de bouwstraat zelf blijken.

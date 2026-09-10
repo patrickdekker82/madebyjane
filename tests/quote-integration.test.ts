@@ -1,6 +1,6 @@
 import { beforeAll, afterAll, test, expect } from "vitest";
 import { randomUUID, randomBytes } from "node:crypto";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { localDatabase } from "../scripts/local-db";
 import { createAuth } from "../packages/auth/src/index";
 import { createServer } from "../apps/api/src/server";
@@ -31,6 +31,7 @@ const call = (
     ...(payload ? { payload: payload as any } : {}),
   });
 const definition = () => ({
+  seller: "Fictieve studio, Voorbeeldweg 2",
   customer: "Fictieve klant, Voorbeeldstraat 1",
   title: "Interieur",
   date: "2026-09-08",
@@ -291,9 +292,7 @@ test("materiaalbron is projectgebonden; wijzigingen vereisen expliciet nieuw bro
       })
     ).statusCode,
   ).toBe(200);
-  const frozen = (await call("GET", path))
-    .json()
-    .items.find((q: any) => q.id === d.id);
+  const frozen = (await call("GET", `${path}/${d.id}/versions/3`)).json();
   expect(frozen.definition.lines[0].source.versionId).toBe(newer.versionId);
   expect(frozen.totals.total).toBe("242.01");
   const bad = { ...draft(), definition: d.definition };
@@ -323,4 +322,623 @@ test("lege offerte blijft concept en krijgt geen nummer", async () => {
       })
     ).json().code,
   ).toBe("EMPTY_QUOTE");
+});
+
+test("catalogusprijsfreeze, vaste bijlagen, PDF-herhaling en intrekbare exacte versielink", async () => {
+  const root = `/api/v1/projects/${project}`,
+    path = root + "/quotes";
+  const material = {
+    entryId: randomUUID(),
+    versionId: randomUUID(),
+    baseVersion: 0,
+    definition: {
+      name: "Vloer voor offerte",
+      category: "Vloer",
+      room: "Woonkamer",
+      supplier: "Fictieve leverancier",
+      collection: "Eiken",
+      sku: "V01",
+      colorCode: "Natuurlijk",
+      unit: "m²",
+      quantity: "20",
+      quantityReason: "Handmatig gemeten",
+      status: "chosen",
+      confirmationDate: null,
+      confirmationNote: "",
+      notes: "",
+    },
+  };
+  expect((await call("POST", root + "/materials", material)).statusCode).toBe(
+    200,
+  );
+  const price = {
+    id: randomUUID(),
+    entryId: randomUUID(),
+    baseVersion: 0,
+    sourceType: "material",
+    sourceId: material.entryId,
+    unitPrice: "25.00",
+    unit: "m²",
+    taxCategory: "Hoog",
+    taxRate: "21",
+    date: "2026-09-08",
+    note: "Prijslijst leverancier",
+  };
+  expect(
+    (await call("POST", root + "/quote-prices", price, "finance")).statusCode,
+  ).toBe(200);
+  expect(
+    (await call("POST", root + "/quote-prices", price, "designer")).statusCode,
+  ).toBe(403);
+  expect(
+    (await call("POST", root + "/quote-prices", { ...price, id: randomUUID() }))
+      .statusCode,
+  ).toBe(409);
+  const attachment = {
+    id: randomUUID(),
+    kind: "text",
+    title: "Ontwerpvoorstel",
+    text: "Vaste presentatiebijlage <script>alert('x')</script>",
+  };
+  const a = await call("POST", root + "/quote-attachments", attachment);
+  expect(a.statusCode, a.body).toBe(200);
+  expect(a.json().html).toContain("&lt;script&gt;");
+  expect(a.json().html).not.toContain("<script>");
+  const sheet = {
+    id: randomUUID(),
+    kind: "materials",
+    title: "Materiaalkeuzes",
+    versionIds: [material.versionId],
+  };
+  expect(
+    (await call("POST", root + "/quote-attachments", sheet)).statusCode,
+  ).toBe(200);
+  const d: any = draft();
+  d.definition.lines = [
+    {
+      ...d.definition.lines[0],
+      quantity: "20",
+      unitPrice: price.unitPrice,
+      unit: price.unit,
+      priceRef: { id: price.id },
+      source: { entryId: material.entryId, versionId: material.versionId },
+    },
+  ];
+  d.definition.attachments = [attachment.id, sheet.id];
+  expect(
+    (
+      await call("POST", path, {
+        ...d,
+        definition: {
+          ...d.definition,
+          lines: [{ ...d.definition.lines[0], unitPrice: "1" }],
+        },
+      })
+    ).json().code,
+  ).toBe("PRICE_MISMATCH");
+  expect((await call("POST", path, d)).statusCode).toBe(200);
+  const finalized = await call("POST", `${path}/${d.id}/finalize`, {
+    requestId: randomUUID(),
+    baseVersion: 1,
+  });
+  expect(finalized.statusCode, finalized.body).toBe(200);
+  expect(finalized.json().totals.total).toBe("605.00");
+  expect(finalized.json().frozen.attachments).toHaveLength(2);
+  const pdfPath = `${path}/${d.id}/versions/2/pdf`;
+  const pdf = await call("GET", pdfPath);
+  expect(pdf.statusCode, pdf.body.slice(0, 100)).toBe(200);
+  expect(pdf.rawPayload.subarray(0, 4).toString()).toBe("%PDF");
+  await mkdir("outputs/qa", { recursive: true });
+  await writeFile("outputs/qa/offerte-api.pdf", pdf.rawPayload);
+  expect((await call("GET", pdfPath)).rawPayload.equals(pdf.rawPayload)).toBe(
+    true,
+  );
+  expect((await call("GET", pdfPath, undefined, "viewer")).statusCode).toBe(
+    403,
+  );
+  const shareBody = { id: randomUUID(), days: 7 },
+    share = await call("POST", `${path}/${d.id}/versions/2/shares`, shareBody);
+  expect(share.statusCode, share.body).toBe(200);
+  expect(
+    (await call("POST", `${path}/${d.id}/versions/2/shares`, shareBody)).json()
+      .path,
+  ).toBe(share.json().path);
+  const publicPath = share.json().path;
+  const publicPdf = await server.app.inject({ method: "GET", url: publicPath });
+  expect(publicPdf.rawPayload.equals(pdf.rawPayload)).toBe(true);
+  expect(
+    (
+      await server.app.inject({
+        method: "GET",
+        url: publicPath.replace(org, other),
+      })
+    ).statusCode,
+  ).toBe(404);
+  expect(
+    (await call("GET", `${path}/${d.id}/history`)).json().items[0].status,
+  ).toBe("final");
+  const newPrice = {
+    ...price,
+    id: randomUUID(),
+    baseVersion: 1,
+    unitPrice: "30.00",
+  };
+  expect(
+    (await call("POST", root + "/quote-prices", newPrice)).statusCode,
+  ).toBe(200);
+  expect((await call("GET", pdfPath)).rawPayload.equals(pdf.rawPayload)).toBe(
+    true,
+  );
+  const reviseBody = { requestId: randomUUID(), baseVersion: 2 };
+  const revised = await call("POST", `${path}/${d.id}/revise`, reviseBody);
+  expect(revised.statusCode, revised.body).toBe(200);
+  expect(
+    (await call("POST", `${path}/${d.id}/revise`, reviseBody)).json().version,
+  ).toBe(3);
+  expect(
+    (
+      await call("POST", `${path}/${d.id}/finalize`, {
+        requestId: randomUUID(),
+        baseVersion: 3,
+      })
+    ).json().code,
+  ).toBe("STALE_PRICE");
+  const diffs = (await call("GET", `${path}/${d.id}/differences`)).json()
+    .changes;
+  expect(diffs[0]).toMatchObject({
+    kind: "price",
+    previous: { unitPrice: "25.00" },
+    current: { unitPrice: "30.00" },
+  });
+  const updated = revised.json().definition;
+  updated.lines[0].priceRef.id = newPrice.id;
+  updated.lines[0].unitPrice = newPrice.unitPrice;
+  expect(
+    (
+      await call("POST", path, {
+        id: d.id,
+        requestId: randomUUID(),
+        baseVersion: 3,
+        definition: updated,
+      })
+    ).statusCode,
+  ).toBe(200);
+  expect(
+    (
+      await call("POST", `${path}/${d.id}/finalize`, {
+        requestId: randomUUID(),
+        baseVersion: 4,
+      })
+    ).statusCode,
+  ).toBe(200);
+  const hist = (await call("GET", `${path}/${d.id}/history`)).json().items;
+  expect(hist.find((q: any) => q.version === 2)).toMatchObject({
+    status: "replaced",
+    totals: { total: "605.00" },
+  });
+  expect(hist[0].totals.total).toBe("726.00");
+  expect(
+    (
+      await server.app.inject({ method: "GET", url: publicPath })
+    ).rawPayload.equals(pdf.rawPayload),
+  ).toBe(true);
+  expect(
+    (
+      await call(
+        "POST",
+        `/api/v1/quote-shares/${shareBody.id}/revoke`,
+        {},
+        "viewer",
+      )
+    ).statusCode,
+  ).toBe(403);
+  expect(
+    (await call("POST", `/api/v1/quote-shares/${shareBody.id}/revoke`, {}))
+      .statusCode,
+  ).toBe(200);
+  expect(
+    (await server.app.inject({ method: "GET", url: publicPath })).statusCode,
+  ).toBe(404);
+  const exp = await call("POST", `${path}/${d.id}/versions/2/shares`, {
+    id: randomUUID(),
+    days: 1,
+  });
+  await db.admin.query(
+    "UPDATE quote_shares SET expires_at=now()-interval '1 second' WHERE token_hash IS NOT NULL AND id=$1",
+    [exp.json().id],
+  );
+  expect(
+    (await server.app.inject({ method: "GET", url: exp.json().path }))
+      .statusCode,
+  ).toBe(404);
+  await expect(
+    inTenant(db.runtime, org, (c) =>
+      c.query("UPDATE quote_exports SET pdf='x' WHERE quote_id=$1", [d.id]),
+    ),
+  ).rejects.toThrow(/permission denied/i);
+}, 90000);
+
+test("expliciete statusovergangen, bewijs, herhaalveiligheid en finance-rechten", async () => {
+  const path = `/api/v1/projects/${project}/quotes`,
+    d = draft();
+  expect((await call("POST", path, d)).statusCode).toBe(200);
+  await call("POST", `${path}/${d.id}/finalize`, {
+    requestId: randomUUID(),
+    baseVersion: 1,
+  });
+  const endpoint = `${path}/${d.id}/versions/2/events`,
+    event = {
+      requestId: randomUUID(),
+      baseEventVersion: 0,
+      status: "sent",
+      occurredOn: "2026-09-08",
+      actor: "Fictieve studio",
+      evidence: "Handmatig verstuurd per e-mail, onderwerp Offerte",
+    };
+  // Migration 0011 leaves pre-existing commercial snapshots intact, without a hash.
+  await db.admin.query(
+    "UPDATE quote_versions SET content_hash=NULL WHERE id=$1 AND version=2",
+    [d.id],
+  );
+  const pdf = await call("GET", `${path}/${d.id}/versions/2/pdf`);
+  expect(pdf.statusCode, pdf.body.slice(0, 100)).toBe(200);
+  const exportedHash = (
+    await db.admin.query(
+      "SELECT content_hash FROM quote_exports WHERE quote_id=$1 AND quote_version=2",
+      [d.id],
+    )
+  ).rows[0].content_hash;
+  expect(
+    (await call("POST", endpoint, { ...event, status: "accepted" })).json()
+      .code,
+  ).toBe("INVALID_TRANSITION");
+  expect(
+    (await call("POST", endpoint, { ...event, evidence: "" })).statusCode,
+  ).toBe(400);
+  expect((await call("POST", endpoint, event, "designer")).statusCode).toBe(
+    403,
+  );
+  const r = await call("POST", endpoint, event, "finance");
+  expect(r.statusCode, r.body).toBe(200);
+  expect(r.json().content_hash).toBe(exportedHash);
+  expect(
+    (await call("POST", endpoint, event, "finance")).json().event_version,
+  ).toBe(1);
+  expect(
+    (
+      await call(
+        "POST",
+        endpoint,
+        { ...event, evidence: "Gewijzigde retry" },
+        "finance",
+      )
+    ).statusCode,
+  ).toBe(409);
+  expect(
+    (
+      await call("POST", endpoint, {
+        ...event,
+        requestId: randomUUID(),
+        status: "accepted",
+        baseEventVersion: 0,
+      })
+    ).statusCode,
+  ).toBe(409);
+  const accepted = await call("POST", endpoint, {
+    ...event,
+    requestId: randomUUID(),
+    status: "accepted",
+    baseEventVersion: 1,
+    actor: "Familie Voorbeeld",
+    evidence: "E-mail akkoord klant",
+  });
+  expect(accepted.statusCode, accepted.body).toBe(200);
+  expect(accepted.json().content_hash).toMatch(/^[a-f0-9]{64}$/);
+  expect(
+    (
+      await call("POST", endpoint, {
+        ...event,
+        requestId: randomUUID(),
+        status: "rejected",
+        baseEventVersion: 2,
+      })
+    ).statusCode,
+  ).toBe(409);
+  expect((await call("GET", endpoint)).json().items).toHaveLength(2);
+  expect(
+    (await call("GET", endpoint, undefined, "other", other)).statusCode,
+  ).toBe(404);
+  await expect(
+    inTenant(db.runtime, org, (c) =>
+      c.query("DELETE FROM quote_events WHERE quote_id=$1", [d.id]),
+    ),
+  ).rejects.toThrow(/permission denied/i);
+  const expired = draft();
+  expired.definition.date = "2026-09-01";
+  expired.definition.validUntil = "2026-09-02";
+  await call("POST", path, expired);
+  await call("POST", `${path}/${expired.id}/finalize`, {
+    requestId: randomUUID(),
+    baseVersion: 1,
+  });
+  expect(
+    (
+      await call("POST", `${path}/${expired.id}/versions/2/events`, {
+        ...event,
+        requestId: randomUUID(),
+        status: "expired",
+        occurredOn: "2026-09-01",
+      })
+    ).json().code,
+  ).toBe("NOT_EXPIRED");
+  expect(
+    (
+      await call("POST", `${path}/${expired.id}/versions/2/events`, {
+        ...event,
+        requestId: randomUUID(),
+        status: "expired",
+      })
+    ).statusCode,
+  ).toBe(200);
+});
+
+test("berekende materialen, planrevisies en dubbele productroutes worden gecontroleerd", async () => {
+  const p = (
+    await call("POST", "/api/v1/projects", {
+      name: "Broncontrole",
+      customer: "Fictief",
+      description: "",
+      demo: true,
+    })
+  ).json();
+  const root = `/api/v1/projects/${p.id}`;
+  // Seed an explicit supplier article in this isolated test project's scene.
+  p.scene.items[0].catalog = {
+    supplier: "Testleverancier",
+    sku: "STOEL-1",
+    category: "Stoel",
+    description: "Teststoel",
+    keywords: [],
+  };
+  await db.admin.query(
+    "UPDATE design_documents SET document=$1 WHERE variant_id=$2",
+    [p.scene, p.variantId],
+  );
+  const revision = (
+    await call("POST", `/api/v1/variants/${p.variantId}/revisions`, {
+      name: "Eerste plan",
+    })
+  ).json();
+  const measured = (
+    await call("GET", root + `/quantities?variantId=${p.variantId}`)
+  ).json();
+  const material = {
+    entryId: randomUUID(),
+    versionId: randomUUID(),
+    baseVersion: 0,
+    definition: {
+      name: "Testmateriaal",
+      category: "Vloer",
+      room: "Woonkamer",
+      supplier: "Testleverancier",
+      sku: "STOEL-1",
+      collection: "",
+      colorCode: "",
+      unit: "m²",
+      quantity: null,
+      quantityReason: "",
+      status: "chosen",
+      confirmationDate: null,
+      confirmationNote: "",
+      notes: "",
+    },
+    calculation: {
+      variantId: p.variantId,
+      roomId: measured.rooms[0].id,
+      basis: "floor_area",
+      wastePercent: "0",
+      orderStep: null,
+    },
+  };
+  const saved = await call("POST", root + "/materials", material);
+  expect(saved.statusCode, saved.body).toBe(200);
+  const d: any = draft();
+  d.definition.lines = [
+    {
+      ...definition().lines[0],
+      quantity: "1",
+      designSource: {
+        variantId: p.variantId,
+        revisionId: revision.id,
+        itemId: p.scene.items[0].id,
+      },
+    },
+    {
+      ...definition().lines[0],
+      source: { entryId: material.entryId, versionId: material.versionId },
+    },
+  ];
+  expect((await call("POST", root + "/quotes", d)).json().code).toBe(
+    "POSSIBLE_DOUBLE_COUNT",
+  );
+  d.definition.lines[1].overlapReason =
+    "Afzonderlijke levering voor de tweede kamer";
+  const allowed = await call("POST", root + "/quotes", d);
+  expect(allowed.statusCode, allowed.body).toBe(200);
+  p.scene.revision = 1;
+  await db.admin.query(
+    "UPDATE design_documents SET document=$1,revision=1 WHERE variant_id=$2",
+    [p.scene, p.variantId],
+  );
+  const newer = (
+    await call("POST", `/api/v1/variants/${p.variantId}/revisions`, {
+      name: "Nieuw plan",
+    })
+  ).json();
+  const plan = {
+    id: randomUUID(),
+    kind: "plan",
+    title: "Nieuw plan",
+    revisionId: newer.id,
+    scale: 50,
+  };
+  expect(
+    (await call("POST", root + "/quote-attachments", plan)).statusCode,
+  ).toBe(200);
+  const mismatch = {
+    ...draft(),
+    definition: {
+      ...d.definition,
+      lines: [d.definition.lines[1]],
+      attachments: [plan.id],
+    },
+  };
+  expect((await call("POST", root + "/quotes", mismatch)).json().code).toBe(
+    "INCONSISTENT_REVISIONS",
+  );
+  const firstSheet = {
+    id: randomUUID(),
+    kind: "materials",
+    title: "Oude materialen",
+    versionIds: [material.versionId],
+  };
+  expect(
+    (await call("POST", root + "/quote-attachments", firstSheet)).statusCode,
+  ).toBe(200);
+  const v2 = { ...material, baseVersion: 1, versionId: randomUUID() };
+  expect((await call("POST", root + "/materials", v2)).statusCode).toBe(200);
+  const secondSheet = {
+    ...firstSheet,
+    id: randomUUID(),
+    versionIds: [v2.versionId],
+  };
+  expect(
+    (await call("POST", root + "/quote-attachments", secondSheet)).statusCode,
+  ).toBe(200);
+  const conflictingSheets = {
+    ...draft(),
+    definition: {
+      ...definition(),
+      attachments: [firstSheet.id, secondSheet.id],
+    },
+  };
+  expect(
+    (await call("POST", root + "/quotes", conflictingSheets)).json().code,
+  ).toBe("INCONSISTENT_REVISIONS");
+});
+
+test("ontwerpbron en planbijlage behouden dezelfde revisie en weigeren dubbele objecten", async () => {
+  const designProject = (
+    await call("POST", "/api/v1/projects", {
+      name: "Ontwerpbronnen",
+      customer: "Fictief",
+      description: "",
+      demo: true,
+    })
+  ).json();
+  const root = `/api/v1/projects/${designProject.id}`,
+    path = root + "/quotes";
+  const variant = designProject.variantId;
+  const a = (
+    await call("POST", `/api/v1/variants/${variant}/revisions`, {
+      name: "Offerteplan 1",
+    })
+  ).json();
+  const b = (
+    await call("POST", `/api/v1/variants/${variant}/revisions`, {
+      name: "Offerteplan 2",
+    })
+  ).json();
+  const plan = {
+    id: randomUUID(),
+    kind: "plan",
+    title: "Plan 1:50",
+    revisionId: a.id,
+    scale: 50,
+  };
+  expect(
+    (await call("POST", root + "/quote-attachments", plan)).statusCode,
+  ).toBe(200);
+  expect(
+    (await call("POST", root + "/quote-attachments", plan)).json().revisionId,
+  ).toBe(a.id);
+  expect(
+    (
+      await call("POST", root + "/quote-attachments", {
+        ...plan,
+        title: "Andere retry",
+      })
+    ).statusCode,
+  ).toBe(409);
+  expect(
+    (
+      await call(
+        "POST",
+        `/api/v1/projects/${otherProject}/quote-attachments`,
+        plan,
+        "other",
+        other,
+      )
+    ).statusCode,
+  ).toBe(400);
+  const second = { ...plan, id: randomUUID(), revisionId: b.id };
+  await call("POST", root + "/quote-attachments", second);
+  const d: any = draft();
+  d.definition.attachments = [plan.id, second.id];
+  expect((await call("POST", path, d)).json().code).toBe(
+    "INCONSISTENT_REVISIONS",
+  );
+  d.definition.attachments = [plan.id];
+  const item = designProject.scene.items[0];
+  d.definition.lines = [
+    {
+      ...d.definition.lines[0],
+      quantity: "1",
+      designSource: { variantId: variant, revisionId: a.id, itemId: item.id },
+    },
+  ];
+  expect(
+    (
+      await call("POST", path, {
+        ...d,
+        definition: {
+          ...d.definition,
+          lines: [
+            ...d.definition.lines,
+            { ...d.definition.lines[0], id: randomUUID() },
+          ],
+        },
+      })
+    ).statusCode,
+  ).toBe(400);
+  expect(
+    (
+      await call("POST", path, {
+        ...d,
+        definition: {
+          ...d.definition,
+          lines: [{ ...d.definition.lines[0], quantity: "2" }],
+        },
+      })
+    ).json().code,
+  ).toBe("INVALID_QUANTITY");
+  expect((await call("POST", path, d)).statusCode).toBe(200);
+  expect(
+    (
+      await call("POST", `${path}/${d.id}/finalize`, {
+        requestId: randomUUID(),
+        baseVersion: 1,
+      })
+    ).statusCode,
+  ).toBe(200);
+  const history = (await call("GET", `${path}/${d.id}/versions/2`)).json();
+  expect(history.frozen.sources[0].item.id).toBe(item.id);
+  expect(history.frozen.attachments[0].revisionId).toBe(a.id);
+  expect(
+    (await call("GET", root + `/quote-design/${a.id}`)).json().variantId,
+  ).toBe(variant);
+  expect(
+    (await call("GET", root + `/quote-design/${a.id}`, undefined, "viewer"))
+      .statusCode,
+  ).toBe(403);
 });

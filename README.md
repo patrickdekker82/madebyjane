@@ -1,6 +1,6 @@
 # Studio — interieurontwerp
 
-Een lokale ontwikkelbasis voor een professionele ontwerpstudio. Projecten en geometrie worden in PostgreSQL bewaard. De proef bevat 2D-tekenen, maatvaste meubels, undo, revisies, een 3D-geometrieweergave en een schaalplanblad. Uitnodigingen en tweestapsverificatie zijn beschikbaar. Dit is **geen productieversie**; offertes, materialen, presentatie, imports en AI zijn nog niet geïmplementeerd.
+Een lokale ontwikkelbasis voor een professionele ontwerpstudio. Projecten en geometrie worden in PostgreSQL bewaard. De proef bevat 2D-tekenen, maatvaste meubels, undo, revisies, een 3D-geometrieweergave en een schaalplanblad. Uitnodigingen en tweestapsverificatie zijn beschikbaar. Dit is **geen productieversie**; materiaalkeuzes en offertes zijn beschikbaar; de volledige presentatiemodule, productie-infrastructuur en AI staan nog open.
 
 ## Lokaal starten
 
@@ -89,24 +89,34 @@ Onder **Alternatieven** leg je maximaal tien productvoorstellen vast met hun eig
 
 De keuzestatus loopt van **Nog te kiezen** via voorstel/monster/gekozen naar eventueel **Door klant bevestigd** of **Vervangen**. Klantbevestiging vereist een datum en bron; dit is een handmatige registratie, geen digitaal akkoord van de klant. Iedere wijziging maakt een nieuwe vaste versie met auteur en tijdstip. Bij gelijktijdige wijzigingen vraagt de app om de nieuwste versie te openen. Maximaal 200 materiaalkeuzes per project; gebruikers met alleen leestoegang kunnen de lijst bekijken.
 
-## Offerteconcepten — eerste deel van fase 6
+## Offertes — fase 6
 
-Eigenaar, beheerder en finance openen **Offertes** in het ontwerp. Maak een concept, vul klantgegevens en geldigheid in en voeg handmatige posten of materiaalkeuzes toe. Controleer hoeveelheid, eenheidsprijs, korting, belastingcategorie, tarief en prijsbron. Komma-invoer wordt genormaliseerd. Een materiaal zonder hoeveelheid vereist expliciete invoer. Prijzen zijn exclusief belasting; negatieve eenheidsprijzen zijn correcties.
+Eigenaar, beheerder en finance openen **Offertes** in het ontwerp. Maak een concept, vul bedrijfs- en klantgegevens, datum, geldigheid en voorwaarden in. Voeg handmatige posten, materiaalkeuzes of objecten uit een bewaarde ontwerprevisie toe. Controleer hoeveelheden, prijzen, korting en belastingcategorieën. Negatieve eenheidsprijzen zijn correcties. De server berekent met decimalen; netto per regel op centen, daarna belasting per categorie met halve centen van nul af.
 
-**Concept bewaren** legt een vaste versie vast. **Materiaalverschillen controleren** toont wijzigingen sinds de gekozen bronversie. Overnemen wijzigt de materiaalgegevens; de handmatige prijs blijft staan en moet opnieuw worden beoordeeld. Een materiaalkeuze kan maar eenmaal in dezelfde offerte voorkomen. **Definitief maken** bevriest klantgegevens, voorwaarden, posten en berekende bedragen en kent transactioneel een nummer per organisatie/offertejaar toe. Deze actie verstuurt niets. Designer en viewer hebben geen toegang tot de offertetools of -API.
+Onder **Prijsbronnen en presentatiebijlagen** bewaar en selecteer je catalogusprijsversies, tekstblokken, materiaalbladen en schaalplanbladen. Iedere bijlage bewaart haar eigen bronversies. Een gekoppeld ontwerpobject telt precies eenmaal. Dezelfde materiaalkeuze kan eenmaal voorkomen; hetzelfde leverancierartikel via materiaal én ontwerp vereist een onderbouwing van afzonderlijke leveringen. De indicatieve materiaalprijs is afzonderlijk van de commerciële offerteprijs: controleer die expliciet.
 
-Dit is een eerste implementatie, geen volledige fase 6: PDF-export, presentatiebijlagen, vervolgrevisies van definitieve offertes, verdere statussen, ontwerpmeubelbronnen en catalogusprijsversies ontbreken nog. De nieuwe database- en browsercontroles moeten op een ondersteunde testomgeving slagen; zie de implementatiestatus.
+**Concept bewaren** legt een versie vast. **Materiaalverschillen controleren** toont materiaal-, prijs- en ontwerpwijzigingen. Materiaal- en prijswijzigingen vereisen een expliciete keuze voordat finalisatie kan slagen. Een oudere, onderling consistente ontwerpset mag worden gebruikt. Berekende materiaalhoeveelheden en planbijlagen moeten bij dezelfde ontwerprevisie horen.
+
+**Definitief maken** bevriest afzender, klantgegevens, voorwaarden, bedragen en bijlagen en kent transactioneel een uniek nummer per organisatie/offertejaar toe. **Offerte-PDF downloaden** levert een bewaarde PDF van precies deze versie. **Deellink maken** geeft zeven dagen toegang tot uitsluitend die PDF; **Link intrekken** trekt deze toegang direct in. Kopieer en verstuur de link zelf. Wie de link heeft, kan de PDF lezen; de ontvanger moet de server kunnen bereiken.
+
+Via **Versies bekijken** open je oude versies. **Vervolgconcept maken** maakt een bewerkbare opvolger. Bij definitief maken krijgt die een nieuw offertenummer en wordt de voorganger als vervangen geregistreerd. Oude inhoud, PDF en eerder vastgelegde reacties blijven intact. Bestaande links blijven naar de oude PDF wijzen totdat ze verlopen of worden ingetrokken.
+
+**Verzending of klantreactie registreren** bewaart een handmatige registratie met actor, datum, onderbouwing en offertehash. Downloaden en delen zetten de status nooit automatisch op verzonden. Er is geen e-mailverzending of gekwalificeerde elektronische handtekening ingebouwd. Designer en viewer hebben geen toegang tot offertes of commerciële prijsbronnen. Inkoop- en margevelden zijn niet aanwezig.
 
 ## Verifiëren
 
 ```sh
+PLAYWRIGHT_BROWSERS_PATH="$PWD/work/browsers" pnpm exec playwright install chromium
 pnpm build
 pnpm test
-PLAYWRIGHT_BROWSERS_PATH="$PWD/work/browsers" pnpm exec playwright install chromium
 pnpm test:e2e
 pnpm probe:pdf
+pnpm probe:quote
+python scripts/verify-quote-pdf.py
 node scripts/release-manifest.mjs
 ```
+
+Offerte-integratietests hebben ook Chromium nodig. Gebruik `QUOTE_CHROMIUM_PATH` voor een expliciet browserpad bij de offerte-renderer (ook op Windows). De PDF-verificaties vereisen Python met pdfplumber.
 
 Heb je al een Chromium van Playwright op de machine staan, dan kun je de download overslaan met `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/pad/naar/chrome pnpm test:e2e`. Draai je de tests als root, dan start de ingebouwde PostgreSQL onder de bestaande `postgres`-systeemgebruiker; `scripts/local-db.ts` regelt de benodigde rechten op de tijdelijke datadirectory zelf.
 
@@ -114,7 +124,7 @@ Browser- en integratietests gebruiken afzonderlijke lokale databases en fictieve
 
 ## Grenzen en vervolg
 
-Met Web Locks hervat dezelfde tab de schrijflease direct na herladen; een gedupliceerde tab blijft in leesmodus. Zonder Web Locks valt de editor veilig terug op een nieuwe lease en kan herladen maximaal 45 seconden wachttijd geven. De 3D-proef gebruikt blokvormige meubels en vloeren volgens herkende kamercontouren; muurverbindingen zijn nog in ontwikkeling. Netto hoeveelheden worden berekend, maar een ruimte wordt nog herkend aan haar muurpunten: verwijder of splits je een muur, dan vraagt de app om de bron opnieuw te kiezen. PDF is een renderproef, nog geen productie-exportqueue. Nog geen productie-Compose, back-up/herstelprocedure of Hyper-V-validatie.
+Met Web Locks hervat dezelfde tab de schrijflease direct na herladen; een gedupliceerde tab blijft in leesmodus. Zonder Web Locks valt de editor veilig terug op een nieuwe lease en kan herladen maximaal 45 seconden wachttijd geven. De 3D-proef gebruikt blokvormige meubels en vloeren volgens herkende kamercontouren; muurverbindingen zijn nog in ontwikkeling. Netto hoeveelheden worden berekend, maar een ruimte wordt nog herkend aan haar muurpunten: verwijder of splits je een muur, dan vraagt de app om de bron opnieuw te kiezen. Offerte-PDF werkt met vaste snapshots en een begrensde lokale Chromium-renderer; een productie-exportqueue staat nog open. Nog geen productie-Compose, back-up/herstelprocedure of Hyper-V-validatie.
 
 De precieze voortgang, testresultaten en eerstvolgende stappen staan in `docs/IMPLEMENTATION_STATUS.md`. Alle oorspronkelijke eisen staan in `docs/MASTERPROMPT.md` en `docs/ACCEPTANCE_MATRIX.md`. Gepinde dependencies en migrations staan in `release-manifest.json`. `docs/DEPENDENCY_LICENSES.json` inventariseert de licenties van 36 directe packages; transitieve en native licentiebijlagen zijn nog niet compleet. CI draait op GitHub Actions (ubuntu-24.04) en voert build, tests, browsertests en `pnpm audit` uit.
 
