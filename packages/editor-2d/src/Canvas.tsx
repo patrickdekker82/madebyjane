@@ -47,8 +47,11 @@ export function PlanCanvas({
    * zoomstand voelt het vangen daardoor even ver, terwijl de opgeslagen maat
    * nooit met de schermzoom vermenigvuldigd wordt.
    */
+  // Verborgen objecten doen niet mee: niet tekenen, en niet vangen.
+  const visible = scene.items.filter((i) => !i.hidden);
+  const snapScene = { ...scene, items: visible };
   const snapTo = (point: Point, exclude?: string[]) =>
-    snapPoint(scene, point, {
+    snapPoint(snapScene, point, {
       toleranceMm: 12 / zoom,
       grid,
       exclude,
@@ -307,13 +310,13 @@ export function PlanCanvas({
               </Group>
             );
           })}
-          {scene.items.map((i) => (
+          {visible.map((i) => (
             <Group
               key={i.id}
               x={i.x}
               y={i.y}
               rotation={i.rotation}
-              draggable={!disabled && tool === "select"}
+              draggable={!disabled && tool === "select" && !i.locked}
               onClick={(e) =>
                 e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey
                   ? toggleSelected(i.id)

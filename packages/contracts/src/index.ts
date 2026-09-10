@@ -85,10 +85,33 @@ export const libraryQuerySchema = z.object({
   q: z.string().trim().max(120).default(""),
   category: z.string().trim().max(80).default(""),
 }).strict();
+/**
+ * Laagindeling van het plan. Ontbreekt de laag bij een ouder object, dan telt
+ * het als inrichting; oude scenes blijven daardoor geldig zonder migratie.
+ */
+export const itemLayers = {
+  furniture: "Inrichting",
+  finish: "Afwerking",
+  electrical: "Elektra",
+  lighting: "Verlichting",
+  technical: "Technische presentatie",
+} as const;
+export const itemLayerSchema = z.enum([
+  "furniture",
+  "finish",
+  "electrical",
+  "lighting",
+  "technical",
+]);
+export type ItemLayer = z.infer<typeof itemLayerSchema>;
 export const itemSchema = z
   .object({
     id,
     name: z.string().trim().min(1).max(120),
+    layer: itemLayerSchema.optional(),
+    /** Vergrendelde objecten blijven zichtbaar maar zijn niet te verplaatsen of te verwijderen. */
+    locked: z.boolean().optional(),
+    hidden: z.boolean().optional(),
     x: mm,
     y: mm,
     width: size,
@@ -142,6 +165,22 @@ export const operationSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   z.object({ type: z.literal("RestoreRevision"), revisionId: id }).strict(),
+  z
+    .object({
+      type: z.literal("SetItemDisplay"),
+      ids: z.array(id).min(1).max(500),
+      layer: itemLayerSchema.optional(),
+      locked: z.boolean().optional(),
+      hidden: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("ReorderItems"),
+      ids: z.array(id).min(1).max(500),
+      direction: z.enum(["front", "back", "forward", "backward"]),
+    })
+    .strict(),
   z
     .object({
       type: z.literal("AddWall"),

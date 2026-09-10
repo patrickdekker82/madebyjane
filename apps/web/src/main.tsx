@@ -54,12 +54,15 @@ import {
   Save,
   Grid2X2,
   Magnet,
+  EyeOff,
+  Lock,
   Copy,
   X,
   Armchair,
 } from "lucide-react";
 import { api, login, logout, authRequest, ApiError } from "./api";
 import { Arrange } from "./Arrange";
+import { LayerPanel } from "./Layers";
 import { PlanCanvas } from "../../../packages/editor-2d/src/Canvas";
 import { useEditor } from "../../../packages/editor-2d/src/store";
 import {
@@ -1090,6 +1093,12 @@ function Editor() {
               </button>
             ))}
           </div>
+          <LayerPanel
+            items={scene.items}
+            selected={selected}
+            disabled={disabled}
+            onCommand={command}
+          />
           <div className="objects-heading">
             <span className="eyebrow">OBJECTEN</span>
             <span>
@@ -1109,6 +1118,8 @@ function Editor() {
               >
                 <span className="color-dot" style={{ background: i.color }} />
                 {i.name}
+                {i.hidden && <EyeOff size={12} />}
+                {i.locked && <Lock size={12} />}
               </button>
             ))}
             {scene.walls.map((w, i) => (

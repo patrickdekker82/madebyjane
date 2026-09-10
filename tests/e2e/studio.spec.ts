@@ -1199,3 +1199,92 @@ test("meerdere meubels selecteren → uitlijnen → gelijk verdelen → één st
   expect((await positionOf("Salontafel · eiken")).y).toBe(spread.table.y);
   expect(errors).toEqual([]);
 });
+
+test("lagen: verbergen, vergrendelen, van laag wisselen en volgorde", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
+  await page.getByLabel("Projectnaam").fill("Lagenstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+
+  // Alle demomeubels zitten in de standaardlaag Inrichting.
+  await expect(
+    page.getByRole("button", { name: "Inrichting verbergen", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Salontafel · eiken", exact: true }).click();
+  await page
+    .getByLabel("Laag van de selectie", { exact: true })
+    .selectOption("lighting");
+  await saved();
+  await expect(
+    page.getByRole("button", { name: "Verlichting verbergen", exact: true }),
+  ).toBeVisible();
+
+  // Verlichting verbergen: de tafel verdwijnt uit beeld maar blijft in de lijst.
+  await page
+    .getByRole("button", { name: "Verlichting verbergen", exact: true })
+    .click();
+  await saved();
+  await expect(
+    page.getByRole("button", { name: "Verlichting tonen", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Salontafel · eiken", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: "outputs/qa/lagen.png" });
+
+  // Inrichting vergrendelen: de bank is niet meer te verwijderen.
+  await page
+    .getByRole("button", { name: "Inrichting vergrendelen", exact: true })
+    .click();
+  await saved();
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  await page.getByRole("button", { name: "Object verwijderen", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("vergrendeld");
+  await expect(
+    page.getByRole("button", { name: "Bank · linnen naturel", exact: true }),
+  ).toBeVisible();
+
+  // Ontgrendelen maakt verwijderen weer mogelijk.
+  await page
+    .getByRole("button", { name: "Inrichting ontgrendelen", exact: true })
+    .click();
+  await saved();
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  await page.getByRole("button", { name: "Naar voren halen", exact: true }).click();
+  await saved();
+  const order = async () =>
+    page.locator(".object-list button").allInnerTexts();
+  const names = await order();
+  expect(names[0]).not.toContain("Bank · linnen naturel");
+
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Verlichting tonen", exact: true }),
+  ).toBeVisible();
+  expect((await order())[0]).toBe(names[0]);
+  expect(errors).toEqual([]);
+});

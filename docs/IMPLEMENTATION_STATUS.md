@@ -273,3 +273,23 @@ Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
 - Screenshots `outputs/qa/vangen.png`, `outputs/qa/vanghulplijn.png` en `outputs/qa/uitlijnen.png` daadwerkelijk geïnspecteerd. Twee correcties na inspectie: een sleep van 2 px startte nooit omdat Konva pas vanaf 3 px sleept — de test drukt de afstanden nu in pixels uit; en de zes uitlijnknoppen braken af als 5+1, nu een raster van drie kolommen.
 
 Nog open in fase 2: maatlijnen, annotaties, legenda en meetgereedschap; vergrendelen, laagvolgorde en zichtbaarheid; laagpresets voor inrichting, afwerking, elektra en verlichting; import van rasteronderlegger en PDF-pagina met kalibratie via twee punten; rubberband-selectie op het canvas; groeperen; opt-in lokaal herstel via IndexedDB; toetsenbordsnelkoppelingen. Muurjoins blijven ook open. Fase 2 is daarmee niet afgerond.
+
+## Aanvulling 10 september 2026 — PR's samengevoegd, lagen in de 2D-editor
+
+Beide openstaande PR's zijn afgehandeld. PR #1 is met een merge-commit in `main` gezet (`cb03021`), zodat de commits van `codex/phase-6-quotes` met hun oorspronkelijke auteurschap in de geschiedenis blijven. PR #2 kon daarna niet meer gemerged worden — zijn head is een voorouder van `main` geworden — en is gesloten met uitleg. `main` bevat nu fase 4, fase 6 en de editoruitbreidingen.
+
+### Lagen, vergrendelen, zichtbaarheid en volgorde
+
+Objecten krijgen drie optionele velden: `layer`, `locked` en `hidden`. Optioneel, dus scenes van vóór deze wijziging blijven geldig zonder scene-migratie; ontbreekt de laag, dan telt het object als inrichting. De lagen zijn inrichting, afwerking, elektra, verlichting en technische presentatie — dezelfde indeling die fase 4 nodig heeft voor elektra en licht.
+
+Twee nieuwe opdrachten: `SetItemDisplay` zet laag, vergrendeling of zichtbaarheid voor een groep objecten tegelijk, waarbij alleen meegegeven velden veranderen; `ReorderItems` verschuift de tekenvolgorde. `packages/domain/src/order.ts` is de pure functie daarachter. Bij een meervoudige selectie blijft de onderlinge volgorde intact en schuift de selectie als geheel over precies één niet-geselecteerd object. Bij een onderbroken selectie telt de bovenste respectievelijk onderste, en komt de hele selectie bij elkaar te liggen; dat is voorspelbaarder dan elk object apart verschuiven.
+
+Vergrendeling wordt afgedwongen in `applyOperations`, dus ook wanneer een opdracht niet uit de editor komt: `TransformItem` en `DeleteSelection` op een vergrendeld object leveren een leesbare fout. Ontgrendelen mag altijd. Verborgen objecten worden niet getekend en doen ook niet mee aan het vangen, maar blijven in de objectlijst staan met een oog- en slotpictogram.
+
+Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+- **104 tests / 17 bestanden geslaagd, 26,5 s** (was 94). Nieuw: zeven volgordetests en drie commandotests voor lagen, vergrendeling en volgorde.
+- **11 browserroutes geslaagd, 1,5 min.** De nieuwe route wisselt een meubel van laag, verbergt de laag en controleert dat het object uit beeld is maar in de lijst blijft, vergrendelt de laag, ziet verwijderen afgewezen worden met de servermelding, ontgrendelt, verandert de volgorde en vindt alles terug na herladen.
+- TypeScript strict en productiebuild geslaagd (9,8 s). Bekende chunkgroottewaarschuwing blijft open.
+- Screenshot `outputs/qa/lagen.png` geïnspecteerd: de laaglijst toont Inrichting 3 en Verlichting 1, het oog van Verlichting is doorgestreept en de salontafel is inderdaad uit het plan verdwenen. De testverwachting moest eerst aangescherpt: "Verlichting" kwam zowel in de laaglijst als in de keuzelijst voor.
+
+Nog open in fase 2: maatlijnen, annotaties, legenda en meetgereedschap; import van rasteronderlegger en PDF-pagina met kalibratie via twee punten; rubberband-selectie op het canvas; groeperen; opt-in lokaal herstel via IndexedDB; toetsenbordsnelkoppelingen; muurjoins. Laagpresets bestaan nu als indeling, maar er is nog geen presetknop die een set lagen in één keer toont of verbergt voor een tekenblad. Fase 2 is niet afgerond.

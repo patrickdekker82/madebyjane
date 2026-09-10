@@ -29,6 +29,10 @@ De onderbalk heeft twee schakelaars. **Raster snap** rondt af op 100 mm. **Vange
 
 Selecteer meerdere meubels met shift, ctrl of cmd, in de plattegrond of in de objectlijst. Het eigenschappenpaneel toont dan zes uitlijningen en twee verdelingen. Uitlijnen gebruikt de omhullende van elk meubel inclusief draaiing; verdelen maakt de tussenruimten gelijk en laat de buitenste meubels staan. De hele actie is één stap terug.
 
+## Lagen
+
+Elk meubel hoort bij een laag: inrichting, afwerking, elektra, verlichting of technische presentatie. Het lagenpaneel links toont per laag hoeveel objecten erin zitten, met een oog om de laag te verbergen en een slot om hem te vergrendelen. Een verborgen object verdwijnt uit het plan en doet niet mee aan het vangen, maar blijft in de objectlijst staan. Een vergrendeld object is niet te verplaatsen of te verwijderen; die controle zit in de server, niet alleen in de interface. Met een selectie kun je de laag wijzigen en objecten naar voren of naar achteren halen.
+
 ## Versies bewaren en terugzetten
 
 Klik **Revisie bewaren** om het opgeslagen ontwerp vast te leggen. Open **Versiegeschiedenis**, kies een bewaarde revisie en bevestig **Deze versie herstellen**. De huidige versie wordt automatisch bewaard als **Voor herstel**; je kunt die later ook terugzetten. Herstel maakt een nieuwe revisie en vereist bewerktoegang. De lijst toont de laatste 100 bewaarde versies.
