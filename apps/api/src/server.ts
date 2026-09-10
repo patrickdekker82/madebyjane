@@ -1,6 +1,7 @@
 import { MaterialService } from "../../../packages/domain/src/materials";
 import { QuoteService } from "../../../packages/domain/src/quotes";
 import { ModelAssetService } from "../../../packages/domain/src/model-assets";
+import { UnderlayAssetService } from "../../../packages/domain/src/underlay-assets";
 import { libraryQuerySchema } from "../../../packages/contracts/src/index";
 import { LibraryService } from "../../../packages/domain/src/library";
 import Fastify from "fastify";
@@ -201,6 +202,27 @@ export function createServer(config: {
     const assetId = z.object({ id }).parse(req.params).id;
     const model = await models.get(await context(req.headers), assetId);
     return reply.type("application/octet-stream").header("Content-Disposition", 'attachment; filename="geometry.bin"').send(model.positions);
+  });
+  const underlays = new UnderlayAssetService(config.runtime);
+  app.post("/api/v1/underlay-assets/:id", {
+    bodyLimit: 16777216,
+    config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+    onRequest: async req => {
+      const ctx = await context(req.headers);
+      if (!canWrite(ctx.role)) throw new DomainError("FORBIDDEN", "Je hebt alleen leestoegang.", 403);
+      z.object({ id }).parse(req.params);
+    },
+  }, async req => {
+    const assetId = z.object({ id }).parse(req.params).id;
+    if (!Buffer.isBuffer(req.body)) throw new DomainError("INVALID_IMAGE", "Upload de afbeelding als binair bestand.", 415);
+    return underlays.upload(await context(req.headers), assetId, req.body);
+  });
+  app.get("/api/v1/underlay-assets/:id", async (req, reply) => {
+    const assetId = z.object({ id }).parse(req.params).id;
+    const image = await underlays.get(await context(req.headers), assetId);
+    // Vast content-type uit de gelezen bestandskop, nooit uit de invoer van de
+    // client; met nosniff kan de browser er niets anders van maken.
+    return reply.type(image.mime).header("Content-Security-Policy", "default-src 'none'").send(image.bytes);
   });
   const materials = new MaterialService(config.runtime);
   const quotes = new QuoteService(config.runtime);

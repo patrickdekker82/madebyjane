@@ -842,6 +842,47 @@ form {
   margin: 18px 0;
   border: 1px solid #e7ddd2;
 }
+.underlay {
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+.underlay h4 {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #839078;
+  margin: 0 0 8px;
+}
+.underlay p {
+  margin: 0 0 8px;
+}
+.underlay input[type="file"] {
+  font-size: 9px;
+  width: 100%;
+  max-width: 100%;
+}
+.underlay input[type="range"] {
+  width: 100%;
+}
+.underlay button {
+  width: 100%;
+  margin-top: 6px;
+  background: white;
+  border: 1px solid #e7ddd2;
+  color: #4c5148;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.underlay button.active {
+  border-color: #a36432;
+  color: #a36432;
+}
+.underlay label {
+  font-size: 10px;
+}
 .layers {
   padding: 16px 0;
   border-top: 1px solid var(--line);

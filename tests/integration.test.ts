@@ -749,6 +749,54 @@ test("alternatieven, prijsbron en monsterstatus; de server controleert de herkom
   expect((await request("POST", path, { entryId, versionId: randomUUID(), baseVersion: 2, definition: { ...definition, priceSource: "", unitPrice: "74.95" } })).statusCode).toBe(400);
   expect((await request("POST", path, { entryId, versionId: randomUUID(), baseVersion: 2, definition: { ...definition, sampleStatus: "approved", sampleDate: null } })).statusCode).toBe(400);
 });
+test("onderleggerafbeeldingen: type, maten, herhaling, quota en werkruimtegrens", async () => {
+  const { makePng, makeJpeg } = await import("./helpers/image");
+  const assetId = randomUUID(), bytes = makePng(1200, 900);
+  const upload = (id: string, body: Buffer, cookie = cookieA, org = orgA) =>
+    request("POST", "/api/v1/underlay-assets/" + id, body, cookie, org);
+
+  const accepted = await upload(assetId, bytes);
+  expect(accepted.statusCode, accepted.body).toBe(200);
+  expect(accepted.json()).toEqual({ id: assetId, mime: "image/png", widthPx: 1200, heightPx: 900 });
+  // Hetzelfde bestand onder dezelfde ID is een herhaling, geen tweede rij.
+  expect((await upload(assetId, bytes)).json().widthPx).toBe(1200);
+  expect((await db.admin.query("SELECT count(*)::int AS count FROM underlay_assets WHERE organization_id=$1", [orgA])).rows[0].count).toBe(1);
+  // Een ander bestand onder dezelfde ID wordt geweigerd.
+  expect((await upload(assetId, makePng(10, 10))).statusCode).toBe(409);
+
+  // Actieve inhoud en onbekende typen komen er niet in.
+  for (const bad of [
+    Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'),
+    Buffer.from("%PDF-1.7\n%\xe2\xe3\xcf\xd3\n"),
+    Buffer.concat([Buffer.from("GIF89a"), Buffer.alloc(64)]),
+  ]) {
+    const rejected = await upload(randomUUID(), bad);
+    expect(rejected.statusCode, rejected.body).toBe(422);
+  }
+  expect((await upload(randomUUID(), bytes.subarray(0, 20))).statusCode).toBe(422);
+  expect((await db.admin.query("SELECT count(*)::int AS count FROM underlay_assets WHERE organization_id=$1", [orgA])).rows[0].count).toBe(1);
+
+  // JPEG mag ook.
+  expect((await upload(randomUUID(), makeJpeg(640, 480))).json().mime).toBe("image/jpeg");
+
+  // Uitleveren gebeurt met een vast content-type en zonder sniffing.
+  const served = await request("GET", "/api/v1/underlay-assets/" + assetId);
+  expect(served.statusCode).toBe(200);
+  expect(served.headers["content-type"]).toBe("image/png");
+  expect(served.headers["x-content-type-options"]).toBe("nosniff");
+  expect(served.rawPayload.equals(bytes)).toBe(true);
+
+  // Een andere werkruimte ziet de afbeelding niet, ook niet met de juiste ID.
+  expect((await request("GET", "/api/v1/underlay-assets/" + assetId, undefined, cookieB, orgB)).statusCode).toBe(404);
+  // Alleen lezen mag niet uploaden, wel bekijken.
+  expect((await upload(randomUUID(), bytes, cookieViewer)).statusCode).toBe(403);
+  expect((await request("GET", "/api/v1/underlay-assets/" + assetId, undefined, cookieViewer)).statusCode).toBe(200);
+  await expect(inTenant(db.runtime, orgA, c => c.query("UPDATE underlay_assets SET width_px=1"))).rejects.toThrow(/permission denied/);
+
+  // Quota per werkruimte.
+  await db.admin.query("INSERT INTO underlay_assets(organization_id,id,source_hash,mime,bytes,width_px,height_px,user_id) SELECT organization_id,gen_random_uuid(),source_hash,mime,bytes,width_px,height_px,user_id FROM underlay_assets CROSS JOIN generate_series(1,60) WHERE organization_id=$1 AND id=$2", [orgA, assetId]);
+  expect((await upload(randomUUID(), makePng(50, 50))).statusCode).toBe(409);
+});
 test("de API overleeft het wegvallen van inactieve databaseverbindingen", async () => {
   // Zonder error-listener op de pool beeindigt Node het proces bij deze gebeurtenis.
   const terminated = await db.admin.query(

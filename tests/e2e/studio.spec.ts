@@ -1475,3 +1475,97 @@ test("sleepkader selecteert meerdere meubels → maatlijn verplaatsen en omklapp
   await expect(page.getByLabel("Afstand maatlijn", { exact: true })).toHaveValue("-900");
   expect(errors).toEqual([]);
 });
+
+test("onderlegger uploaden → inmeten met twee punten → schaal klopt", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
+  await page.getByLabel("Projectnaam").fill("Onderleggerstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+
+  // SVG wordt geweigerd: actieve inhoud hoort niet als onderlegger de pagina in.
+  await page.getByLabel("Onderlegger kiezen", { exact: true }).setInputFiles({
+    name: "plattegrond.svg",
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>'),
+  });
+  await expect(page.getByRole("alert")).toContainText("PNG- of JPEG");
+
+  // Een echte PNG van 1000 x 800 px, in de test zelf gemaakt.
+  const { makePng } = await import("../helpers/image");
+  await page.getByLabel("Onderlegger kiezen", { exact: true }).setInputFiles({
+    name: "plattegrond.png",
+    mimeType: "image/png",
+    buffer: makePng(1000, 800),
+  });
+  await saved();
+  await expect(page.getByText("1000 × 800 px", { exact: false })).toBeVisible();
+  await expect(page.getByText("nog niet gekalibreerd", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  await page.screenshot({ path: "outputs/qa/onderlegger.png" });
+
+  // Inmeten: twee punten op de afbeelding, 400 px uit elkaar.
+  const canvas = page.locator(".canvas-wrap canvas").first();
+  const box = (await canvas.boundingBox())!;
+  // De onderlegger loopt zonder kalibratie van (0,0) tot (10000, 8000) mm.
+  const fit = Math.min((box.width - 120) / 10000, (box.height - 120) / 8000);
+  const at = (x: number, y: number) => ({
+    x: box.x + 60 + x * fit,
+    y: box.y + 60 + y * fit,
+  });
+  await page.getByRole("button", { name: "Inmeten", exact: true }).click();
+  // Pixel (100,200) en (500,200) liggen bij 10 mm/px op 1000 en 5000 mm.
+  await page.mouse.click(at(1000, 2000).x, at(1000, 2000).y);
+  await page.mouse.click(at(5000, 2000).x, at(5000, 2000).y);
+  await page.getByLabel("Werkelijke afstand", { exact: true }).fill("5000");
+  await page.getByRole("button", { name: "Schaal toepassen", exact: true }).click();
+  await saved();
+
+  // Ongeveer 400 px staat nu voor 5.000 mm: 12,5 mm per pixel. Een muisklik
+  // landt op een hele schermpixel, hier zo'n 0,65 afbeeldingspixel, dus de
+  // uitkomst mag daar iets van afwijken; de kalibratie gebruikt wat de
+  // gebruiker werkelijk heeft aangewezen.
+  const perPixel = async () =>
+    Number(
+      (await page.locator(".underlay p").first().innerText())
+        .replace(/.*·\s*/, "")
+        .replace(" mm per pixel", "")
+        .replace(",", "."),
+    );
+  expect(await perPixel()).toBeGreaterThan(12.3);
+  expect(await perPixel()).toBeLessThan(12.7);
+  await expect(page.getByText("nog niet gekalibreerd", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  await page.screenshot({ path: "outputs/qa/onderlegger-gekalibreerd.png" });
+
+  const before = await perPixel();
+  await page.reload();
+  expect(await perPixel()).toBe(before);
+  await page.getByRole("button", { name: "Onderlegger verwijderen", exact: true }).click();
+  await saved();
+  await expect(page.getByLabel("Onderlegger kiezen", { exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});

@@ -341,3 +341,26 @@ Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
 - Screenshots `outputs/qa/sleepkader-actief.png`, `outputs/qa/sleepkader.png` en `outputs/qa/maatlijn-omgeklapt.png` geïnspecteerd. De eerste is bewust middenin de sleep gemaakt: zonder die opname zou de test slagen ook als het kader helemaal niet getekend werd, want de selectie komt uit de staat en niet uit de weergave.
 
 Nog open in fase 2: annotatieteksten en een legenda; import van rasteronderlegger en PDF-pagina met kalibratie via twee punten; groeperen; opt-in lokaal herstel via IndexedDB; laagpresets per tekenblad; muurjoins. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — onderlegger met tweepuntskalibratie
+
+Een verdieping kan nu een onderlegger hebben: een foto of scan van een bestaande plattegrond om overheen te tekenen. Migration `0011_underlay_assets` bewaart de afbeeldingen per werkruimte onder FORCE RLS met alleen SELECT en INSERT voor de runtime-rol, met een quotum van 50 afbeeldingen of 200 MiB.
+
+**Alleen PNG en JPEG.** SVG en PDF worden geweigerd: dat is actieve inhoud die scripts en externe verwijzingen kan bevatten. De server leest alleen de bestandskop — een eigen parser van enkele tientallen regels in `packages/image-import` — en slaat de bytes ongewijzigd op. Er komt geen beeldbibliotheek aan te pas; de browser decodeert, en die is daarop gehard. Uitleveren gebeurt met een vast content-type dat uit die gelezen kop komt en nooit uit de invoer van de client, met `nosniff` en een restrictieve `Content-Security-Policy`. De afbeelding wordt in de editor met `fetch` opgehaald in plaats van via een `img src`, omdat een `img` geen werkruimte-header kan meesturen; de autorisatie op de route blijft daardoor gelijk aan die van alle andere gegevens. De blob-URL wordt weer vrijgegeven zodra de onderlegger wisselt.
+
+**De schaal wordt niet opgeslagen.** Vastgelegd zijn twee punten in afbeeldingspixels en de werkelijke afstand daartussen; de millimeters per pixel volgen daaruit. Zo blijft de kalibratie navolgbaar. Zonder kalibratie geldt een aangenomen 10 mm per pixel en toont het paneel **nog niet gekalibreerd** met de vraag een bekende maat in te meten — er staat dus nooit een schaal die nergens op stoelt. Doorzichtigheid is instelbaar; de onderlegger ligt in een eigen laag onder de tekening en vangt geen muisacties af.
+
+De keuze voor raster in plaats van PDF staat in `docs/adr/0004-underlay-images.md`, met de gevolgen: wie alleen een PDF heeft moet die zelf omzetten, en EXIF-metadata blijft staan omdat verwijderen opnieuw encoderen vraagt.
+
+Daarbij opgelost: **Passend** keek niet naar de onderlegger, net zoals het eerder niet naar maatlijnen keek. Een onderlegger die groter is dan het plan viel daardoor buiten beeld. Dat kwam aan het licht doordat de browsertest een schaal van 20,8 mm per pixel kreeg in plaats van 12,5: mijn omrekening van scherm naar wereld klopte niet, omdat de app anders inzoomde dan de test aannam.
+
+Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+- **124 tests / 21 bestanden geslaagd, 19,2 s** (was 113). Vijf kopleestests met een in de test zelf gemaakt geldig PNG en JPEG, inclusief afgekapte en misvormde bestanden, SVG, PDF, GIF en onmogelijke maten. Vijf kalibratietests met 200 gegenereerde gevallen voor heen-en-terug rekenen.
+- Eén nieuwe integratietest tegen echte PostgreSQL: type- en maatcontrole, herhaling met dezelfde ID, een ander bestand onder dezelfde ID (409), geweigerde SVG/PDF/GIF/afgekapt bestand (422) zonder dat er een rij achterblijft, vast content-type met nosniff, andere werkruimte krijgt 404, alleen-lezen mag niet uploaden maar wel bekijken, geen UPDATE-recht voor de runtime-rol, en het quotum.
+- **14 browserroutes geslaagd, 1,3 min.** De nieuwe route weigert eerst een SVG, uploadt dan een echt PNG van 1000 × 800, meet twee punten in op 5.000 mm en controleert de schaal.
+- TypeScript strict en productiebuild geslaagd (6,8 s). Release-manifest bijgewerkt naar elf migrations.
+- Screenshots `outputs/qa/onderlegger.png` en `outputs/qa/onderlegger-gekalibreerd.png` geïnspecteerd: de afbeelding ligt zichtbaar onder het plan en schaalt mee. De testafbeelding is bewust middengrijs gemaakt, want een lichte afbeelding op 45% doorzichtigheid is op een schermopname niet van de achtergrond te onderscheiden — de test zou dan slagen zonder dat iemand ziet of er iets getekend wordt.
+
+De browsertest controleert de schaal met een marge tussen 12,3 en 12,7 mm per pixel in plaats van exact 12,5. Een muisklik landt op een hele schermpixel, hier ongeveer 0,65 afbeeldingspixel; de kalibratie gebruikt wat de gebruiker werkelijk heeft aangewezen en niet wat de test bedoelde. Dat is geen onnauwkeurigheid in de berekening.
+
+Nog open in fase 2: PDF-pagina als onderlegger; EXIF verwijderen; de onderlegger verslepen en draaien; annotatieteksten en een legenda; groeperen; opt-in lokaal herstel via IndexedDB; laagpresets per tekenblad; muurjoins. Fase 2 is niet afgerond.

@@ -118,6 +118,15 @@ export function validateGeometry(scene: Scene) {
 }
 export { detectRooms, type Room, type RoomDetection } from "./rooms";
 export {
+  underlayScale,
+  underlayPlacement,
+  underlayToWorld,
+  worldToUnderlay,
+  ASSUMED_MM_PER_PIXEL,
+  type UnderlayLike,
+  type Calibration,
+} from "./underlay";
+export {
   dimensionGeometry,
   formatMm,
   type DimensionGeometry,

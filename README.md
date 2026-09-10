@@ -29,6 +29,12 @@ De onderbalk heeft twee schakelaars. **Raster snap** rondt af op 100 mm. **Vange
 
 Selecteer meerdere meubels met shift, ctrl of cmd, in de plattegrond of in de objectlijst. Het eigenschappenpaneel toont dan zes uitlijningen en twee verdelingen. Uitlijnen gebruikt de omhullende van elk meubel inclusief draaiing; verdelen maakt de tussenruimten gelijk en laat de buitenste meubels staan. De hele actie is één stap terug.
 
+## Onderlegger
+
+Leg een foto of scan van een bestaande plattegrond onder je tekening: kies links onder **Onderlegger** een PNG of JPEG van maximaal 16 MiB. SVG en PDF worden geweigerd, omdat dat actieve inhoud kan bevatten; zet een PDF eerst zelf om naar een afbeelding.
+
+Een verse onderlegger staat op **nog niet gekalibreerd** en gebruikt een aangenomen schaal. Klik **Inmeten**, wijs twee punten aan waarvan je de echte afstand kent en vul die in. De schaal wordt niet als getal bewaard maar uit die twee punten en die maat afgeleid, zodat altijd te zien is waar hij vandaan komt. Doorzichtigheid stel je in met de schuifregelaar.
+
 ## Meten en maatlijnen
 
 Het gereedschap **Maat** meet en legt vast in één handeling: klik het eerste punt, lees de maat mee terwijl je beweegt en klik het tweede punt om de maatlijn te bewaren. Escape breekt af als je alleen wilde meten. Het vangen werkt hier net als bij tekenen, dus meten tussen twee muurpunten geeft exact de muurlengte. De lengte wordt niet opgeslagen maar uit de twee punten berekend; een maatlijn kan dus nooit iets anders beweren dan de tekening. Maatlijnen komen ook op het planblad.

@@ -64,6 +64,7 @@ import {
 import { api, login, logout, authRequest, ApiError } from "./api";
 import { Arrange } from "./Arrange";
 import { LayerPanel } from "./Layers";
+import { UnderlayPanel } from "./Underlay";
 import { DimensionProperties } from "./DimensionProperties";
 import { PlanCanvas } from "../../../packages/editor-2d/src/Canvas";
 import { useEditor, type Tool } from "../../../packages/editor-2d/src/store";
@@ -602,6 +603,11 @@ function Editor() {
     [view, setView] = useState<"2d" | "3d">("2d");
   const [undo, setUndo] = useState<Scene[]>([]),
     [redo, setRedo] = useState<Scene[]>([]);
+  /** Twee punten die op de onderlegger zijn aangewezen, in afwachting van de maat. */
+  const [calibration, setCalibration] = useState<{
+    from: { x: number; y: number };
+    to: { x: number; y: number };
+  } | null>(null);
   const pending = useRef<{
     commandId: string;
     baseRevision: number;
@@ -1143,6 +1149,14 @@ function Editor() {
               </button>
             ))}
           </div>
+          <UnderlayPanel
+            scene={scene}
+            organizationId={org.id}
+            disabled={disabled}
+            pending={calibration}
+            onCommand={command}
+            onCalibrated={() => setCalibration(null)}
+          />
           <LayerPanel
             items={scene.items}
             selected={selected}
@@ -1209,7 +1223,12 @@ function Editor() {
         </aside>
         <section className="drawing">
           {view === "2d" ? (
-            <PlanCanvas scene={scene} onCommand={command} disabled={disabled} />
+            <PlanCanvas
+              scene={scene}
+              onCommand={command}
+              onCalibrate={(from, to) => setCalibration({ from, to })}
+              disabled={disabled}
+            />
           ) : (
             <ViewError>
               <Suspense

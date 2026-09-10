@@ -1,5 +1,11 @@
 import { create } from "zustand";
-export type Tool = "select" | "wall" | "door" | "window" | "measure";
+export type Tool =
+  | "select"
+  | "wall"
+  | "door"
+  | "window"
+  | "measure"
+  | "calibrate";
 export const useEditor = create<{
   hasPending: boolean;
   setPending: (value: boolean) => void;

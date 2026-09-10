@@ -10,6 +10,7 @@ import {
   Circle,
   Arc,
   Ellipse,
+  Image as KonvaImage,
 } from "react-konva";
 import type Konva from "konva";
 import type { Scene, Operation, Point } from "../../contracts/src/index";
@@ -17,6 +18,8 @@ import {
   endpoints,
   snapPoint,
   itemsInRect,
+  underlayPlacement,
+  worldToUnderlay,
   dimensionGeometry,
   formatMm,
   type SnapTarget,
@@ -25,10 +28,13 @@ import { useEditor } from "./store";
 export function PlanCanvas({
   scene,
   onCommand,
+  onCalibrate,
   disabled,
 }: {
   scene: Scene;
   onCommand: (ops: Operation[]) => void;
+  /** Twee aangewezen punten op de onderlegger, in afbeeldingspixels. */
+  onCalibrate?: (from: Point, to: Point) => void;
   disabled: boolean;
 }) {
   const el = useRef<HTMLDivElement>(null),
@@ -50,6 +56,9 @@ export function PlanCanvas({
     setZoom,
   } = useEditor();
   const [snapped, setSnapped] = useState<SnapTarget[]>([]);
+  const [underlayImage, setUnderlayImage] = useState<HTMLImageElement | null>(
+    null,
+  );
   /** Sleepkader in wereldcoordinaten; alleen actief met het gereedschap Selecteren. */
   const [band, setBand] = useState<{
     x1: number;
@@ -77,10 +86,17 @@ export function PlanCanvas({
   /** Het hele plan met een rand van 60 px in beeld brengen. */
   const fitToProject = (width: number, height: number) => {
     if (width <= 0 || height <= 0) return;
-    // Maatlijnen liggen naast de geometrie en kunnen er dus buiten steken; ook
-    // die horen in beeld te komen.
+    // Maatlijnen en de onderlegger liggen naast de geometrie en kunnen er dus
+    // buiten steken; ook die horen in beeld te komen.
+    const underlayCorners = scene.underlay
+      ? (({ x, y, width, height }) => [
+          { x, y },
+          { x: x + width, y: y + height },
+        ])(underlayPlacement(scene.underlay))
+      : [];
     const points = [
       ...scene.nodes,
+      ...underlayCorners,
       ...scene.annotations.flatMap((a) => {
         const d = dimensionGeometry(a.from, a.to, a.offset);
         return [a.from, a.to, d.line.from, d.line.to];
@@ -114,6 +130,38 @@ export function PlanCanvas({
   useEffect(() => {
     setStart(null);
   }, [tool]);
+  /**
+   * De onderlegger wordt met fetch opgehaald in plaats van via een img-src,
+   * omdat een img geen werkruimte-header kan meesturen. De autorisatie op de
+   * route blijft daardoor precies zoals bij alle andere gegevens. De blob-URL
+   * is same-origin en wordt weer vrijgegeven zodra de afbeelding wisselt.
+   */
+  const assetId = scene.underlay?.assetId ?? null,
+    organizationId = scene.organizationId;
+  useEffect(() => {
+    if (!assetId) {
+      setUnderlayImage(null);
+      return;
+    }
+    let url = "";
+    const image = new window.Image();
+    const load = async () => {
+      const response = await fetch("/api/v1/underlay-assets/" + assetId, {
+        credentials: "same-origin",
+        headers: { "x-organization-id": organizationId },
+      });
+      if (!response.ok) return;
+      url = URL.createObjectURL(await response.blob());
+      image.onload = () => setUnderlayImage(image);
+      image.src = url;
+    };
+    void load();
+    return () => {
+      image.onload = null;
+      setUnderlayImage(null);
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [assetId, organizationId]);
   const rawWorld = () => {
     const p = stage.current?.getPointerPosition();
     return p ? { x: (p.x - pan.x) / zoom, y: (p.y - pan.y) / zoom } : null;
@@ -205,6 +253,20 @@ export function PlanCanvas({
         },
       ]);
       setStart(null);
+    } else if (tool === "calibrate") {
+      const underlay = scene.underlay;
+      if (!underlay) return;
+      const p = rawWorld();
+      if (!p) return;
+      if (!start) {
+        setStart(p);
+        return;
+      }
+      if (p.x === start.x && p.y === start.y) return;
+      // De twee punten worden in afbeeldingspixels bewaard, zodat de kalibratie
+      // blijft kloppen wanneer de onderlegger later verschoven wordt.
+      onCalibrate?.(worldToUnderlay(underlay, start), worldToUnderlay(underlay, p));
+      setStart(null);
     } else if (tool === "select") select(null);
   };
   const wheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -244,6 +306,7 @@ export function PlanCanvas({
         onMouseMove={() => {
           if ((tool === "wall" || tool === "measure") && start)
             setCursor(world());
+          if (tool === "calibrate" && start) setCursor(rawWorld());
           if (band) {
             const p = rawWorld();
             if (p) setBand({ ...band, x2: p.x, y2: p.y });
@@ -262,7 +325,8 @@ export function PlanCanvas({
         onMouseDown={(e) => {
           // Meten en muren tekenen moeten juist op bestaande muren en punten
           // kunnen beginnen; anders is aansluiten op wat er staat onmogelijk.
-          if (tool === "measure" || tool === "wall") return click();
+          if (tool === "measure" || tool === "wall" || tool === "calibrate")
+            return click();
           if (e.target !== stage.current) return;
           if (tool !== "select") return click();
           const p = rawWorld();
@@ -307,6 +371,20 @@ export function PlanCanvas({
                 />
               ),
             )}
+        </Layer>
+        <Layer x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom} listening={false}>
+          {scene.underlay &&
+            underlayImage &&
+            (({ x, y, width, height }) => (
+              <KonvaImage
+                image={underlayImage}
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+                opacity={scene.underlay!.opacity / 100}
+              />
+            ))(underlayPlacement(scene.underlay))}
         </Layer>
         <Layer x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom}>
           {scene.walls.map((w) => {
@@ -591,6 +669,14 @@ export function PlanCanvas({
               </Group>
             );
           })}
+          {tool === "calibrate" && start && cursor && (
+            <Line
+              listening={false}
+              points={[start.x, start.y, cursor.x, cursor.y]}
+              stroke="#2f6f8f"
+              strokeWidth={2 / zoom}
+            />
+          )}
           {tool === "measure" && start && cursor && (
             <>
               <Line

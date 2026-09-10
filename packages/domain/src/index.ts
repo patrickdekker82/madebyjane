@@ -73,6 +73,9 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
       case "PlaceItem":
         s.items.push(op.item);
         break;
+      case "SetUnderlay":
+        s.underlay = op.underlay;
+        break;
       case "AddAnnotation":
         s.annotations.push(op.annotation);
         break;
@@ -154,7 +157,9 @@ export const contentOf = ({
   openings,
   items,
   annotations,
-}: Scene) => structuredClone({ nodes, walls, openings, items, annotations });
+  underlay,
+}: Scene) =>
+  structuredClone({ nodes, walls, openings, items, annotations, underlay });
 export type Role = "owner" | "admin" | "designer" | "finance" | "viewer";
 export function canWrite(role: Role) {
   return ["owner", "admin", "designer"].includes(role);

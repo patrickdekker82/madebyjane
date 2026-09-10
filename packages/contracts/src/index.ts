@@ -163,6 +163,39 @@ export const annotationSchema = z
       });
   });
 export type Annotation = z.infer<typeof annotationSchema>;
+/**
+ * Onderlegger per verdieping: een foto of scan om op na te tekenen. De schaal
+ * staat er bewust niet in; die volgt uit de twee kalibratiepunten en de
+ * opgegeven werkelijke afstand. Zonder kalibratie geldt een aangenomen schaal
+ * die de interface als schatting moet tonen.
+ */
+export const underlaySchema = z
+  .object({
+    assetId: id,
+    widthPx: z.number().int().min(1).max(20000),
+    heightPx: z.number().int().min(1).max(20000),
+    x: mm,
+    y: mm,
+    opacity: z.number().int().min(10).max(100),
+    calibration: z
+      .object({
+        from: z.object({ x: z.number().finite(), y: z.number().finite() }).strict(),
+        to: z.object({ x: z.number().finite(), y: z.number().finite() }).strict(),
+        lengthMm: z.number().int().min(1).max(100000),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict()
+  .superRefine((underlay, ctx) => {
+    const c = underlay.calibration;
+    if (c && c.from.x === c.to.x && c.from.y === c.to.y)
+      ctx.addIssue({
+        code: "custom",
+        message: "Kalibreren vraagt twee verschillende punten op de afbeelding.",
+      });
+  });
+export type Underlay = z.infer<typeof underlaySchema>;
 export const sceneSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -176,6 +209,7 @@ export const sceneSchema = z
     openings: z.array(openingSchema).max(500),
     items: z.array(itemSchema).max(2000),
     annotations: z.array(annotationSchema).max(500).default([]),
+    underlay: underlaySchema.nullable().default(null),
   })
   .strict();
 export type Scene = z.infer<typeof sceneSchema>;
@@ -244,6 +278,9 @@ export const operationSchema = z.discriminatedUnion("type", [
     .object({ type: z.literal("AddAnnotation"), annotation: annotationSchema })
     .strict(),
   z
+    .object({ type: z.literal("SetUnderlay"), underlay: underlaySchema.nullable() })
+    .strict(),
+  z
     .object({
       type: z.literal("SetAnnotationOffset"),
       id,
@@ -277,6 +314,7 @@ export const operationSchema = z.discriminatedUnion("type", [
         openings: true,
         items: true,
         annotations: true,
+        underlay: true,
       }),
     })
     .strict(),
