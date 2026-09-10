@@ -2663,12 +2663,50 @@ test("spot en wandcontact plaatsen → bundel tonen → symbolenlegenda op het b
     3,
   );
 
+  // Het overzicht telt de groepen en zegt erbij wat er niet is ingevuld.
+  const overzicht = page.locator(".lighting");
+  await expect(overzicht).toContainText("Groep 2");
+  await expect(overzicht).toContainText("Niet toegewezen");
+  await expect(overzicht).toContainText("geen vermogen opgegeven");
+  await expect(overzicht).toContainText("geen groeps- of belastingberekening");
+
+  // Twee lichtscenes maken en er een van tonen.
+  await page.getByRole("button", { name: "Inbouwspot", exact: true }).click();
+  await page.getByLabel("Lichtscene", { exact: true }).fill("Avond");
+  await page.getByLabel("Opgenomen vermogen", { exact: true }).fill("7,5");
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  await page.getByRole("button", { name: "Hanglamp" }).click();
+  await saved();
+  await page.getByLabel("Lichtscene", { exact: true }).fill("Ochtend");
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  await expect(overzicht).toContainText("Avond");
+  await expect(overzicht).toContainText("Ochtend");
+  await expect(overzicht).toContainText("7,500 W opgegeven");
+
+  await page.getByRole("button", { name: "Alleen Avond tonen" }).click();
+  await saved();
+  // Wat je op het scherm ziet, komt op het blad: de hanglamp is er nu af.
+  const alleenAvond = await sheet("outputs/elektra-avond.svg");
+  expect(alleenAvond).toContain("Inbouwspot × 1");
+  expect(alleenAvond).not.toContain("Hanglamp ×");
+  await page
+    .getByRole("button", { name: "Alle armaturen tonen", exact: true })
+    .click();
+  await saved();
+  const alles = await sheet("outputs/elektra-alles.svg");
+  expect(alles).toContain("Hanglamp × 1");
+  await page.screenshot({ path: "outputs/qa/lichtscenes.png" });
   // Herladen: het punt en zijn groep staan op de server.
   await page.reload();
   await saved();
   await page.getByRole("button", { name: "Inbouwspot", exact: true }).click();
   await expect(page.getByLabel("Groep", { exact: true })).toHaveValue(
     "Groep 2",
+  );
+  await expect(page.getByLabel("Lichtscene", { exact: true })).toHaveValue(
+    "Avond",
   );
   await expect(page.getByLabel("Montagehoogte", { exact: true })).toHaveValue(
     "3000",

@@ -622,3 +622,30 @@ Een bestaande test op het planblad prikte op de exacte x-positie van de schaalre
 ### Nog open in fase 4
 
 Circuits en lichtscènes zijn nu vrije tekstvelden per punt; er is nog geen overzicht dat een groep of scène als geheel toont of schakelt. De 3D-uitstraling (lichtbronnen, schaduwen, emissieve stripmaterialen) hoort bij fase 7. Fase 4 is daarmee dicht bij afronding maar niet afgerond.
+
+## Aanvulling 10 september 2026 — fase 4 afgerond: groepen en lichtscènes
+
+Het laatste openstaande punt van fase 4. Groep en lichtscène waren al velden per punt; er was alleen geen overzicht dat een groep of scène als geheel toonde.
+
+Het paneel **Elektra en licht** somt de groepen en de lichtscènes op met hun aantallen. Een scène is met één knop alleen te tonen: dat zet de zichtbaarheid van de armaturen zelf in één opdracht, precies zoals de laagpresets, dus het werkt door in de export en is met één stap terug ongedaan te maken.
+
+**Het opgetelde vermogen is de som van wat iemand zelf heeft ingevuld, en dat staat er ook bij.** Een groep waarin drie van de vijf armaturen een vermogen hebben, toont "3 van 5 opgegeven"; een groep zonder enkele opgave toont "geen vermogen opgegeven" in plaats van 0 W. Er wordt geen groepsbelasting, zekeringmaat of lux uit afgeleid, en het paneel zegt dat in één zin. Armaturen en LED-strips staan apart in het totaal: het vermogen van een strip komt uit lengte maal vermogen per meter en is van een andere orde dan een opgegeven armatuurvermogen.
+
+Punten zonder groep of scène vallen onder **Niet toegewezen**, onderaan de lijst. Juist die wil je zien voordat een lichtplan naar een installateur gaat; ze stilzwijgend weglaten zou het overzicht compleet laten lijken terwijl het dat niet is.
+
+Onderweg gecorrigeerd: in het smalle paneel brak "Niet toegewezen" af tot drie regels van vier letters, doordat de telling ernaast niet mocht afbreken. Naam en telling staan nu onder elkaar in plaats van naast elkaar. Gevonden door de schermafbeelding te bekijken.
+
+### Verificatie 10 september, Linux x64, Node 22.22.2
+
+- **196 tests / 25 bestanden geslaagd, 34,3 s** (was 187). Negen nieuwe tests: groepen die alle punten tellen inclusief elektra, een deels ingevulde groep die laat zien hoeveel er is opgegeven, punten zonder groep die een eigen kop krijgen, lichtscènes die alleen tellen wat licht geeft, sortering met de restpost onderaan, het totaal dat armaturen en LED-strips uit elkaar houdt, een leeg ontwerp, de ids die bij een scène horen, en spaties rond een naam die geen tweede groep maken.
+- **19 browserroutes geslaagd, 2,6 min.** De elektraroute maakt nu ook twee lichtscènes, controleert het overzicht inclusief de meldingen over wat niet is ingevuld, toont één scène en haalt het planblad op: de andere armatuur staat er dan werkelijk niet meer op. Daarna weer alles tonen, en na herladen staan groep en scène nog op de server.
+- TypeScript strict en productiebuild geslaagd (10,8 s).
+- Het paneel bekeken, voor en na de correctie van de regelafbreking.
+
+### Fase 4 is hiermee afgerond
+
+Materiaalcatalogus, ruimte- en oppervlakkoppeling, keuzestatussen, alternatieven en hoeveelheidberekening stonden er al; daar zijn nu elektra, LED-paden en 2D-uitstraling bij gekomen.
+
+De exitcriteria: het demoproject levert uitlegbare vloer-, plint- en LED-hoeveelheden; wijzigingen tonen veroudering; handmatige overrides blijven begrijpelijk met hun onderbouwing; en lichtbundels zijn visueel en gelabeld — met de formule erbij en zonder luxclaim.
+
+Bewust buiten deze fase gelaten en als zodanig genoteerd: de **3D-uitstraling** (lichtbronnen, schaduwen, emissieve stripmaterialen) hoort bij fase 7, en een **gecertificeerde lux- of elektraberekening** is in het masterprompt een expliciete vervolgmodule.

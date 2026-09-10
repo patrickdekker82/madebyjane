@@ -77,6 +77,7 @@ import { UnderlayPanel } from "./Underlay";
 import { DimensionProperties, NoteProperties } from "./DimensionProperties";
 import { LedProperties } from "./LedProperties";
 import { FixtureProperties } from "./FixtureProperties";
+import { LightingPanel } from "./Lighting";
 import { newFixtureItem } from "../../../packages/editor-2d/src/fixture-draft";
 import { newLedPath } from "../../../packages/editor-2d/src/led-draft";
 import { ledLengthMm } from "../../../packages/geometry/src/index";
@@ -1567,6 +1568,11 @@ function Editor() {
           <LayerPanel
             items={scene.items}
             selected={selected}
+            disabled={disabled}
+            onCommand={command}
+          />
+          <LightingPanel
+            scene={scene}
             disabled={disabled}
             onCommand={command}
           />

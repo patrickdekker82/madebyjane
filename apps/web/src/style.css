@@ -512,6 +512,47 @@ form {
   color: #7c8475;
   margin-bottom: 24px;
 }
+.lighting {
+  margin: 18px 0 4px;
+}
+.lighting h4 {
+  font-size: 11px;
+  margin: 0 0 8px;
+}
+.lighting-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px;
+}
+.lighting-list li {
+  padding: 5px 0;
+  font-size: 11px;
+  border-top: 1px solid var(--line);
+}
+.lighting-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lighting-list li span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lighting-list li span.muted {
+  color: #a1a897;
+}
+.lighting-list li small {
+  display: block;
+  margin-left: 18px;
+  color: #839078;
+  font-size: 9px;
+}
+.lighting-list li button {
+  padding: 2px 5px;
+  border: 0;
+  background: none;
+}
 .led-readout {
   display: flex;
   gap: 14px;
