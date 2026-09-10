@@ -6,7 +6,8 @@ export type Tool =
   | "window"
   | "measure"
   | "note"
-  | "calibrate";
+  | "calibrate"
+  | "underlay";
 export const useEditor = create<{
   hasPending: boolean;
   setPending: (value: boolean) => void;

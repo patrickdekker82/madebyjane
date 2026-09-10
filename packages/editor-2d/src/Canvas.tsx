@@ -21,6 +21,7 @@ import {
   expandSelection,
   wallOutlines,
   underlayPlacement,
+  underlayCorners,
   worldToUnderlay,
   dimensionGeometry,
   formatMm,
@@ -101,15 +102,11 @@ export function PlanCanvas({
     if (width <= 0 || height <= 0) return;
     // Maatlijnen en de onderlegger liggen naast de geometrie en kunnen er dus
     // buiten steken; ook die horen in beeld te komen.
-    const underlayCorners = scene.underlay
-      ? (({ x, y, width, height }) => [
-          { x, y },
-          { x: x + width, y: y + height },
-        ])(underlayPlacement(scene.underlay))
-      : [];
+    // Een gedraaide onderlegger is geen rechthoek meer; alle vier de hoeken tellen.
+    const corners = scene.underlay ? underlayCorners(scene.underlay) : [];
     const points = [
       ...scene.nodes,
-      ...underlayCorners,
+      ...corners,
       ...scene.annotations.flatMap((a) => {
         if (a.type === "note") return [{ x: a.x, y: a.y }];
         const d = dimensionGeometry(a.from, a.to, a.offset);
@@ -296,7 +293,10 @@ export function PlanCanvas({
       if (p.x === start.x && p.y === start.y) return;
       // De twee punten worden in afbeeldingspixels bewaard, zodat de kalibratie
       // blijft kloppen wanneer de onderlegger later verschoven wordt.
-      onCalibrate?.(worldToUnderlay(underlay, start), worldToUnderlay(underlay, p));
+      onCalibrate?.(
+        worldToUnderlay(underlay, start),
+        worldToUnderlay(underlay, p),
+      );
       setStart(null);
     } else if (tool === "select") select(null);
   };
@@ -355,7 +355,9 @@ export function PlanCanvas({
             Math.abs(band.y2 - band.y1) > 5 / zoom;
           // Een klik zonder sleep blijft gewoon de selectie opheffen.
           if (dragged)
-            selectMany(expandSelection(scene.items, itemsInRect(visible, band)));
+            selectMany(
+              expandSelection(scene.items, itemsInRect(visible, band)),
+            );
           else select(null);
           setBand(null);
         }}
@@ -414,17 +416,43 @@ export function PlanCanvas({
               ),
             )}
         </Layer>
-        <Layer x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom} listening={false}>
+        <Layer
+          x={pan.x}
+          y={pan.y}
+          scaleX={zoom}
+          scaleY={zoom}
+          // De onderlegger ligt onder alles en mag geen klikken van muren of
+          // meubels afvangen. Alleen met het gereedschap Onderlegger luistert
+          // deze laag mee, en dan is er verder niets aan te wijzen.
+          listening={tool === "underlay" && !disabled}
+        >
           {scene.underlay &&
             underlayImage &&
-            (({ x, y, width, height }) => (
+            (({ x, y, width, height, rotation }) => (
               <KonvaImage
                 image={underlayImage}
                 x={x}
                 y={y}
                 width={width}
                 height={height}
+                rotation={rotation}
                 opacity={scene.underlay!.opacity / 100}
+                draggable={tool === "underlay" && !disabled}
+                onDragEnd={(event) => {
+                  const grain = grid ? 100 : 1;
+                  const place = (value: number) =>
+                    Math.round(value / grain) * grain;
+                  onCommand([
+                    {
+                      type: "SetUnderlay",
+                      underlay: {
+                        ...scene.underlay!,
+                        x: place(event.target.x()),
+                        y: place(event.target.y()),
+                      },
+                    },
+                  ]);
+                }}
               />
             ))(underlayPlacement(scene.underlay))}
         </Layer>
@@ -509,12 +537,16 @@ export function PlanCanvas({
             <Group
               key={i.id}
               x={
-                dragging && dragging.ids.includes(i.id) && dragging.leader !== i.id
+                dragging &&
+                dragging.ids.includes(i.id) &&
+                dragging.leader !== i.id
                   ? i.x + dragging.dx
                   : i.x
               }
               y={
-                dragging && dragging.ids.includes(i.id) && dragging.leader !== i.id
+                dragging &&
+                dragging.ids.includes(i.id) &&
+                dragging.leader !== i.id
                   ? i.y + dragging.dy
                   : i.y
               }
@@ -540,7 +572,9 @@ export function PlanCanvas({
               }}
               onDragMove={(e) => {
                 const moving = expandSelection(scene.items, [i.id]);
-                setSnapped(snapTo({ x: e.target.x(), y: e.target.y() }, moving).targets);
+                setSnapped(
+                  snapTo({ x: e.target.x(), y: e.target.y() }, moving).targets,
+                );
                 if (moving.length > 1)
                   setDragging({
                     leader: i.id,
@@ -780,7 +814,9 @@ export function PlanCanvas({
                 y={(start.y + cursor.y) / 2}
                 offsetY={14 / zoom}
                 text={formatMm(
-                  Math.round(Math.hypot(cursor.x - start.x, cursor.y - start.y)),
+                  Math.round(
+                    Math.hypot(cursor.x - start.x, cursor.y - start.y),
+                  ),
                 )}
                 fontSize={12 / zoom}
                 align="center"

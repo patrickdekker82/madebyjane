@@ -27,6 +27,7 @@ De schaal afleiden in plaats van opslaan houdt de kalibratie navolgbaar: je ziet
 - Een gebruiker met alleen een PDF moet die eerst zelf naar afbeelding omzetten. De interface zegt dat PDF niet wordt geaccepteerd, in plaats van het bestand stil te weigeren.
 - **EXIF-metadata blijft staan.** Een JPEG uit een telefoon kan locatiegegevens bevatten en die worden nu niet verwijderd; dat vraagt om opnieuw encoderen en dus om een beeldbibliotheek. Dit staat als open punt in de implementatiestatus.
 - De aangenomen schaal van 10 mm per pixel voor een niet-gekalibreerde onderlegger is een werkwaarde, geen meting. De interface benoemt dat.
+- **Aanvulling 10 september 2026 — draaien.** De onderlegger heeft een hoek gekregen, met een standaardwaarde en dus zonder scene-migratie. Het draaipunt is de linkerbovenhoek, precies zoals de tekenlaag een afbeelding om haar eigen oorsprong draait; model en tekening kunnen zo niet uit elkaar lopen. Wie een hoek intikt of een kwartslag maakt, draait om het midden: de bijbehorende verschuiving wordt meteen verrekend. De kalibratie blijft in afbeeldingspixels bewaard en verandert niet mee, dus verschuiven en draaien laten de schaal met rust.
 
 ## Later
 

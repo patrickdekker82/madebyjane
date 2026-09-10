@@ -73,18 +73,22 @@ export const symbolShapeSchema = z
   });
 export const symbolSchema = z.array(symbolShapeSchema).min(1).max(32);
 export type SymbolShape = z.infer<typeof symbolShapeSchema>;
-export const catalogSchema = z.object({
-  category: z.string().trim().max(80),
-  description: z.string().trim().max(2000),
-  keywords: z.array(z.string().trim().min(1).max(80)).max(20),
-  supplier: z.string().trim().max(120),
-  sku: z.string().trim().max(120),
-}).strict();
-export const libraryQuerySchema = z.object({
-  offset: z.coerce.number().int().min(0).max(100000).default(0),
-  q: z.string().trim().max(120).default(""),
-  category: z.string().trim().max(80).default(""),
-}).strict();
+export const catalogSchema = z
+  .object({
+    category: z.string().trim().max(80),
+    description: z.string().trim().max(2000),
+    keywords: z.array(z.string().trim().min(1).max(80)).max(20),
+    supplier: z.string().trim().max(120),
+    sku: z.string().trim().max(120),
+  })
+  .strict();
+export const libraryQuerySchema = z
+  .object({
+    offset: z.coerce.number().int().min(0).max(100000).default(0),
+    q: z.string().trim().max(120).default(""),
+    category: z.string().trim().max(80).default(""),
+  })
+  .strict();
 /**
  * Laagindeling van het plan. Ontbreekt de laag bij een ouder object, dan telt
  * het als inrichting; oude scenes blijven daardoor geldig zonder migratie.
@@ -124,7 +128,10 @@ export const itemSchema = z
     custom: z.boolean(),
     symbol: symbolSchema.optional(),
     catalog: catalogSchema.optional(),
-    model: z.object({ assetId: id, width: size, depth: size, height: size }).strict().optional(),
+    model: z
+      .object({ assetId: id, width: size, depth: size, height: size })
+      .strict()
+      .optional(),
     libraryRef: z
       .object({
         entryId: id,
@@ -188,11 +195,20 @@ export const underlaySchema = z
     heightPx: z.number().int().min(1).max(20000),
     x: mm,
     y: mm,
+    /**
+     * Graden met de klok mee om de linkerbovenhoek. Standaardwaarde, dus
+     * scenes van voor deze stap blijven geldig zonder scene-migratie.
+     */
+    rotation: z.number().finite().min(-360).max(360).default(0),
     opacity: z.number().int().min(10).max(100),
     calibration: z
       .object({
-        from: z.object({ x: z.number().finite(), y: z.number().finite() }).strict(),
-        to: z.object({ x: z.number().finite(), y: z.number().finite() }).strict(),
+        from: z
+          .object({ x: z.number().finite(), y: z.number().finite() })
+          .strict(),
+        to: z
+          .object({ x: z.number().finite(), y: z.number().finite() })
+          .strict(),
         lengthMm: z.number().int().min(1).max(100000),
       })
       .strict()
@@ -204,7 +220,8 @@ export const underlaySchema = z
     if (c && c.from.x === c.to.x && c.from.y === c.to.y)
       ctx.addIssue({
         code: "custom",
-        message: "Kalibreren vraagt twee verschillende punten op de afbeelding.",
+        message:
+          "Kalibreren vraagt twee verschillende punten op de afbeelding.",
       });
   });
 export type Underlay = z.infer<typeof underlaySchema>;
@@ -290,7 +307,10 @@ export const operationSchema = z.discriminatedUnion("type", [
     .object({ type: z.literal("AddAnnotation"), annotation: annotationSchema })
     .strict(),
   z
-    .object({ type: z.literal("SetUnderlay"), underlay: underlaySchema.nullable() })
+    .object({
+      type: z.literal("SetUnderlay"),
+      underlay: underlaySchema.nullable(),
+    })
     .strict(),
   z
     .object({

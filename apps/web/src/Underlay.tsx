@@ -1,7 +1,14 @@
 import { useRef, useState } from "react";
-import { Image as ImageIcon, Ruler, Trash2 } from "lucide-react";
+import {
+  Image as ImageIcon,
+  Move,
+  Ruler,
+  RotateCw,
+  Trash2,
+} from "lucide-react";
 import {
   underlayScale,
+  rotateUnderlay,
   parseDutchNumber,
 } from "../../../packages/geometry/src/index";
 import type { Operation, Scene } from "../../../packages/contracts/src/index";
@@ -52,7 +59,8 @@ export function UnderlayPanel({
         body: await chosen.arrayBuffer(),
       });
       const body = await response.json();
-      if (!response.ok) throw new ApiError(body.code, body.message, response.status);
+      if (!response.ok)
+        throw new ApiError(body.code, body.message, response.status);
       onCommand([
         {
           type: "SetUnderlay",
@@ -62,6 +70,7 @@ export function UnderlayPanel({
             heightPx: body.heightPx,
             x: 0,
             y: 0,
+            rotation: 0,
             opacity: 45,
             calibration: null,
           },
@@ -114,8 +123,8 @@ export function UnderlayPanel({
           </p>
           {!underlay.calibration && (
             <p className="small">
-              De schaal is nu een aanname. Meet een bekende maat in om er echt op
-              te kunnen tekenen.
+              De schaal is nu een aanname. Meet een bekende maat in om er echt
+              op te kunnen tekenen.
             </p>
           )}
           <label>
@@ -132,12 +141,123 @@ export function UnderlayPanel({
                 onCommand([
                   {
                     type: "SetUnderlay",
-                    underlay: { ...underlay, opacity: Number(event.target.value) },
+                    underlay: {
+                      ...underlay,
+                      opacity: Number(event.target.value),
+                    },
                   },
                 ])
               }
             />
           </label>
+          <button
+            className={tool === "underlay" ? "active" : ""}
+            disabled={disabled}
+            onClick={() => setTool(tool === "underlay" ? "select" : "underlay")}
+          >
+            <Move size={13} />
+            {tool === "underlay"
+              ? "Klaar met verplaatsen"
+              : "Verplaatsen en draaien"}
+          </button>
+          {tool === "underlay" && (
+            <p className="small">
+              Sleep de afbeelding op de plattegrond. Zolang dit aan staat,
+              verplaats je alleen de onderlegger.
+            </p>
+          )}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              const value = (name: string) => String(form.get(name) ?? "");
+              try {
+                const x = Math.round(parseDutchNumber(value("x"))),
+                  y = Math.round(parseDutchNumber(value("y"))),
+                  rotation = parseDutchNumber(value("rotation"));
+                if (Math.abs(x) > 1000000 || Math.abs(y) > 1000000)
+                  throw new Error("Vul een plaats binnen 1.000 meter in.");
+                if (!(rotation >= -360 && rotation <= 360))
+                  throw new Error("Vul een hoek tussen -360 en 360 graden in.");
+                setError("");
+                // Alleen de hoek verandert: het midden blijft dan liggen. Zijn
+                // ook X en Y ingevuld, dan wint wat de gebruiker intikt.
+                const turned = rotateUnderlay(underlay, rotation);
+                const moved = x !== underlay.x || y !== underlay.y;
+                onCommand([
+                  {
+                    type: "SetUnderlay",
+                    underlay: moved
+                      ? { ...underlay, x, y, rotation }
+                      : { ...underlay, ...turned },
+                  },
+                ]);
+              } catch (e) {
+                setError((e as Error).message);
+              }
+            }}
+          >
+            <div className="pair">
+              <label>
+                Onderlegger X <span>mm</span>
+                <input
+                  name="x"
+                  aria-label="Onderlegger X"
+                  inputMode="decimal"
+                  key={"x" + underlay.x}
+                  defaultValue={underlay.x}
+                  disabled={disabled}
+                />
+              </label>
+              <label>
+                Onderlegger Y <span>mm</span>
+                <input
+                  name="y"
+                  aria-label="Onderlegger Y"
+                  inputMode="decimal"
+                  key={"y" + underlay.y}
+                  defaultValue={underlay.y}
+                  disabled={disabled}
+                />
+              </label>
+            </div>
+            <label>
+              Draaiing <span>°</span>
+              <input
+                name="rotation"
+                aria-label="Onderlegger draaiing"
+                inputMode="decimal"
+                key={"r" + underlay.rotation}
+                defaultValue={underlay.rotation}
+                disabled={disabled}
+              />
+            </label>
+            <button className="primary" disabled={disabled}>
+              Plaatsing toepassen
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() =>
+                onCommand([
+                  {
+                    type: "SetUnderlay",
+                    underlay: {
+                      ...underlay,
+                      // Zelfde afspraak als bij meubels: altijd 0 tot 359 graden.
+                      ...rotateUnderlay(
+                        underlay,
+                        (((underlay.rotation + 90) % 360) + 360) % 360,
+                      ),
+                    },
+                  },
+                ])
+              }
+            >
+              <RotateCw size={13} />
+              90° draaien
+            </button>
+          </form>
           {pending ? (
             <form
               onSubmit={(event) => {
@@ -153,7 +273,10 @@ export function UnderlayPanel({
                   onCommand([
                     {
                       type: "SetUnderlay",
-                      underlay: { ...underlay, calibration: { ...pending, lengthMm } },
+                      underlay: {
+                        ...underlay,
+                        calibration: { ...pending, lengthMm },
+                      },
                     },
                   ]);
                   onCalibrated();
@@ -184,7 +307,9 @@ export function UnderlayPanel({
             <button
               className={tool === "calibrate" ? "active" : ""}
               disabled={disabled}
-              onClick={() => setTool(tool === "calibrate" ? "select" : "calibrate")}
+              onClick={() =>
+                setTool(tool === "calibrate" ? "select" : "calibrate")
+              }
             >
               <Ruler size={13} />
               {tool === "calibrate"

@@ -467,3 +467,25 @@ Zolang er een klad is, blokkeert de editor het verlaten van de pagina niet meer 
 - Het conflict in de browserroute wordt gemaakt door een tweede schrijver die dezelfde bewerktoegang hergebruikt. De bewerktoegang is exclusief, dus overname door een tweede echte sessie is een apart scenario dat hier niet is getest.
 
 Nog open in fase 2: de onderlegger verslepen en draaien; PDF-pagina als onderlegger; EXIF verwijderen. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — de onderlegger verplaatsen en draaien
+
+De onderlegger heeft een hoek gekregen, als veld met standaardwaarde in `underlaySchema`; bestaande scenes blijven geldig zonder scene-migratie. Het draaipunt in het model is de linkerbovenhoek, precies zoals de tekenlaag een afbeelding om haar eigen oorsprong draait — zo kunnen model en tekening niet uit elkaar lopen. Wat de gebruiker doet is iets anders: een hoek intikken of een kwartslag maken draait **om het midden**, en de verschuiving die daarbij hoort wordt meteen verrekend in `rotateUnderlay`. Anders zwaait de afbeelding onder je cursor vandaan.
+
+De kalibratie blijft in afbeeldingspixels bewaard en draait dus niet mee: verplaatsen en draaien laten de schaal met rust. `underlayToWorld` en `worldToUnderlay` rekenen de draaiing wel mee, zodat een inmeting na het draaien nog steeds op de juiste plek belandt.
+
+Verplaatsen gaat met een eigen gereedschap, aan te zetten in het onderleggerpaneel. Alleen dan luistert de onderleggerlaag mee en is de afbeelding versleepbaar; in alle andere standen ligt de onderlegger onder alles en vangt hij geen klikken van muren of meubels af. Slepen landt op het raster wanneer rastervangen aan staat. Daarnaast zijn X, Y en de hoek in te tikken.
+
+`fitToProject` gebruikt nu alle vier de hoeken van de onderlegger: een gedraaide afbeelding is geen rechthoek meer en zou anders half buiten beeld vallen.
+
+Onderweg gecorrigeerd: de eerste normalisatie van de kwartslagknop leverde −180 in plaats van 180 graden — dezelfde hoek, maar een verwarrend getal in het veld. De knop houdt nu, net als bij meubels, 0 tot 359 graden aan.
+
+Verificatie 10 september, Linux x64, Node 22.22.2:
+- **156 tests / 22 bestanden geslaagd, 28,7 s** (was 151). Vijf nieuwe onderleggertests: omrekenen om de hoek bij 90 graden, de draaiing in de plaatsing, de vier hoeken van een gedraaide afbeelding, draaien dat het midden op zijn plaats houdt in hele millimeters, en draaien naar dezelfde hoek dat niets verplaatst. De bestaande eigenschapstest met 200 gevallen draait nu ook over willekeurige hoeken van −360 tot 360.
+- **17 browserroutes geslaagd, 2,1 min.** De onderleggerroute plaatst de afbeelding numeriek, draait hem 90 graden, controleert dat de hoek daarbij verschuift, maakt vier kwartslagen en komt binnen 3 mm terug op het beginpunt, sleept de afbeelding over het canvas en controleert dat de plaatsing op hele honderden millimeters landt, en vindt plaats en hoek terug na herladen.
+- TypeScript strict en productiebuild geslaagd (10,4 s).
+- Screenshots `outputs/qa/onderlegger-gedraaid.png` en `onderlegger-verplaatst.png` bekeken: de afbeelding staat na een kwartslag rechtop in plaats van liggend, met het midden op dezelfde plek, en na het slepen op de ingevulde coördinaten.
+
+Beperkingen: draaien gaat via het paneel, niet met een greep op het canvas. De draaiing werkt niet door in het planblad of de 3D-weergave, want de onderlegger komt daar bewust niet in voor — het is een natekenhulp, geen tekeninhoud.
+
+Daarmee zijn de openstaande punten van fase 2 afgewerkt. Nog steeds bewust buiten deze fase gelaten: **PDF-pagina als onderlegger** (zie ADR 0004; vraagt een PDF-engine in de browser) en **EXIF-metadata verwijderen** (vraagt opnieuw encoderen en dus een beeldbibliotheek op de server). Beide staan als open punt genoteerd en zijn geen stille weglating. De symbolenlegenda op het planblad wacht op de elektra- en lichtsymbolen uit fase 4.

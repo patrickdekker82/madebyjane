@@ -1804,9 +1804,85 @@ test("onderlegger uploaden → inmeten met twee punten → schaal klopt", async 
   await page.getByRole("button", { name: "Passend", exact: true }).click();
   await page.screenshot({ path: "outputs/qa/onderlegger-gekalibreerd.png" });
 
+  // Verplaatsen en draaien.
+  const field = (name: string) => page.getByLabel(name, { exact: true });
+  const apply = async () => {
+    await page
+      .getByRole("button", { name: "Plaatsing toepassen", exact: true })
+      .click();
+    await saved();
+  };
+  await field("Onderlegger X").fill("3000");
+  await field("Onderlegger Y").fill("-1000");
+  await apply();
+  await expect(field("Onderlegger X")).toHaveValue("3000");
+  await expect(field("Onderlegger Y")).toHaveValue("-1000");
+
+  await field("Onderlegger draaiing").fill("90");
+  await apply();
+  await expect(field("Onderlegger draaiing")).toHaveValue("90");
+  // Draaien gaat om het midden van de afbeelding, dus de hoek schuift mee.
+  await expect(field("Onderlegger X")).not.toHaveValue("3000");
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  await page.screenshot({ path: "outputs/qa/onderlegger-gedraaid.png" });
+
+  // Vier kwartslagen brengen de onderlegger terug waar hij stond.
+  const number = async (name: string) => Number(await field(name).inputValue());
+  const x0 = await number("Onderlegger X"),
+    y0 = await number("Onderlegger Y");
+  for (const expected of [180, 270, 0, 90]) {
+    await page
+      .getByRole("button", { name: "90° draaien", exact: true })
+      .click();
+    await expect(field("Onderlegger draaiing")).toHaveValue(String(expected));
+  }
+  expect(Math.abs((await number("Onderlegger X")) - x0)).toBeLessThanOrEqual(3);
+  expect(Math.abs((await number("Onderlegger Y")) - y0)).toBeLessThanOrEqual(3);
+
+  // Slepen op het canvas, met het raster als vangnet.
+  await field("Onderlegger X").fill("0");
+  await field("Onderlegger Y").fill("0");
+  await field("Onderlegger draaiing").fill("0");
+  await apply();
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Verplaatsen en draaien", exact: true })
+    .click();
+  const scale = await perPixel();
+  const spread = await canvas.boundingBox();
+  const fit2 = Math.min(
+    (spread!.width - 120) / (1000 * scale),
+    (spread!.height - 120) / (800 * scale),
+  );
+  const on = (x: number, y: number) => ({
+    x: spread!.x + 60 + x * fit2,
+    y: spread!.y + 60 + y * fit2,
+  });
+  const grip = on(1000 * scale * 0.5, 800 * scale * 0.5);
+  await page.mouse.move(grip.x, grip.y);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + 60, grip.y + 30, { steps: 8 });
+  await page.mouse.up();
+  await saved();
+  const dx = await number("Onderlegger X"),
+    dy = await number("Onderlegger Y");
+  // Het raster staat aan, dus de plaatsing landt op hele honderden millimeters.
+  expect(dx % 100).toBe(0);
+  expect(dy % 100).toBe(0);
+  expect(Math.abs(dx - 60 / fit2)).toBeLessThanOrEqual(150);
+  expect(Math.abs(dy - 30 / fit2)).toBeLessThanOrEqual(150);
+  await page.screenshot({ path: "outputs/qa/onderlegger-verplaatst.png" });
+  await page
+    .getByRole("button", { name: "Klaar met verplaatsen", exact: true })
+    .click();
+
   const before = await perPixel();
   await page.reload();
   expect(await perPixel()).toBe(before);
+  // Plaats en draaiing overleven het herladen.
+  await expect(field("Onderlegger X")).toHaveValue(String(dx));
+  await expect(field("Onderlegger Y")).toHaveValue(String(dy));
+  await expect(field("Onderlegger draaiing")).toHaveValue("0");
   await page
     .getByRole("button", { name: "Onderlegger verwijderen", exact: true })
     .click();
