@@ -8,6 +8,22 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: "http://127.0.0.1:4320",
+    // De app is Nederlands en rekent in Europe/Amsterdam; de tests draaien daarom
+    // niet in de locale van de runner. Chromium tekent <input type="date"> wel in
+    // zijn eigen UI-taal: in een container zonder Nederlands taalpakket staat er
+    // op screenshots mm/dd/jjjj waar een Nederlandse browser dd-mm-jjjj toont.
+    // Dat verschil zit in de testomgeving, niet in de app.
+    locale: "nl-NL",
+    timezoneId: "Europe/Amsterdam",
+    // Sommige omgevingen leveren een eigen Chromium op een vaste plek. Verwijs er
+    // expliciet naar in plaats van een tweede browser te downloaden.
+    ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+      ? {
+          launchOptions: {
+            executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+          },
+        }
+      : {}),
     viewport: { width: 1440, height: 1000 },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",

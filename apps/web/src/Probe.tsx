@@ -33,7 +33,7 @@ export function Probe() {
       setError((e as Error).message);
     }
   };
-  const item = scene.items.find((i) => i.id === selected);
+  const item = scene.items.find((i) => selected.includes(i.id));
   return (
     <div className="app">
       <header className="topbar">
@@ -99,7 +99,7 @@ export function Probe() {
                 <button
                   key={i.id}
                   onClick={() => select(i.id)}
-                  className={selected === i.id ? "selected" : ""}
+                  className={selected.includes(i.id) ? "selected" : ""}
                 >
                   <span className="color-dot" style={{ background: i.color }} />
                   {i.name}

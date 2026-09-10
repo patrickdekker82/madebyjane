@@ -835,6 +835,38 @@ form {
   margin: 18px 0;
   border: 1px solid #e7ddd2;
 }
+.arrange {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  margin-top: 4px;
+}
+.arrange h3 {
+  font-size: 11px;
+  margin: 0 0 4px;
+}
+.arrange p {
+  margin: 0 0 10px;
+}
+.arrange-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.arrange-row.pair {
+  grid-template-columns: repeat(2, 1fr);
+}
+.arrange-row button {
+  padding: 8px 0;
+  display: flex;
+  justify-content: center;
+  background: white;
+  border: 1px solid #e7ddd2;
+  color: #4c5148;
+}
+.arrange-row button:disabled {
+  opacity: 0.45;
+}
 .statusbar {
   height: 39px;
   border-top: 1px solid var(--line);

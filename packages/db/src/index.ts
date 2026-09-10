@@ -2,6 +2,18 @@ import { Pool, type PoolClient } from "pg";
 import { readFile, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 export { Pool };
+/**
+ * Een pg-Pool zonder error-listener laat Node het proces beeindigen zodra de
+ * database een inactieve verbinding sluit (herstart, `pg_terminate_backend`).
+ * pg verwijdert de client zelf uit de pool; de API moet zo'n gebeurtenis dus
+ * overleven en bij de volgende query gewoon opnieuw verbinden.
+ */
+export function guardPool(pool: Pool, label: string) {
+  pool.on("error", (error: Error) => {
+    console.error(`[db:${label}] inactieve verbinding verbroken: ${error.message}`);
+  });
+  return pool;
+}
 // Read-only startup gate: deployments must migrate explicitly before starting the API.
 export async function assertSchemaCompatible(pool: Pool) {
   const names = (await readdir(new URL("../migrations/", import.meta.url)))

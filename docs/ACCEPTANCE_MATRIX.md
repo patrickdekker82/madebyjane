@@ -6,12 +6,17 @@ Een rij per bronalinea/bullet; samengestelde eisen zijn pas gereed wanneer alle 
 
 | Component | Implementatiepad | Testbewijs | Status |
 |---|---|---|---|
-| Materiaalkeuzes / handmatige hoeveelheden | Materials; MaterialService; contracts/materials; migration 0009 | schema-/DB-tests en browser: onbekend, onderbouwing, akkoord, versies en herladen | Basis getoetst; formules, alternatieven, textures, offertes en geometriekoppeling open |
+| Berekende hoeveelheden uit geometrie | geometry/quantities; domain/quantities; MaterialService.calculate; GET /projects/:id/quantities; Materials | quantities.test.ts (8, incl. 200 property cases en losse narekening); materials.test.ts (2); integration.test.ts (server rekent, bronrevisie, 404/409/403); E2E veroudering en herberekenen | Netto vloer/wand/omtrek/plint, snijverlies, bestelstap, bronrevisie, veroudering en onderbouwde override getoetst; alternatieven, prijsbron, gordijnen, LED en persistente ruimtes open |
+| Alternatieven / prijsbron / monsterstatus | contracts/materials (alternativeSchema, productFields); MaterialService.verifyChosenFrom; domain/pricing; Materials | materials.test.ts (5 nieuw); integration.test.ts: herkomst 409 bij verzonnen, gewijzigd of eerste versie; E2E toevoegen, kiezen en herkomst | Prijs met verplichte bron/datum, monsterstatus, tien alternatieven, servergecontroleerde herkomst en indicatiebedrag getoetst; textures, prijsversies en offertekoppeling open |
+| Materiaalkeuzes / handmatige hoeveelheden | Materials; MaterialService; contracts/materials; migration 0009 | schema-/DB-tests en browser: onbekend, onderbouwing, akkoord, versies en herladen | Basis getoetst; textures, prijsgeschiedenis en koppeling naar offertes open |
+| Databaseverbindingen overleven wegvallen | packages/db guardPool; apps/api/src/main.ts; scripts/local-db.ts | integration.test.ts: pg_terminate_backend op runtime- en auth-verbindingen, API blijft 200; zonder listener 4 onafgevangen fouten nagemeten | Getoetst voor inactieve verbindingen; volledige DB-herstartprocedure open |
 | GLB-opslag / bibliotheekkoppeling / project-3D | ModelAssetService; server-worker; migration 0008; ModelItems | echte worker+DB; quota/retry/rechten; browser upload/plaats/herlaad | Geometrieprofiel getoetst; textures, assetrechten, S3 en opruimen open |
 | GLB-controle en lokale preview | model-import/glb; glb.worker; GlbInspector | glb.test.ts; browser ongeldige header/externe bron/maat/3D-frame | Beperkt geometrieprofiel getoetst; textures/animaties/compressie open |
 | Bibliotheek zoeken / productgegevens | LibraryPanel; LibraryService; catalogSchema; ItemProperties | 51-item DB-proef; tenantisolatie; nieuwste versie; browser zoeken en herladen | Categorie, omschrijving, zoektermen, leverancier en SKU getoetst; prijsbron/rechtenmetadata open |
 | Eigen 2D-symbolen | SymbolEditor; geometry/symbol; Konva; planSvg | symbols.test.ts + editor-E2E; exacte vormmaten, versiebehoud en SVG na herladen | Basis getoetst; polylines/bogen/paden en papiersymbolen open |
 | Eigen bibliotheek / versies | LibraryPanel; domain/library; migration 0007 | integration.test.ts + editor-E2E; snapshotmaten/retry/rechten | Parametrische basis en basis-symboleneditor getoetst; GLB open |
+| Vangen: raster, muurpunt, muur, object | geometry/snapping; Canvas snapTo en hulplijnen; onderbalkschakelaar | snapping.test.ts (11, incl. 300 property cases); E2E zelfkalibrerend: honderdtallen, exact uitlijnen, vangen uit | Volgorde, tolerantie in schermpixels, hele mm en zichtbare hulplijnen getoetst; rubberband en snappen tijdens muur tekenen deels open |
+| Meervoudige selectie / uitlijnen / verdelen | editor-2d/store selected[]; geometry/arrange; apps/web/Arrange | arrange.test.ts (8, incl. 200 property cases); E2E shift-selectie, gelijke randen, één stap terug, gelijke tussenruimten | Zes uitlijningen en twee verdelingen met gedraaide omhullende getoetst; vergrendelen, laagvolgorde en groeperen open |
 | Ruimtes / hartlijnoppervlak / 3D-vloer | geometry/src/rooms.ts; RoomSummary; Viewer | rooms.test.ts + editor-E2E; 29,04 m² | Basis getoetst; netto offsets/joins/persistente ruimtes open |
 | Ontwerpvarianten | Variants.tsx; ProjectService; migration 0006 | integration.test.ts + editor-E2E; onafhankelijke kopie/retry/wisselen | Basis getoetst; hernoemen/archiveren/vergelijken open |
 | Versiegeschiedenis / herstel | RevisionHistory.tsx; ProjectService.command/revisions | integration.test.ts + editor-E2E; voorganger, retry, rechten, herstel | Getoetste basis; vergelijking en paginering open |
@@ -27,7 +32,7 @@ Een rij per bronalinea/bullet; samengestelde eisen zijn pas gereed wanneer alle 
 | 500 objecten / 100 muren | packages/test-fixtures; editor-2d | work/performance.json; p95 17,1 ms tijdens discrete panacties | Lokale basisproef; continue drag/inputlatency open |
 | PDF 1:50 | packages/documents; scripts/pdf-probe.ts | scripts/verify-pdf.py; ~99,9983 mm voor 5 m | Numeriek en visueel getoetst |
 | Linux Chromium zonder GPU | infra/docker; scripts/probe-linux.sh | work/linux-probe/pdf-metrics.json; 67 ms, arm64 | Geïsoleerde renderproef; Hyper-V open |
-| Release / licenties / CI | release-manifest.json; docs/DEPENDENCY_LICENSES.json; .github/workflows/ci.yml | Lokale build geslaagd; 36 directe licenties geïnventariseerd | CI niet extern gedraaid; transitieve notices open |
+| Release / licenties / CI | release-manifest.json; docs/DEPENDENCY_LICENSES.json; .github/workflows/ci.yml | CI op ubuntu-24.04 geslaagd voor commit deabc13: build, test, e2e en audit; 36 directe licenties geïnventariseerd | CI extern getoetst; transitieve notices en securityrelease-gate open |
 
 ## Volledige bronregistratie
 
@@ -288,3 +293,11 @@ Een rij per bronalinea/bullet; samengestelde eisen zijn pas gereed wanneer alle 
 | R23.009 | MASTERPROMPT.md:575 | Definitieve installatie- en gebruikershandleiding, snelstart en tutorial. | Nog toe te wijzen | Geen volledig eisbewijs | Open |
 | R23.010 | MASTERPROMPT.md:576 | Release notes met bekende beperkingen en expliciete vervolgmodules. | Nog toe te wijzen | Geen volledig eisbewijs | Open |
 | R23.011 | MASTERPROMPT.md:578 | Begin nu met fase 0 en ga daarna door met de implementatie. Houd elke fase concreet en verifieerbaar. Als uitvoering wordt onderbroken, laat de repository in een hervatbare toestand met precieze voortgang; markeer onvoltooide fasen nooit als afgerond. | Nog toe te wijzen | Geen volledig eisbewijs | Open |
+# Aanvulling fase 6 — 8 september 2026
+
+| Eis | Implementatie | Testbewijs / status |
+| --- | --- | --- |
+| Decimale offerterekenkern, korting, correcties, configureerbare belastingcategorieën | packages/contracts/src/quotes.ts; packages/domain/src/quote-calculation.ts | 4 lokale Vitest-tests geslaagd in tests/quotes.test.ts |
+| Conceptformulier, klantgegevens, posten, materiaalbron en bronverschillen | apps/web/src/Quotes.tsx; packages/domain/src/quotes.ts | Typecheck/build en afzonderlijke Chrome-UI-proef met gemockte API geslaagd; desktop/mobiel visueel bekeken. Nieuwe echte E2E-route nog niet uitgevoerd |
+| Unieke transactionele nummering, prijsfreeze, immutable opslag, finance-rechten en tenantisolatie | packages/domain/src/quotes.ts; packages/db/migrations/0010_quotes.sql; apps/api/src/server.ts | 4 PostgreSQL/API-tests geslaagd op Linux-CI a27a69b, onderdeel van 57 geslaagde tests. Offerte-E2E eveneens geslaagd; herhaling volledige browsersuite na sessiehergebruik open |
+| PDF, vaste presentatiebijlagen, vervolgversies, statusovergangen en catalogusprijsversies | Nog te implementeren | Open; fase 6 niet afgerond |

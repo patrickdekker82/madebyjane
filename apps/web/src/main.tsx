@@ -1,4 +1,5 @@
 import { Materials } from "./Materials";
+import { Quotes } from "./Quotes";
 import { LibraryPanel } from "./LibraryPanel";
 import { Variants, VariantName } from "./Variants";
 import { RoomSummary } from "./RoomSummary";
@@ -52,11 +53,13 @@ import {
   RotateCw,
   Save,
   Grid2X2,
+  Magnet,
   Copy,
   X,
   Armchair,
 } from "lucide-react";
 import { api, login, logout, authRequest, ApiError } from "./api";
+import { Arrange } from "./Arrange";
 import { PlanCanvas } from "../../../packages/editor-2d/src/Canvas";
 import { useEditor } from "../../../packages/editor-2d/src/store";
 import {
@@ -613,8 +616,19 @@ function Editor() {
     },
   });
   const leaseId = useRef<string>(crypto.randomUUID());
-  const { tool, setTool, selected, select, zoom, setZoom, grid, toggleGrid } =
-    useEditor();
+  const {
+    tool,
+    setTool,
+    selected,
+    select,
+    zoom,
+    setZoom,
+    grid,
+    toggleGrid,
+    objectSnap,
+    toggleObjectSnap,
+    toggleSelected,
+  } = useEditor();
   useEffect(() => {
     if (query.data) {
       setScene(query.data);
@@ -850,7 +864,9 @@ function Editor() {
         </button>
       </div>
     );
-  const item = scene.items.find((i) => i.id === selected);
+  const single = selected.length === 1 ? selected[0]! : null;
+  const item = single ? scene.items.find((i) => i.id === single) : undefined;
+  const selectedItems = scene.items.filter((i) => selected.includes(i.id));
   const disabled = busy || !!pending.current || !lease || !canWrite(org.role);
   return (
     <main className="editor">
@@ -940,7 +956,8 @@ function Editor() {
           </button>
         </div>
         <span className="tools-spacer" />
-        <Materials organizationId={org.id} projectId={scene.projectId} canEdit={canWrite(org.role)} />
+        <Materials organizationId={org.id} projectId={scene.projectId} variantId={variantId} canEdit={canWrite(org.role)} />
+        {["owner", "admin", "finance"].includes(org.role) && <Quotes organizationId={org.id} projectId={scene.projectId} />}
         <Variants
           organizationId={org.id}
           variantId={variantId}
@@ -1082,9 +1099,13 @@ function Editor() {
           <div className="object-list">
             {scene.items.map((i) => (
               <button
-                className={selected === i.id ? "selected" : ""}
+                className={selected.includes(i.id) ? "selected" : ""}
                 key={i.id}
-                onClick={() => select(i.id)}
+                onClick={(event) =>
+                  event.shiftKey || event.metaKey || event.ctrlKey
+                    ? toggleSelected(i.id)
+                    : select(i.id)
+                }
               >
                 <span className="color-dot" style={{ background: i.color }} />
                 {i.name}
@@ -1093,7 +1114,7 @@ function Editor() {
             {scene.walls.map((w, i) => (
               <button
                 key={w.id}
-                className={selected === w.id ? "selected" : ""}
+                className={selected.includes(w.id) ? "selected" : ""}
                 onClick={() => select(w.id)}
               >
                 <BrickWall size={14} />
@@ -1103,7 +1124,7 @@ function Editor() {
             {scene.openings.map((o, i) => (
               <button
                 key={o.id}
-                className={selected === o.id ? "selected" : ""}
+                className={selected.includes(o.id) ? "selected" : ""}
                 onClick={() => select(o.id)}
               >
                 <DoorOpen size={14} />
@@ -1147,38 +1168,55 @@ function Editor() {
               disabled={disabled}
               onCommand={command}
             />
-          ) : selected &&
-            (scene.walls.some((w) => w.id === selected) ||
-              scene.openings.some((o) => o.id === selected)) ? (
+          ) : single &&
+            (scene.walls.some((w) => w.id === single) ||
+              scene.openings.some((o) => o.id === single)) ? (
             <StructureProperties
-              key={selected + ":" + scene.revision}
+              key={single + ":" + scene.revision}
               scene={scene}
-              selected={selected}
+              selected={single}
               disabled={disabled}
               onCommand={command}
             />
           ) : (
             <div className="property-empty">
               <MousePointer2 size={27} strokeWidth={1} />
-              <h3>{selected ? "Object geselecteerd" : "Elk detail telt."}</h3>
+              <h3>
+                {selectedItems.length > 1
+                  ? `${selectedItems.length} meubels geselecteerd`
+                  : selected.length
+                    ? "Object geselecteerd"
+                    : "Elk detail telt."}
+              </h3>
               <p>
-                {selected
-                  ? "Dit object kun je verwijderen via de knop hieronder."
-                  : "Selecteer een meubel in je plattegrond of objectlijst om de exacte maten aan te passen."}
+                {selectedItems.length > 1
+                  ? "Lijn ze uit of verdeel ze gelijk; dat is samen een stap terug."
+                  : selected.length
+                    ? "Dit object kun je verwijderen via de knop hieronder."
+                    : "Selecteer een meubel in je plattegrond of objectlijst om de exacte maten aan te passen. Houd shift ingedrukt voor meerdere."}
               </p>
             </div>
           )}
-          {selected && (
+          {selectedItems.length > 1 && (
+            <Arrange
+              items={selectedItems}
+              disabled={disabled}
+              onCommand={command}
+            />
+          )}
+          {!!selected.length && (
             <button
               className="delete"
               disabled={disabled}
               onClick={() => {
-                command([{ type: "DeleteSelection", ids: [selected] }]);
+                command([{ type: "DeleteSelection", ids: selected }]);
                 select(null);
               }}
             >
               <Trash2 size={15} />
-              Object verwijderen
+              {selected.length > 1
+                ? `${selected.length} objecten verwijderen`
+                : "Object verwijderen"}
             </button>
           )}
           <div className="property-tip">
@@ -1206,6 +1244,14 @@ function Editor() {
           <button className={grid ? "active" : ""} onClick={toggleGrid}>
             <Grid2X2 size={13} />
             {grid ? "Raster snap · 100 mm" : "Vrij plaatsen"}
+          </button>
+          <button
+            className={objectSnap ? "active" : ""}
+            onClick={toggleObjectSnap}
+            title="Vangen aan muurpunten, muren en meubels"
+          >
+            <Magnet size={13} />
+            {objectSnap ? "Vangen aan objecten" : "Vangen uit"}
           </button>
           <span>mm</span>
           <button aria-label="Uitzoomen" onClick={() => setZoom(zoom / 1.2)}>

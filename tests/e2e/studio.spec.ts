@@ -402,53 +402,137 @@ test("muur en raam op maat → ongeldige opening afgewezen → undo → herladen
     .click();
   await page.getByText("3D-model controleren (GLB)", { exact: true }).click();
   const glbFile = page.getByLabel("GLB-bestand", { exact: true });
-  await glbFile.setInputFiles({ name: "ongeldig.glb", mimeType: "model/gltf-binary", buffer: Buffer.from("geen glb") });
+  await glbFile.setInputFiles({
+    name: "ongeldig.glb",
+    mimeType: "model/gltf-binary",
+    buffer: Buffer.from("geen glb"),
+  });
   await expect(page.getByRole("alert")).toContainText("geen volledig GLB");
-  await glbFile.setInputFiles({ name: "eigen-testmodel.glb", mimeType: "model/gltf-binary", buffer: Buffer.from(makeGlb()) });
-  await expect(page.getByText("Model gecontroleerd · 4 driehoeken", { exact: true })).toBeVisible();
-  await expect(page.getByText("Breedte 2000 mm · diepte 500 mm · hoogte 1000 mm", { exact: true })).toBeVisible();
-  await page.getByLabel("GLB 3D-preview", { exact: true }).scrollIntoViewIfNeeded();
-  await expect(page.getByLabel("GLB 3D-preview", { exact: true }).locator("canvas")).toBeVisible();
-  await expect(page.getByLabel("GLB 3D-preview", { exact: true })).toHaveAttribute("data-render-ready", "true");
+  await glbFile.setInputFiles({
+    name: "eigen-testmodel.glb",
+    mimeType: "model/gltf-binary",
+    buffer: Buffer.from(makeGlb()),
+  });
+  await expect(
+    page.getByText("Model gecontroleerd · 4 driehoeken", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Breedte 2000 mm · diepte 500 mm · hoogte 1000 mm", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .getByLabel("GLB 3D-preview", { exact: true })
+    .scrollIntoViewIfNeeded();
+  await expect(
+    page.getByLabel("GLB 3D-preview", { exact: true }).locator("canvas"),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("GLB 3D-preview", { exact: true }),
+  ).toHaveAttribute("data-render-ready", "true");
   await page.screenshot({ path: "outputs/qa/glb-controle.png" });
-  await glbFile.setInputFiles({ name: "externe-bron.glb", mimeType: "model/gltf-binary", buffer: Buffer.from(makeGlb(j => { j.buffers[0].uri = "https://example.invalid/model.bin"; })) });
+  await glbFile.setInputFiles({
+    name: "externe-bron.glb",
+    mimeType: "model/gltf-binary",
+    buffer: Buffer.from(
+      makeGlb((j) => {
+        j.buffers[0].uri = "https://example.invalid/model.bin";
+      }),
+    ),
+  });
   await expect(page.getByRole("alert")).toContainText("Externe bronnen");
-  await expect(page.getByLabel("GLB 3D-preview", { exact: true })).toHaveCount(0);
-  await glbFile.setInputFiles({ name: "eigen-testmodel.glb", mimeType: "model/gltf-binary", buffer: Buffer.from(makeGlb()) });
-  await expect(page.getByText("Model gecontroleerd · 4 driehoeken", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Model bewaren en meubel maken", exact: true })).toBeDisabled();
-  await page.getByRole("checkbox", { name: "Maten en oriëntatie gecontroleerd", exact: true }).check();
-  await page.getByRole("button", { name: "Model bewaren en meubel maken", exact: true }).click();
-  await expect(page.getByText("Eigen 3D-model gekoppeld.", { exact: false })).toBeVisible();
-  await expect(page.getByLabel("Bibliotheekbreedte", { exact: true })).toHaveValue("2000");
-  await page.getByLabel("Bibliotheeknaam", { exact: true }).fill("GLB proefmeubel");
-  await page.getByRole("button", { name: "Versie bewaren", exact: true }).click();
-  await page.getByRole("button", { name: "Plaats GLB proefmeubel", exact: true }).click();
-  await expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await expect(page.getByLabel("GLB 3D-preview", { exact: true })).toHaveCount(
+    0,
+  );
+  await glbFile.setInputFiles({
+    name: "eigen-testmodel.glb",
+    mimeType: "model/gltf-binary",
+    buffer: Buffer.from(makeGlb()),
+  });
+  await expect(
+    page.getByText("Model gecontroleerd · 4 driehoeken", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "Model bewaren en meubel maken",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await page
+    .getByRole("checkbox", {
+      name: "Maten en oriëntatie gecontroleerd",
+      exact: true,
+    })
+    .check();
+  await page
+    .getByRole("button", { name: "Model bewaren en meubel maken", exact: true })
+    .click();
+  await expect(
+    page.getByText("Eigen 3D-model gekoppeld.", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Bibliotheekbreedte", { exact: true }),
+  ).toHaveValue("2000");
+  await page
+    .getByLabel("Bibliotheeknaam", { exact: true })
+    .fill("GLB proefmeubel");
+  await page
+    .getByRole("button", { name: "Versie bewaren", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Plaats GLB proefmeubel", exact: true })
+    .click();
+  await expect(
+    page.getByText("Server opgeslagen", { exact: false }),
+  ).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "3D bekijken", exact: true }).click();
-  await expect(page.getByText("Eigen 3D-modellen geladen", { exact: false })).toBeVisible();
-  await expect(page.locator(".viewer")).toHaveAttribute("data-render-ready", "true");
+  await expect(
+    page.getByText("Eigen 3D-modellen geladen", { exact: false }),
+  ).toBeVisible();
+  await expect(page.locator(".viewer")).toHaveAttribute(
+    "data-render-ready",
+    "true",
+  );
   await page.screenshot({ path: "outputs/qa/glb-opgeslagen-3d.png" });
   await page.getByRole("button", { name: "Plattegrond", exact: true }).click();
-  await page.getByRole("button", { name: "Eigen bibliotheek", exact: true }).click();
-  await page.getByRole("button", { name: "Nieuwe versie van GLB proefmeubel", exact: true }).click();
-  await expect(page.getByText("Eigen 3D-model gekoppeld.", { exact: false })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Eigen bibliotheek", exact: true })
+    .click();
+  await page
+    .getByRole("button", {
+      name: "Nieuwe versie van GLB proefmeubel",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByText("Eigen 3D-model gekoppeld.", { exact: false }),
+  ).toBeVisible();
   await page.getByLabel("Bibliotheekbreedte", { exact: true }).fill("2200");
-  await page.getByRole("button", { name: "Versie bewaren", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Versie bewaren", exact: true })
+    .click();
   await page.getByRole("button", { name: "Sluiten", exact: true }).click();
   await page.reload();
-  await page.getByRole("button", { name: "GLB proefmeubel", exact: true }).click();
+  await page
+    .getByRole("button", { name: "GLB proefmeubel", exact: true })
+    .click();
   await expect(page.getByLabel("Breedte", { exact: true })).toHaveValue("2000");
-  await page.getByRole("button", { name: "Eigen bibliotheek", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Eigen bibliotheek", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Bibliotheekitem maken", exact: true })
     .click();
   await page.getByLabel("Bibliotheeknaam", { exact: true }).fill("Atelierbank");
   await page.getByLabel("Item categorie", { exact: true }).fill("Zitmeubels");
-  await page.getByLabel("Item leverancier", { exact: true }).fill("Werkplaats Noord");
+  await page
+    .getByLabel("Item leverancier", { exact: true })
+    .fill("Werkplaats Noord");
   await page.getByLabel("Item artikelnummer", { exact: true }).fill("BANK-01");
-  await page.getByLabel("Item zoektermen", { exact: true }).fill("linnen, naturel");
+  await page
+    .getByLabel("Item zoektermen", { exact: true })
+    .fill("linnen, naturel");
   await page.getByLabel("Bibliotheekbreedte", { exact: true }).fill("0");
   await page
     .getByRole("button", { name: "Versie bewaren", exact: true })
@@ -469,7 +553,9 @@ test("muur en raam op maat → ongeldige opening afgewezen → undo → herladen
   await page
     .getByRole("button", { name: "Vorm toepassen", exact: true })
     .click();
-  await expect(page.getByRole("img", { name: "Symboolvoorbeeld" }).locator("rect").nth(1)).toHaveAttribute("width", "1680");
+  await expect(
+    page.getByRole("img", { name: "Symboolvoorbeeld" }).locator("rect").nth(1),
+  ).toHaveAttribute("width", "1680");
   await page
     .getByRole("button", { name: "Ellips toevoegen", exact: true })
     .click();
@@ -478,7 +564,9 @@ test("muur en raam op maat → ongeldige opening afgewezen → undo → herladen
   await page
     .getByRole("button", { name: "Vorm toepassen", exact: true })
     .click();
-  await expect(page.getByRole("img", { name: "Symboolvoorbeeld" }).locator("ellipse")).toHaveAttribute("rx", "360");
+  await expect(
+    page.getByRole("img", { name: "Symboolvoorbeeld" }).locator("ellipse"),
+  ).toHaveAttribute("rx", "360");
   await page
     .getByRole("button", { name: "Lijn toevoegen", exact: true })
     .click();
@@ -496,22 +584,44 @@ test("muur en raam op maat → ongeldige opening afgewezen → undo → herladen
   await page
     .getByRole("button", { name: "Eigen bibliotheek", exact: true })
     .click();
-  await page.getByLabel("Bibliotheek zoeken", { exact: true }).fill("onvindbaar");
-  await page.getByRole("button", { name: "Zoeken in bibliotheek", exact: true }).click();
-  await expect(page.getByText("Geen items gevonden voor deze zoekopdracht.")).toBeVisible();
+  await page
+    .getByLabel("Bibliotheek zoeken", { exact: true })
+    .fill("onvindbaar");
+  await page
+    .getByRole("button", { name: "Zoeken in bibliotheek", exact: true })
+    .click();
+  await expect(
+    page.getByText("Geen items gevonden voor deze zoekopdracht."),
+  ).toBeVisible();
   await page.getByLabel("Bibliotheek zoeken", { exact: true }).fill("LINNEN");
-  await page.getByLabel("Bibliotheekcategorie filter", { exact: true }).fill("zitmeubels");
-  await page.getByRole("button", { name: "Zoeken in bibliotheek", exact: true }).click();
-  await expect(page.getByText("Zitmeubels · Werkplaats Noord · BANK-01")).toBeVisible();
+  await page
+    .getByLabel("Bibliotheekcategorie filter", { exact: true })
+    .fill("zitmeubels");
+  await page
+    .getByRole("button", { name: "Zoeken in bibliotheek", exact: true })
+    .click();
+  await expect(
+    page.getByText("Zitmeubels · Werkplaats Noord · BANK-01"),
+  ).toBeVisible();
   await page.screenshot({ path: "outputs/qa/bibliotheek-zoeken.png" });
   await page
     .getByRole("button", { name: "Nieuwe versie van Atelierbank", exact: true })
     .click();
-  await expect(page.getByLabel("Item artikelnummer", { exact: true })).toHaveValue("BANK-01");
-  await page.getByRole("button", { name: "Terug naar bibliotheek", exact: true }).click();
-  await expect(page.getByLabel("Bibliotheek zoeken", { exact: true })).toHaveValue("LINNEN");
-  await expect(page.getByLabel("Bibliotheekcategorie filter", { exact: true })).toHaveValue("zitmeubels");
-  await page.getByRole("button", { name: "Nieuwe versie van Atelierbank", exact: true }).click();
+  await expect(
+    page.getByLabel("Item artikelnummer", { exact: true }),
+  ).toHaveValue("BANK-01");
+  await page
+    .getByRole("button", { name: "Terug naar bibliotheek", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Bibliotheek zoeken", { exact: true }),
+  ).toHaveValue("LINNEN");
+  await expect(
+    page.getByLabel("Bibliotheekcategorie filter", { exact: true }),
+  ).toHaveValue("zitmeubels");
+  await page
+    .getByRole("button", { name: "Nieuwe versie van Atelierbank", exact: true })
+    .click();
   await page.getByLabel("Bibliotheekbreedte", { exact: true }).fill("3000");
   await page
     .getByRole("img", { name: "Symboolvoorbeeld", exact: true })
@@ -531,7 +641,9 @@ test("muur en raam op maat → ongeldige opening afgewezen → undo → herladen
   await expect(
     page.getByText("Bibliotheek · versie 1.", { exact: false }),
   ).toBeVisible();
-  await expect(page.getByLabel("Opgeslagen productgegevens")).toContainText("Artikelnummer: BANK-01");
+  await expect(page.getByLabel("Opgeslagen productgegevens")).toContainText(
+    "Artikelnummer: BANK-01",
+  );
   const symbolDownload = page.waitForEvent("download");
   await page.getByRole("button", { name: "Planblad SVG", exact: true }).click();
   await (await symbolDownload).saveAs("outputs/symbool-planblad.svg");
@@ -539,10 +651,135 @@ test("muur en raam op maat → ongeldige opening afgewezen → undo → herladen
   expect(symbolSvg).toContain('width="1680" height="760"');
   expect(symbolSvg).toContain('rx="360" ry="237.5"');
 });
-test("materiaalkeuzes → onderbouwde hoeveelheid → interne keuze → vastgelegd klantakkoord", async ({ page }) => {
+test("materiaalkeuzes → onderbouwde hoeveelheid → interne keuze → vastgelegd klantakkoord", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page
+    .getByRole("button", { name: "Nieuw project", exact: true })
+    .click();
+  await page.getByLabel("Projectnaam").fill("Materiaalstudio");
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Materiaalkeuzes", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Materiaal toevoegen", exact: true })
+    .click();
+  await page
+    .getByLabel("Materiaal name", { exact: true })
+    .fill("Eiken vloer · naturel");
+  await page.getByLabel("Materiaal room", { exact: true }).fill("Woonkamer");
+  await page
+    .getByLabel("Materiaal supplier", { exact: true })
+    .fill("Fictieve vloermaker");
+  await page.getByLabel("Materiaal sku", { exact: true }).fill("VLOER-01");
+  await page
+    .getByLabel("Materiaal collection", { exact: true })
+    .fill("Rustiek Eiken");
+  await page.getByLabel("Materiaal colorCode", { exact: true }).fill("N-204");
+  await page
+    .getByRole("button", { name: "Materiaal bewaren", exact: true })
+    .click();
+  await expect(
+    page.getByText("Hoeveelheid onbekend", { exact: false }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Wijzig Eiken vloer · naturel", exact: true })
+    .click();
+  await page.getByLabel("Materiaal hoeveelheid", { exact: true }).fill("31,5");
+  await page
+    .getByRole("button", { name: "Materiaal bewaren", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Onderbouw de handmatig ingevoerde hoeveelheid",
+  );
+  await page
+    .getByLabel("Materiaal onderbouwing", { exact: true })
+    .fill("Ingemeten leverancier: 29,04 m² plus snijverlies.");
+  await page
+    .getByLabel("Materiaal status", { exact: true })
+    .selectOption("chosen");
+  await page
+    .getByRole("button", { name: "Materiaal bewaren", exact: true })
+    .click();
+  await expect(
+    page.getByText("31,5 m² · handmatig", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Klantakkoord handmatig vastgelegd", { exact: false }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Wijzig Eiken vloer · naturel", exact: true })
+    .click();
+  await page
+    .getByLabel("Materiaal status", { exact: true })
+    .selectOption("client_confirmed");
+  await page
+    .getByLabel("Datum klantakkoord", { exact: true })
+    .fill("2026-09-07");
+  await page
+    .getByLabel("Bron klantakkoord", { exact: true })
+    .fill("Fictieve klant bevestigde per e-mail, onderwerp vloerkeuze.");
+  await page
+    .getByRole("button", { name: "Materiaal bewaren", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Sluiten", exact: true }).click();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Materiaalkeuzes", exact: true })
+    .click();
+  await expect(
+    page.getByText("Klantakkoord handmatig vastgelegd op 2026-09-07:", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Materialen zoeken", { exact: true })
+    .fill("onvindbaar");
+  await expect(
+    page.getByText("Geen passende materiaalkeuzes.", { exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Materialen zoeken", { exact: true }).fill("vloer-01");
+  await expect(
+    page.getByRole("heading", { name: "Eiken vloer · naturel", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Collectie: Rustiek Eiken · Kleurcode: N-204", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  for (const query of ["rustiek", "n-204"]) {
+    await page.getByLabel("Materialen zoeken", { exact: true }).fill(query);
+    await expect(
+      page.getByRole("heading", { name: "Eiken vloer · naturel", exact: true }),
+    ).toBeVisible();
+  }
+  await page.screenshot({ path: "outputs/qa/materiaalkeuzes.png" });
+  expect(errors).toEqual([]);
+});
+test("berekende hoeveelheid uit het ontwerp → ontwerp wijzigen → veroudering → herberekenen", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   const credentials = JSON.parse(await readFile("work/e2e-credentials.json", "utf8"));
+  await mkdir("outputs/qa", { recursive: true });
   if (ownerCookies.length) { await page.context().addCookies(ownerCookies); await page.goto("/"); }
   else {
     await page.goto("/"); await page.getByLabel("E-mailadres").fill(credentials.email);
@@ -550,45 +787,415 @@ test("materiaalkeuzes → onderbouwde hoeveelheid → interne keuze → vastgele
     await page.getByRole("button", { name: "Inloggen", exact: true }).click();
   }
   await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
-  await page.getByLabel("Projectnaam").fill("Materiaalstudio");
+  await page.getByLabel("Projectnaam").fill("Hoeveelhedenstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page.getByRole("button", { name: "Project aanmaken", exact: true }).click();
+  await expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+
+  await page.getByRole("button", { name: "Materiaalkeuzes", exact: true }).click();
+  await page.getByRole("button", { name: "Materiaal toevoegen", exact: true }).click();
+  await page.getByLabel("Materiaal name", { exact: true }).fill("Eiken vloerdelen");
+  await page.getByLabel("Bereken uit ontwerp", { exact: true }).check();
+  await expect(page.getByLabel("Bronruimte", { exact: true })).toHaveValue(/.+/);
+  await page.getByLabel("Bestelstap", { exact: true }).fill("0,5");
+  await expect(page.getByLabel("Bestelstap", { exact: true })).toHaveValue("0,5");
+  // 29,04 m² bruto langs de hartlijnen; 27,154275 m² netto binnen muren van 180 mm.
+  await expect(page.getByRole("status")).toContainText("Netto 27,154 m² + snijverlies 2,715 m² = bruto 29,869 m²");
+  await expect(page.getByRole("status")).toContainText("Bestelhoeveelheid 30 m² uit ontwerpversie 0");
+  await page.screenshot({ path: "outputs/qa/hoeveelheid-berekenen.png" });
+  await page.getByRole("button", { name: "Materiaal bewaren", exact: true }).click();
+  await expect(page.getByText("30 m² · berekend uit het ontwerp", { exact: false })).toBeVisible();
+  await expect(page.getByText("Netto vloeroppervlak · netto 27,154 m² + 10% snijverlies · bestelstap 0,5 m² = 30 m² · ontwerpversie 0", { exact: false })).toBeVisible();
+  await page.screenshot({ path: "outputs/qa/berekende-hoeveelheden.png" });
+  await page.getByRole("button", { name: "Sluiten", exact: true }).click();
+
+  await page.getByRole("button", { name: "Muur 1", exact: true }).click();
+  await page.getByLabel("Muurdikte", { exact: true }).fill("400");
+  await page.getByRole("button", { name: "Maten toepassen", exact: true }).click();
+  await expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+
+  await page.getByRole("button", { name: "Materiaalkeuzes", exact: true }).click();
+  await expect(page.getByText("Verouderd: het ontwerp (versie 1) geeft nu", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Herbereken Eiken vloerdelen", exact: true }).click();
+  await expect(page.getByText("· ontwerpversie 1", { exact: false })).toBeVisible();
+  await expect(page.getByText("Verouderd", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("30 m² · berekend uit het ontwerp", { exact: false })).toHaveCount(0);
+  await page.getByRole("button", { name: "Sluiten", exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "Materiaalkeuzes", exact: true }).click();
+  await expect(page.getByText("· ontwerpversie 1", { exact: false })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+test("alternatief met prijsbron vastleggen → kiezen → herkomst en indicatiebedrag zichtbaar", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  const credentials = JSON.parse(await readFile("work/e2e-credentials.json", "utf8"));
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) { await page.context().addCookies(ownerCookies); await page.goto("/"); }
+  else {
+    await page.goto("/"); await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page.getByLabel("Wachtwoord", { exact: true }).fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
+  await page.getByLabel("Projectnaam").fill("Alternatievenstudio");
   await page.getByRole("button", { name: "Project aanmaken", exact: true }).click();
   await page.getByRole("button", { name: "Materiaalkeuzes", exact: true }).click();
   await page.getByRole("button", { name: "Materiaal toevoegen", exact: true }).click();
   await page.getByLabel("Materiaal name", { exact: true }).fill("Eiken vloer · naturel");
-  await page.getByLabel("Materiaal room", { exact: true }).fill("Woonkamer");
   await page.getByLabel("Materiaal supplier", { exact: true }).fill("Fictieve vloermaker");
-  await page.getByLabel("Materiaal sku", { exact: true }).fill("VLOER-01");
-  await page.getByLabel("Materiaal collection", { exact: true }).fill("Rustiek Eiken");
-  await page.getByLabel("Materiaal colorCode", { exact: true }).fill("N-204");
+  await page.getByLabel("Materiaal sku", { exact: true }).fill("V-01");
+  await page.getByLabel("Materiaal hoeveelheid", { exact: true }).fill("30");
+  await page.getByLabel("Materiaal onderbouwing", { exact: true }).fill("Ingemeten door de leverancier.");
+  await page.getByLabel("Eenheidsprijs", { exact: true }).fill("74,95");
+
+  // Een prijs zonder bron en datum wordt geweigerd.
   await page.getByRole("button", { name: "Materiaal bewaren", exact: true }).click();
-  await expect(page.getByText("Hoeveelheid onbekend", { exact: false })).toBeVisible();
-  await page.getByRole("button", { name: "Wijzig Eiken vloer · naturel", exact: true }).click();
-  await page.getByLabel("Materiaal hoeveelheid", { exact: true }).fill("31,5");
+  await expect(page.getByRole("alert")).toContainText("Noteer bij een prijs ook de bron en de prijsdatum");
+  await page.getByLabel("Prijsbron", { exact: true }).fill("Prijslijst 2026");
+  await page.getByLabel("Prijsdatum", { exact: true }).fill("2026-08-20");
+  await page.getByLabel("Monsterstatus", { exact: true }).selectOption("received");
+  await page.getByLabel("Monsterdatum", { exact: true }).fill("2026-08-28");
+  await page.getByRole("button", { name: "Alternatief toevoegen", exact: true }).click();
+  await page.getByLabel("Alternatief 1 naam", { exact: true }).fill("Es geborsteld");
+  await page.getByLabel("Alternatief 1 leverancier", { exact: true }).fill("Andere vloermaker");
+  await page.getByLabel("Alternatief 1 artikelnummer", { exact: true }).fill("V-02");
+  await page.getByLabel("Alternatief 1 prijsbron", { exact: true }).fill("Offerte 2026-114");
+  await page.getByLabel("Alternatief 1 prijsdatum", { exact: true }).fill("2026-09-01");
+  await page.getByLabel("Alternatief 1 eenheidsprijs", { exact: true }).fill("68,50");
+  await page.screenshot({ path: "outputs/qa/alternatief-invoeren.png" });
   await page.getByRole("button", { name: "Materiaal bewaren", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Onderbouw de handmatig ingevoerde hoeveelheid");
-  await page.getByLabel("Materiaal onderbouwing", { exact: true }).fill("Ingemeten leverancier: 29,04 m² plus snijverlies.");
-  await page.getByLabel("Materiaal status", { exact: true }).selectOption("chosen");
-  await page.getByRole("button", { name: "Materiaal bewaren", exact: true }).click();
-  await expect(page.getByText("31,5 m² · handmatig", { exact: false })).toBeVisible();
-  await expect(page.getByText("Klantakkoord handmatig vastgelegd", { exact: false })).toHaveCount(0);
-  await page.getByRole("button", { name: "Wijzig Eiken vloer · naturel", exact: true }).click();
-  await page.getByLabel("Materiaal status", { exact: true }).selectOption("client_confirmed");
-  await page.getByLabel("Datum klantakkoord", { exact: true }).fill("2026-09-07");
-  await page.getByLabel("Bron klantakkoord", { exact: true }).fill("Fictieve klant bevestigde per e-mail, onderwerp vloerkeuze.");
-  await page.getByRole("button", { name: "Materiaal bewaren", exact: true }).click();
-  await page.getByRole("button", { name: "Sluiten", exact: true }).click();
+
+  await expect(page.getByText("€ 74,95 per m² · bron: Prijslijst 2026 · prijsdatum 2026-08-20", { exact: false })).toBeVisible();
+  await expect(page.getByText("indicatie € 2.248,50 bij 30 m²", { exact: false })).toBeVisible();
+  await expect(page.getByText("Monster ontvangen op 2026-08-28", { exact: true })).toBeVisible();
+  await expect(page.getByText("Het zijn geen offerteregels", { exact: false })).toBeVisible();
+  await expect(page.getByText("Es geborsteld · Andere vloermaker · V-02 · € 68,50 per m² (Offerte 2026-114, 2026-09-01)", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "outputs/qa/alternatieven.png" });
+
+  await page.getByRole("button", { name: "Kies Es geborsteld", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Es geborsteld", exact: true })).toBeVisible();
+  await expect(page.getByText("Gekozen uit het alternatief “Es geborsteld”.", { exact: true })).toBeVisible();
+  await expect(page.getByText("indicatie € 2.055,00 bij 30 m²", { exact: false })).toBeVisible();
+  await expect(page.getByText("Eiken vloer · naturel · Fictieve vloermaker · V-01", { exact: false })).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Materiaalkeuzes", exact: true }).click();
-  await expect(page.getByText("Klantakkoord handmatig vastgelegd op 2026-09-07:", { exact: false })).toBeVisible();
-  await page.getByLabel("Materialen zoeken", { exact: true }).fill("onvindbaar");
-  await expect(page.getByText("Geen passende materiaalkeuzes.", { exact: true })).toBeVisible();
-  await page.getByLabel("Materialen zoeken", { exact: true }).fill("vloer-01");
-  await expect(page.getByRole("heading", { name: "Eiken vloer · naturel", exact: true })).toBeVisible();
-  await expect(page.getByText("Collectie: Rustiek Eiken · Kleurcode: N-204", { exact: true })).toBeVisible();
-  for (const query of ["rustiek", "n-204"]) {
-    await page.getByLabel("Materialen zoeken", { exact: true }).fill(query);
-    await expect(page.getByRole("heading", { name: "Eiken vloer · naturel", exact: true })).toBeVisible();
+  await expect(page.getByText("Versie 2 ·", { exact: false })).toBeVisible();
+  await page.getByLabel("Materialen zoeken", { exact: true }).fill("v-01");
+  await expect(page.getByRole("heading", { name: "Es geborsteld", exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("offerteconcept, decimalen, finalisatie en vaste prijzen na herladen", async ({
+  page,
+}) => {
+  await page.context().addCookies(ownerCookies);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Nieuw project" }).click();
+  await page.getByLabel("Projectnaam").fill("Offerte woonkamer");
+  await page.getByLabel("Klantnaam").fill("Familie Voorbeeld");
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Offertes", exact: true }).click();
+  await page.getByRole("button", { name: "Nieuw offerteconcept" }).click();
+  await page
+    .getByLabel("Klant / bedrijf en adres")
+    .fill("Familie Voorbeeld\nVoorbeeldstraat 1");
+  await page.getByRole("button", { name: "Handmatige post toevoegen" }).click();
+  await page
+    .getByLabel("Omschrijving post 1", { exact: true })
+    .fill("Eiken vloer");
+  await page.getByLabel("Hoeveelheid post 1", { exact: true }).fill("2,5");
+  await page
+    .getByLabel("Eenheidsprijs EUR post 1", { exact: true })
+    .fill("19,995");
+  await page.getByLabel("Korting % post 1", { exact: true }).fill("10");
+  await expect(
+    page.getByRole("heading", { name: "Totaal: 54,44 €" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Concept bewaren", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Concept zonder offertenummer · versie 1",
+    }),
+  ).toBeVisible();
+  page.once("dialog", (d) => d.accept());
+  await page
+    .getByRole("button", { name: "Definitief maken", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: /20\d{2}-\d{5} · versie 2/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Eenheidsprijs EUR post 1", { exact: true }),
+  ).toBeDisabled();
+  await mkdir("outputs/qa", { recursive: true });
+  await page.screenshot({
+    path: "outputs/qa/offerte-definitief.png",
+    fullPage: true,
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Offertes", exact: true }).click();
+  await expect(
+    page.getByText("Definitief · niet door de app verzonden", { exact: false }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Open offerte", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Totaal: 54,44 €" }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Eenheidsprijs EUR post 1", { exact: true }),
+  ).toHaveValue("19.995");
+});
+
+test("vangen op het raster en op een ander meubel → passend in beeld → vangen uitschakelen", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
   }
-  await page.screenshot({ path: "outputs/qa/materiaalkeuzes.png" });
+  await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
+  await page.getByLabel("Projectnaam").fill("Vangstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  await expect(
+    page.getByText("Server opgeslagen", { exact: false }),
+  ).toBeVisible();
+
+  // Passend in beeld geeft een deterministische uitgangspositie. De omrekening
+  // van wereld naar scherm meten we daarna zelf op, zodat deze test niet op de
+  // fit-formule van de editor leunt.
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  const canvas = page.locator(".canvas-wrap canvas").first();
+  const box = (await canvas.boundingBox())!;
+  const guess = Math.min((box.width - 120) / 6200, (box.height - 120) / 4800);
+  const drag = async (from: { x: number; y: number }, dx: number, dy: number) => {
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(from.x + dx / 2, from.y + dy / 2, { steps: 4 });
+    await page.mouse.move(from.x + dx, from.y + dy, { steps: 4 });
+    await page.mouse.up();
+  };
+  const position = async () => ({
+    x: Number(await page.getByLabel("Positie X", { exact: true }).inputValue()),
+    y: Number(await page.getByLabel("Positie Y", { exact: true }).inputValue()),
+  });
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+
+  // Kalibreren met alle vangen uit: een sleep van 120 px levert de schaal.
+  await page.getByRole("button", { name: "Raster snap · 100 mm", exact: true }).click();
+  await page.getByRole("button", { name: "Vangen aan objecten", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Vangen uit", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  const before = await position();
+  await drag({ x: box.x + 60 + 1700 * guess, y: box.y + 60 + 3300 * guess }, 120, 0);
+  await saved();
+  const calibrated = await position();
+  // Zonder deze verplaatsing heeft de sleep de bank niet geraakt en zegt de rest niets.
+  expect(Math.abs(calibrated.x - before.x)).toBeGreaterThan(200);
+  expect(calibrated.y).toBe(before.y);
+  const mmPerPixel = (calibrated.x - before.x) / 120;
+  const anchor = { x: box.x + 60 + 1700 * guess + 120, y: box.y + 60 + 3300 * guess };
+  const at = (x: number, y: number) => ({
+    x: anchor.x + (x - calibrated.x) / mmPerPixel,
+    y: anchor.y + (y - calibrated.y) / mmPerPixel,
+  });
+
+  // Na de kalibratiesleep ligt de muisaanwijzer gegarandeerd binnen de bank.
+  // Dat punt is daarmee een betrouwbaar grijppunt; het schuift mee met elke sleep.
+  let grip = { ...anchor };
+  const dragSofa = async (dx: number, dy: number) => {
+    await drag(grip, dx, dy);
+    grip = { x: grip.x + dx, y: grip.y + dy };
+    await saved();
+    return position();
+  };
+
+  // Raster aan: elke sleep eindigt op hele honderdtallen.
+  await page.getByRole("button", { name: "Vrij plaatsen", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Raster snap · 100 mm", exact: true })).toBeVisible();
+  const sofa = await dragSofa(41, 27);
+  expect(sofa.x % 100).toBe(0);
+  expect(sofa.y % 100).toBe(0);
+  expect(sofa.x).not.toBe(calibrated.x);
+
+  // Raster uit, vangen aan objecten aan: alleen uitlijnen op de salontafel blijft over.
+  await page.getByRole("button", { name: "Raster snap · 100 mm", exact: true }).click();
+  await page.getByRole("button", { name: "Vangen uit", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Vangen aan objecten", exact: true })).toBeVisible();
+  // Alles in schermpixels uitdrukken: Konva start pas een sleep vanaf 3 pixels
+  // en de vangtolerantie is 12 pixels. Een doel op 10 pixels met een sleep van
+  // 8 pixels ligt dus altijd binnen bereik, bij elke zoomstand.
+  const target = sofa.x + Math.round(10 * mmPerPixel);
+  await page.getByRole("button", { name: "Salontafel · eiken", exact: true }).click();
+  await page.getByLabel("Positie X", { exact: true }).fill(String(target));
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  expect((await position()).x).toBe(target);
+
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  // Halverwege de sleep vasthouden om de hulplijnen daadwerkelijk te zien.
+  await page.mouse.move(grip.x, grip.y);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + 4, grip.y, { steps: 3 });
+  await page.mouse.move(grip.x + 8, grip.y, { steps: 3 });
+  await page.screenshot({ path: "outputs/qa/vanghulplijn.png" });
+  await page.mouse.up();
+  grip = { x: grip.x + 8, y: grip.y };
+  await saved();
+  const snappedSofa = await position();
+  // Het hart van de bank valt exact op het hart van de salontafel.
+  expect(snappedSofa.x).toBe(target);
+  expect(snappedSofa.y).toBe(sofa.y);
+  await page.screenshot({ path: "outputs/qa/vangen.png" });
+
+  // Vangen uit: de bank blijft staan waar zij losgelaten wordt.
+  await page.getByRole("button", { name: "Vangen aan objecten", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Vangen uit", exact: true })).toBeVisible();
+  const free = await dragSofa(9, 0);
+  expect(free.x).not.toBe(snappedSofa.x);
+  expect(free.x).toBeGreaterThan(snappedSofa.x);
+
+  await page.reload();
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  expect((await position()).x).toBe(free.x);
+  expect(errors).toEqual([]);
+});
+
+test("meerdere meubels selecteren → uitlijnen → gelijk verdelen → één stap terug", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
+  await page.getByLabel("Projectnaam").fill("Uitlijnstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+
+  const positionOf = async (name: string) => {
+    await page.getByRole("button", { name, exact: true }).click();
+    return {
+      x: Number(await page.getByLabel("Positie X", { exact: true }).inputValue()),
+      y: Number(await page.getByLabel("Positie Y", { exact: true }).inputValue()),
+    };
+  };
+  // De demoruimte heeft vier meubels op verschillende posities.
+  const before = {
+    sofa: await positionOf("Bank · linnen naturel"),
+    table: await positionOf("Salontafel · eiken"),
+    dining: await positionOf("Eettafel · rond"),
+  };
+  expect(new Set([before.sofa.x, before.table.x, before.dining.x]).size).toBe(3);
+
+  // Shift-klikken in de objectlijst selecteert meerdere meubels.
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Salontafel · eiken", exact: true })
+    .click({ modifiers: ["Shift"] });
+  await page
+    .getByRole("button", { name: "Eettafel · rond", exact: true })
+    .click({ modifiers: ["Shift"] });
+  await expect(
+    page.getByRole("heading", { name: "3 meubels geselecteerd", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: "outputs/qa/uitlijnen.png" });
+
+  await page.getByRole("button", { name: "Links uitlijnen", exact: true }).click();
+  await saved();
+  const aligned = {
+    sofa: await positionOf("Bank · linnen naturel"),
+    table: await positionOf("Salontafel · eiken"),
+    dining: await positionOf("Eettafel · rond"),
+  };
+  // Linkerranden gelijk: hart min halve breedte is voor alle drie hetzelfde.
+  const left = (p: { x: number }, width: number) => p.x - width / 2;
+  expect(left(aligned.sofa, 2400)).toBe(left(aligned.table, 1200));
+  expect(left(aligned.sofa, 2400)).toBe(left(aligned.dining, 1200));
+  // De y-as blijft ongemoeid.
+  expect(aligned.sofa.y).toBe(before.sofa.y);
+  expect(aligned.dining.y).toBe(before.dining.y);
+
+  // Eén stap terug zet alle drie de meubels tegelijk terug.
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  await page.getByRole("button", { name: "Ongedaan maken", exact: true }).click();
+  await saved();
+  expect(await positionOf("Bank · linnen naturel")).toEqual(before.sofa);
+  expect(await positionOf("Salontafel · eiken")).toEqual(before.table);
+  expect(await positionOf("Eettafel · rond")).toEqual(before.dining);
+
+  // Verticaal gelijk verdelen: de buitenste blijven staan, de tussenruimten worden gelijk.
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Salontafel · eiken", exact: true })
+    .click({ modifiers: ["Shift"] });
+  await page
+    .getByRole("button", { name: "Eettafel · rond", exact: true })
+    .click({ modifiers: ["Shift"] });
+  await page
+    .getByRole("button", { name: "Verticaal gelijk verdelen", exact: true })
+    .click();
+  await saved();
+  const spread = {
+    sofa: { ...(await positionOf("Bank · linnen naturel")), depth: 950 },
+    table: { ...(await positionOf("Salontafel · eiken")), depth: 650 },
+    dining: { ...(await positionOf("Eettafel · rond")), depth: 1200 },
+  };
+  const order = [spread.dining, spread.table, spread.sofa].sort(
+    (a, b) => a.y - b.y,
+  );
+  const gapOne = order[1]!.y - order[1]!.depth / 2 - (order[0]!.y + order[0]!.depth / 2);
+  const gapTwo = order[2]!.y - order[2]!.depth / 2 - (order[1]!.y + order[1]!.depth / 2);
+  expect(Math.abs(gapOne - gapTwo)).toBeLessThanOrEqual(1);
+  // De buitenste twee staan nog op hun oude plek.
+  expect(order[0]!.y - order[0]!.depth / 2).toBe(
+    Math.min(
+      before.sofa.y - 475,
+      before.table.y - 325,
+      before.dining.y - 600,
+    ),
+  );
+
+  await page.reload();
+  expect((await positionOf("Salontafel · eiken")).y).toBe(spread.table.y);
   expect(errors).toEqual([]);
 });

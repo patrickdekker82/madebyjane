@@ -1,5 +1,22 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 8 september 2026 — fase 6, offerteconcepten en finalisatie
+
+Toegevoegd: offerteformulier met klant-/adresgegevens, datum/geldigheid, voorwaarden, maximaal 200 posten, handmatige prijzen en materiaalkeuzebronnen. EUR-bedragen gebruiken decimal.js met geïsoleerde precisie 40: hoeveelheid × eenheidsprijs × (1 − korting/100), netto per regel op centen ROUND_HALF_UP, daarna belasting over de som per categorie op centen. Negatieve eenheidsprijzen zijn correcties, hoeveelheden zijn niet-negatief. Belastingtarieven zijn per categorie instelbaar. Lege concepten zijn toegestaan, lege finalisatie niet.
+
+Migration 0010_quotes bewaart immutable concept-/definitieve snapshots onder FORCE RLS. Elke write vereist owner/admin/finance, projectcontext, baseVersion en een herhaalbaar requestId. Finalisatie en jaar-/organisatienummering zijn één transactie; definitieve versies weigeren wijzigingen. Materialen bewaren entry-/version-ID, onbekende/vreemde bronnen worden afgewezen, dubbele materiaalbronnen geweigerd. Verschillen zijn opvraagbaar; verouderde bronnen blokkeren finalisatie. Finalisatie neemt dezelfde materiaal-publicatielock zodat een wijziging niet tussen controle en commit kan vallen. Er wordt geen verzending of klantacceptatie gefingeerd.
+
+Lokale verificatie op Windows, 8 september:
+- TypeScript strict geslaagd; Vite-productiebuild met `--configLoader runner` geslaagd (9,49 s). Bekende grote chunks blijven bestaan.
+- Vier nieuwe rekentests geslaagd; bredere run: 31 geslaagd, één bestaande opslagtest faalde bij het aanmaken van een symlink (Windows EPERM). Geen geslaagde volledige suite geclaimd.
+- Vier nieuwe echte PostgreSQL/API-tests en een browserroute toegevoegd. Lokale database-start blokkeert vóór de tests door `uv_os_get_passwd returned ENOMEM` in embedded-postgres. Deze integratie- en E2E-tests zijn dus nog niet geslaagd.
+- Afzonderlijke Chrome-schermproef met expliciet gemockte API geslaagd: komma-invoer, totaal 54,44 EUR, concept bewaren, desktop 1440×1000 en mobiel 390×844 zonder horizontale overflow of page errors. Screenshots daadwerkelijk bekeken: velden en acties leesbaar, formulier scrollt binnen het venster. Dit is UI-bewijs met fictieve data, geen bewijs van echte opslag/finalisatie.
+- De normale configbundler kreeg een Windows-maptoegangsfout; Vite/Vitest runner-configloader werkt. Tijdelijke PostgreSQL-map gebruikt nu os.tmpdir(); Unix-socketflags worden op Windows weggelaten. De gepinde Windows-PostgreSQL-build is toegevoegd aan de bestaande allowBuilds-lijst. Geen dependencyversies gewijzigd.
+
+Linux-CI op commit a27a69b: build geslaagd (6,40 s); **57 tests / 12 bestanden geslaagd (15,62 s)**, inclusief de vier nieuwe echte PostgreSQL/API-tests. De offertebrowserroute is geslaagd (3,3 s), vijf van zes browserroutes slagen. De bestaande uitnodigingsroute faalt bij de gastlogin na de extra offertelogin. De offertest is daarom verplaatst naar de bestaande suite en hergebruikt de eigenaarsessie; geen productie-loginlimiet aangepast. Herhaling van de volledige browsersuite staat nog open. De dependency-audit is in deze CI-run overgeslagen na de browserfout.
+
+Fase 6 is niet afgerond. Eerstvolgend: volledige browsersuite na sessiehergebruik bevestigen. Daarna offerte-PDF vanuit dezelfde snapshot/rekenuitvoer, immutable presentatiebijlagen (afhankelijk van fase 5), vervolgversies, expliciete statusovergangen, ontwerpbronnen en catalogusprijsversies. Deze stap kent alleen concept en definitief; geen verzonden/acceptatieclaim. Geen productie-uitrol.
+
 Bijgewerkt: 6 september 2026. Release 0.0.1 is een ontwikkelbasis, geen productieversie.
 
 ## Fase 0 — verticale basis en risicoproeven getoetst
@@ -29,7 +46,7 @@ Omgeving:
 
 Projectbeheer/auth/RLS/audit/private adapter zijn aanwezig. Eerste-eigenaarsetup is transactioneel en tegen concurrente setup beschermd; echte PostgreSQL-restart behoudt data. Uitnodigingen zijn eenmalig, gehasht, 48 uur geldig en intrekbaar. Beheerdersrechten en identiteit worden opnieuw gecontroleerd. MFA heeft TOTP en eenmalige herstelcodes; HTTPS-domeinroutes vereisen MFA. Database-startcontrole weigert ontbrekende, gewijzigde en nieuwere migrationhistorie zonder zelf migrations uit te voeren.
 
-CI, gepind release-manifest en inventaris van 36 directe package-licenties aanwezig. CI nog niet extern uitgevoerd; native/transitieve licentie-inventaris nog niet compleet. Ontwikkelsnelstart in README. De Linux-container is alleen een renderproef.
+CI, gepind release-manifest en inventaris van 36 directe package-licenties aanwezig. CI is op 7 september voor het eerst extern uitgevoerd op ubuntu-24.04 en volledig geslaagd (zie de aanvulling onderaan); de native/transitieve licentie-inventaris is nog niet compleet. Ontwikkelsnelstart in README. De Linux-container is alleen een renderproef.
 
 Open: account recovery/password reset, expliciete projectmembership, volledige rechtenmatrix, productie-Compose/installatie, assetroutes/S3, operationele back-up/restore. Geen productiegeschiktheidsclaim.
 
@@ -169,3 +186,90 @@ Open voor de volledige materialenmodule: alternatieven en gekozen alternatief, p
 ## Kleine aanvulling — collectie en kleurcode
 
 Collectie en kleurcode zijn nu zichtbaar in de materiaalkeuzelijst en worden hoofdletterongevoelig meegenomen bij zoeken. Lege velden blijven verborgen. TypeScript strict en de gerichte materiaal-browsertest geslaagd (1,7 s; run 5,2 s), inclusief bewaren/herladen en zoeken op beide velden. Geen database- of afhankelijkheidswijzigingen.
+
+## Aanvulling — hoeveelheden berekenen uit de ontwerpgeometrie
+
+Een materiaalkeuze kan zijn hoeveelheid uit het ontwerp halen. De gebruiker kiest een herkende ruimte, een bronmaat (netto vloeroppervlak, netto wandoppervlak, netto omtrek of plintlengte), een snijverliespercentage en een optionele bestelstap. Het formulier toont direct netto, snijverlies, bruto en bestelhoeveelheid met de gebruikte ontwerpversie; de invoervelden houden Nederlandse decimalen vast.
+
+De server rekent bij het bewaren zelf opnieuw. De client stuurt uitsluitend een rekenopdracht; een meegestuurde uitkomst wordt door het contract geweigerd. De server haalt het ontwerpdocument op via een join op `design_variants`, zodat een variant uit een ander project of een andere werkruimte niet bereikbaar is, en legt bronrevisie, tijdstip, alle formule-inputs in millimeters, netto, snijverlies, bruto en bestelhoeveelheid onveranderlijk bij de materiaalversie vast. De eenheid volgt de bronmaat en niet de invoer van de client. Een handmatige afwijking van de berekende bestelhoeveelheid blijft mogelijk maar vereist een onderbouwing; de berekening blijft er naast staan.
+
+De lijst vergelijkt iedere berekende keuze met het huidige ontwerp. Wijkt de uitkomst af, dan verschijnt "Verouderd" met de oude en de nieuwe waarde en de actuele ontwerpversie. Voor een niet-overschreven keuze staat er een knop Herberekenen die een nieuwe materiaalversie publiceert; een overschreven keuze wordt bewust niet automatisch teruggezet. Is de bronruimte verdwenen of niet meer meetbaar, dan zegt de melding dat en vraagt om een nieuwe bronkeuze. Oude materiaalversies wijzigen nooit mee.
+
+Nieuwe rekenregels, expliciet gedocumenteerd in `packages/geometry/src/quantities.ts`, omdat ze in offertes doorwerken: de netto contour ligt per muur een halve muurdikte naar binnen; ingesloten ruimtes worden juist een halve muurdikte vergroot en afgetrokken; de netto omtrek telt de buitencontour plus de omtrek van ingesloten ruimtes; de plintlengte is de netto omtrek min de deurbreedtes, ramen onderbreken de plint niet; het wandoppervlak telt per muur netto lengte maal muurhoogte en trekt elke opening volledig af, ook bij een scheidingsmuur. Uitkomsten worden op hele millimeters afgerond; de afrondingstolerantie is maximaal 1 mm per contourpunt. Een contour waarin een rand na het verschuiven omklapt levert geen getal maar een leesbare melding: het oppervlak blijft in dat geval positief, dus die richtingscontrole is de enige betrouwbare. Het afrondingsbeleid van het decimalrekenwerk staat in `packages/domain/src/quantities.ts`: netto en snijverlies op drie decimalen half naar boven, bruto exact opgeteld, bestelhoeveelheid naar boven op de bestelstap.
+
+Daarnaast: iedere `pg`-pool krijgt nu een error-listener (`guardPool`). Zonder die listener beëindigt Node het API-proces zodra PostgreSQL een inactieve verbinding sluit, bijvoorbeeld bij een herstart.
+
+Verificatie 7 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+- **Volledige Vitest-run: 61 tests / 11 bestanden geslaagd, 14,3 s.** Nieuw: 8 geometrie- en decimaaltests en 2 contracttests, plus 2 integratietests tegen echte PostgreSQL.
+- De geometrietests dekken netto vloer/omtrek/plint/wandoppervlak, deur versus raam, een ingesloten ruimte, te dikke muren, een open contour, onafhankelijkheid van muurrichting en 200 gegenereerde verschuivingen. Het netto oppervlak van de demoruimte (27.154.275 mm²) en de netto omtrek (20.608 mm) zijn los nagerekend met A(d) = A − P·d + d²·Σcot(hoek/2) bij d = 90 mm; beide komen exact overeen.
+- De integratietest toetst tegen echte PostgreSQL: serverberekening en opgeslagen bronrevisie, eenheid uit de bronmaat in plaats van uit de client, onbekende ruimte (409), variant van een ander project (404), variant van een andere werkruimte (404), viewer-afwijzing (403), hoeveelheid zonder onderbouwing (400), onderbouwde afwijking naast de berekening, en na een `ResizeWall` een lagere netto maat met bronrevisie 1.
+- Een tweede nieuwe integratietest beëindigt de inactieve runtime- en auth-verbindingen met `pg_terminate_backend` en controleert dat de API blijft werken. Zonder `guardPool` levert dezelfde run 4 onafgevangen fouten op; dat is expliciet nagemeten door de listener tijdelijk te verwijderen.
+- **Volledige browserrun: 6 routes geslaagd, 44,1 s**, inclusief de nieuwe route: berekende hoeveelheid vastleggen (netto 27,154 m² + 2,715 m² snijverlies = 29,869 m², bestelstap 0,5 m² → 30 m², ontwerpversie 0), muurdikte naar 400 mm wijzigen, "Verouderd" zien, herberekenen naar ontwerpversie 1 en dat na herladen terugvinden.
+- TypeScript strict en Vite-productiebuild geslaagd (7,9 s). De bekende chunkgroottewaarschuwing (879 kB hoofdscherm, 908 kB OrbitControls) blijft open.
+- Screenshots `outputs/qa/hoeveelheid-berekenen.png` en `outputs/qa/berekende-hoeveelheden.png` daadwerkelijk geïnspecteerd op 1440×1000. De eerste inspectie liet twee fouten zien: het selectievakje stond los van zijn tekst en een ingetypte "0,5" werd als "0.5" teruggetoond. Beide zijn hersteld en opnieuw visueel gecontroleerd.
+
+Omgeving (afwijkend van eerdere runs op macOS): deze sessie draait als root in een Linux-container. `scripts/local-db.ts` maakt de tijdelijke data- en socketdirectory nu toegankelijk voor de bestaande `postgres`-systeemgebruiker, omdat PostgreSQL niet als root start; `credentials.json` blijft 0600. Op een niet-root ontwikkelmachine verandert die functie niets. De vastgepinde Playwright-versie verwacht een Chromium-build die hier niet staat; `playwright.config.ts` accepteert daarom een expliciete `PLAYWRIGHT_CHROMIUM_EXECUTABLE`. Zonder die variabele blijft het gedrag ongewijzigd en downloadt CI zijn eigen browser.
+
+Geen databasemigration nodig: de berekening staat in de bestaande `definition`-JSONB van `material_versions`. Materiaalversies van vóór deze wijziging blijven geldig en worden als handmatig getoond. Het release-manifest blijft op negen migrations.
+
+Open voor de rest van fase 4: alternatieven en gekozen alternatief, prijsbron en prijsdatum, monsterstatus als apart veld, gordijnberekening met railbreedte/plooi/stofbreedte/banen/rapport, benoemde persistente ruimtes in plaats van afgeleide sleutels, hoeveelheden over meerdere ruimtes tegelijk, elektra/LED-lengtes, koppeling naar 2D/3D/presentaties/offertes en een geschiedenis-UI per keuze. De ruimtesleutel is afgeleid van de muurpunten: verplaats je een punt dan blijft de sleutel gelijk, verwijder of splits je een muur dan verdwijnt de bron en vraagt de app om een nieuwe keuze. Fase 4 is hiermee niet afgerond en de overige fasen blijven ongewijzigd open.
+
+### CI voor het eerst extern gedraaid
+
+Op 7 september 19:03–19:05 UTC draaide de workflow *Foundation verification* voor het eerst op een GitHub-runner (ubuntu-24.04, Node 24.18.1, pnpm 11.19.0), op commit `deabc13`. Alle stappen slaagden: `pnpm install --frozen-lockfile`, `playwright install --with-deps chromium`, `pnpm build`, `pnpm test`, `pnpm test:e2e` (42 s) en `pnpm audit --audit-level high`. Daarmee is de eerdere aantekening "CI nog niet extern uitgevoerd" achterhaald. De runner installeert zijn eigen Chromium, dus de nieuwe `PLAYWRIGHT_CHROMIUM_EXECUTABLE`-optie is daar niet actief. Er is nog geen securityscan van containers of secrets; de securityrelease-gate uit fase 9 blijft open.
+
+### Eerstvolgende stap na deze aanvulling
+
+1. Alternatieven per materiaalkeuze met gekozen alternatief, prijsbron en prijsdatum; daarna de gordijnberekening met eigen invoervelden.
+2. Benoemde, persistente ruimtes zodat een hoeveelheidsbron een muurwijziging overleeft, inclusief een veilige herkoppeling.
+3. Daarna pas fase 5 (presentaties) aanvatten; foundation-onderdelen uit fase 1 (productie-Compose, back-up/herstel) blijven daarvoor nog steeds open.
+
+## Aanvulling — alternatieven, prijsbron en monsterstatus
+
+Een materiaalkeuze heeft nu een prijsbron, een prijsdatum en een eenheidsprijs, een monsterstatus met eigen datum, en een lijst alternatieven. Een alternatief is een volwaardig productvoorstel met eigen naam, leverancier, collectie, artikelnummer, kleurcode, prijsbron, prijsdatum, eenheidsprijs en notitie; maximaal tien per keuze.
+
+Prijsregels zijn bewust streng: een eenheidsprijs zonder bron én datum wordt geweigerd, en een prijsdatum zonder bron ook. Dat geldt voor de gekozen optie en voor elk alternatief. Zo komt er geen bedrag in het systeem waarvan niemand meer weet waar het vandaan komt. De lijst toont een indicatiebedrag (hoeveelheid × eenheidsprijs, `packages/domain/src/pricing.ts`, decimalrekenwerk, half naar boven op hele centen) met daarboven één zin dat dit geen offerteregel is: geen korting, belasting of prijsbevriezing. Het bedrag wordt nergens opgeslagen; het is afgeleid.
+
+Monsterstatus staat los van de keuzestatus, zoals de opdracht vraagt. Elke andere status dan "Geen monster" vereist een datum, en de keuzestatus "Monster aangevraagd" mag niet samengaan met monsterstatus "Geen monster" — dat zou een tegenstrijdige registratie zijn.
+
+Kiezen doe je in de lijst met de knop **Kies <naam>**. Het gekozen alternatief schuift naar de hoofdplek, het eerder gekozen product schuift terug naar de alternatieven, en de nieuwe versie legt vast uit welk alternatief de keuze komt. Auteur en tijdstip van dat besluit staan al in de materiaalversie zelf. **De server controleert die herkomst**: het alternatief moet in de vorige versie hebben gestaan én de gekozen productgegevens moeten daar exact mee overeenkomen. Anders kan een client elke willekeurige herkomst claimen. Gevolg voor de gebruiker: eerst kiezen, daarna aanpassen in een volgende versie; de foutmelding zegt dat ook.
+
+Geen databasemigration: alles staat in de bestaande `definition`-JSONB. Materiaalversies van vóór deze wijziging missen de nieuwe sleutels; `withDefaults` vult die bij het lezen aan zonder de bewaarde versie te wijzigen of te valideren. Zo blijft een oude versie precies zoals hij is opgeslagen.
+
+Verificatie 7 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+- **Volledige Vitest-run: 67 tests / 11 bestanden geslaagd, 14,5 s** (was 61). Nieuw: vijf contracttests over prijsregels, monsterregels, alternatieven, `withDefaults` op een oude definitie en het indicatiebedrag, plus één integratietest tegen echte PostgreSQL.
+- Die integratietest toetst: alternatief met prijs bewaren en teruglezen, kiezen op versie 0 geweigerd (409), verzonnen herkomst geweigerd (409), tegelijk de prijs aanpassen geweigerd (409), een andere naam claimen geweigerd (409), geldige promotie geaccepteerd, de omgekeerde alternatievenlijst na promotie, de ongewijzigde versie 1 in de database, en prijs- en monsterregels die het contract afwijst (400).
+- **Volledige browserrun: 7 routes geslaagd, 46,3 s**, inclusief de nieuwe route: prijs zonder bron geweigerd, prijsbron/datum/monster invullen, alternatief toevoegen, bewaren, indicatiebedrag € 2.248,50 bij 30 m², alternatief kiezen, herkomst en omgedraaide lijst zien, en na herladen versie 2 terugvinden.
+- TypeScript strict en Vite-productiebuild geslaagd (7,2 s). Bekende chunkgroottewaarschuwing blijft open.
+- Screenshots `outputs/qa/alternatief-invoeren.png` en `outputs/qa/alternatieven.png` daadwerkelijk geïnspecteerd. De eerste inspectie liet zien dat de foutmelding onder de bewaarknop buiten beeld viel: je drukt op Bewaren en ziet niets gebeuren. De melding staat nu boven de knoppen en is opnieuw visueel gecontroleerd.
+- Playwright draait nu met `locale: "nl-NL"` en `timezoneId: "Europe/Amsterdam"`. Geprobeerd en verworpen: `--lang=nl-NL` op Chromium verandert de weergave van `<input type="date">` in deze container niet, dus die vlag is niet blijven staan. Op screenshots uit deze omgeving staat daardoor mm/dd/jjjj waar een Nederlandse browser dd-mm-jjjj toont; dat verschil zit in de testomgeving, niet in de app. Dit is niet op een Nederlandse desktopbrowser nagemeten.
+
+Open voor de rest van fase 4: textuurafbeeldingen bij een materiaal, prijsgeschiedenis en prijsversies (een offerte moet later een prijs bevriezen; nu bewaart elke materiaalversie alleen de prijs van dat moment), de gordijnberekening met railbreedte/plooi/stofbreedte/banen/zoom/rapport, benoemde persistente ruimtes, elektra- en LED-lengtes, en de koppeling naar 2D/3D/presentaties/offertes. Een geschiedenis-UI per keuze ontbreekt nog: de opeenvolgende versies staan wel in de database, maar de lijst toont alleen de nieuwste. Fase 4 is niet afgerond.
+
+### Eerstvolgende stap na deze aanvulling
+
+1. Benoemde, persistente ruimtes zodat een hoeveelheidsbron een muurwijziging overleeft, met een veilige herkoppeling wanneer de contour verandert.
+2. Daarna de gordijnberekening met eigen invoervelden en een geschiedenis-UI per materiaalkeuze.
+3. Fase 5 (presentaties) blijft daarna aan de beurt; de openstaande fase-1-onderdelen (productie-Compose, back-up/herstel) blijven ongewijzigd open.
+
+## Aanvulling 10 september 2026 — fase 4 en 6 samengevoegd, fase 2 uitgebreid
+
+De offertemodule stond op een tak vanaf `main` en de hoeveelheden- en alternatievenmodule op een andere; beide kenden elkaars werk niet. Ze zijn samengevoegd op één tak. Twee conflicten opgelost: het ontwerpscherm toont nu zowel Materiaalkeuzes met `variantId` als de offerteknop voor owner/admin/finance, en beide sets browserroutes blijven staan. `scripts/local-db.ts` kwam automatisch samen: de Windows-tmpdir en het weglaten van Unix-socketflags blijven naast het draaien onder de postgres-systeemgebruiker als root en de pool-error-listener. Daarmee is ook de openstaande vraag uit de fase 6-notitie beantwoord: de volledige browsersuite slaagt met een hergebruikte eigenaarsessie.
+
+### Vangen aan raster, muurpunten, muren en meubels
+
+De editor kende alleen rasterafronding op 100 mm. `packages/geometry/src/snapping.ts` is een pure functie met een vaste volgorde van voorkeur: muurpunt, muur, object, raster. Muurpunt en muur leggen beide assen vast; object en raster werken per as, zodat de x van een meubel kan komen en de y van het raster. De tolerantie komt binnen in wereldmillimeters — de editor rekent twaalf schermpixels om met de zoomfactor — zodat vangen bij elke zoomstand even ver aanvoelt zonder dat een fysieke maat ooit met de schermzoom vermenigvuldigd wordt. Uitkomsten zijn hele millimeters. Een muur vangt alleen binnen zijn eigen segment; daarbuiten hoort het punt bij het muurpunt. Het gesleepte meubel vangt niet aan zichzelf. Tijdens het slepen tonen gestreepte hulplijnen waarop uitgelijnd wordt. De onderbalk heeft een schakelaar **Vangen aan objecten**, los van het raster.
+
+Daarbij opgelost: de canvasknop **Passend** had een eigen fit-berekening die negatieve coördinaten negeerde, waardoor een plan links of boven de oorsprong buiten beeld bleef. Beide plekken gebruiken nu dezelfde berekening.
+
+### Meervoudige selectie, uitlijnen en gelijk verdelen
+
+`selected` is van één ID naar een lijst gegaan. Shift-, ctrl- of cmd-klikken in de plattegrond of de objectlijst voegt toe of haalt weg. Bij twee of meer meubels verschijnt een paneel met zes uitlijningen en twee verdelingen. `packages/geometry/src/arrange.ts` rekent met de asgerichte omhullende van een gedraaid meubel, dus een bank die 30 graden staat lijnt uit op wat je op het plan ziet. Verdelen maakt de tussenruimten tussen de omhullenden gelijk en laat het eerste en laatste meubel staan; passen ze niet, dan worden de tussenruimten negatief en overlappen ze zichtbaar. Alle verplaatsingen gaan als één batch naar de server en zijn dus één stap terug.
+
+Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+- **94 tests / 15 bestanden geslaagd, 23,1 s** (was 75 na de merge). Nieuw: elf vangtests en acht uitlijn-/verdeeltests, met 300 respectievelijk 200 gegenereerde gevallen die bewijzen dat de uitkomst altijd hele millimeters is.
+- **10 browserroutes geslaagd, 1,2 min.** Twee nieuwe. De vangroute kalibreert zichzelf: zij meet eerst de schaal met een sleep van 120 px en drukt daarna alles in schermpixels uit, zodat zij niet op de fit-formule van de editor leunt. Rasterslepen levert hele honderdtallen, uitlijnen op een ander meubel levert exact hetzelfde hart, en met vangen uit blijft het meubel staan waar het losgelaten wordt. De uitlijnroute controleert gelijke linkerranden, een ongemoeide y-as, één stap terug voor drie meubels tegelijk en gelijke tussenruimten na verdelen.
+- TypeScript strict en productiebuild geslaagd (9,7 s). Bekende chunkgroottewaarschuwing blijft open.
+- Screenshots `outputs/qa/vangen.png`, `outputs/qa/vanghulplijn.png` en `outputs/qa/uitlijnen.png` daadwerkelijk geïnspecteerd. Twee correcties na inspectie: een sleep van 2 px startte nooit omdat Konva pas vanaf 3 px sleept — de test drukt de afstanden nu in pixels uit; en de zes uitlijnknoppen braken af als 5+1, nu een raster van drie kolommen.
+
+Nog open in fase 2: maatlijnen, annotaties, legenda en meetgereedschap; vergrendelen, laagvolgorde en zichtbaarheid; laagpresets voor inrichting, afwerking, elektra en verlichting; import van rasteronderlegger en PDF-pagina met kalibratie via twee punten; rubberband-selectie op het canvas; groeperen; opt-in lokaal herstel via IndexedDB; toetsenbordsnelkoppelingen. Muurjoins blijven ook open. Fase 2 is daarmee niet afgerond.
