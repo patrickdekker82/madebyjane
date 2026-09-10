@@ -7,3 +7,22 @@ allowBuilds:
   "@embedded-postgres/linux-arm64": true
   esbuild: true
   "@embedded-postgres/windows-x64": true
+# Twee hoge meldingen op image-size (oneindige lus in de ICNS-, JXL- en
+# HEIF-lezer). Die komt binnen via pptxgenjs 4.0.1, dat hem als afhankelijkheid
+# opgeeft maar nergens laadt: in beide uitgeleverde builds (es en cjs) is
+# jszip de enige import, en de enige plek die een afmeting uit een afbeelding
+# zou lezen staat uitgecommentarieerd met "currently unused" — en vraagt daar
+# bovendien om een module 'sizeof', niet om image-size. Onze eigen code roept
+# hem evenmin aan; het planblad gaat met een expliciete breedte en hoogte de
+# dia op.
+#
+# Bijwerken kan niet: de meldingen noemen 2.0.3 als herstelde versie, maar die
+# is niet uitgebracht. De nieuwste is 2.0.2 en die valt zelf binnen het bereik.
+# Er is dus geen versie om naartoe te gaan. Daarom staan deze twee meldingen
+# hier bij naam genoteerd als aanvaard risico, met het GHSA-nummer erbij, in
+# plaats van de controle als geheel zachter te zetten. Zodra image-size 2.0.3
+# er is, vervangen we dit door een gewone bijwerking.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-w3rx-r6r6-pgpr
+    - GHSA-5p2g-fcmc-qvqq

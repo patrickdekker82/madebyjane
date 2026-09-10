@@ -817,6 +817,14 @@ Verder bleek de browsertest afhankelijk van wat er toevallig al in de beeldbank 
 - TypeScript strict en productiebuild geslaagd (11,4 s). Bekende chunkgroottewaarschuwing blijft open.
 - Schermafbeeldingen `outputs/qa/presentatie-webviewer.png` en `presentatie-webviewer-plan.png` daadwerkelijk bekeken: donkere balk met titel, versie en de melding over maatvastheid, witte bladen op een grijze ondergrond, de moodboardafbeelding op zijn plek en het planblad passend in beeld.
 
+### Een aanvaard risico, met naam en nummer
+
+De bouwstraat viel om op `pnpm audit`: twee hoge meldingen op **image-size**, dat via pptxgenjs 4.0.1 binnenkomt (oneindige lus in de ICNS-, JXL- en HEIF-lezer). Bijwerken kan niet — de meldingen noemen 2.0.3 als herstelde versie, maar die is niet uitgebracht; de nieuwste is 2.0.2 en die valt zelf binnen het bereik.
+
+De code wordt hier niet uitgevoerd. In beide uitgeleverde builds van pptxgenjs (es en cjs) is jszip de enige import; de enige plek die een afmeting uit een afbeelding zou lezen staat uitgecommentarieerd met "currently unused" en vraagt daar bovendien om een module `sizeof`, niet om image-size. Onze eigen code roept hem evenmin aan: het planblad gaat met een expliciete breedte en hoogte de dia op.
+
+De twee meldingen staan daarom **bij naam en GHSA-nummer** in `pnpm-workspace.yaml` als aanvaard risico, in plaats van de drempel van de controle als geheel te verhogen. Zodra image-size 2.0.3 er is, vervalt dit en wordt het een gewone bijwerking. Dat is een aanvaard risico en geen opgelost probleem; het staat hier zodat het teruggevonden wordt.
+
 ### Nog open in fase 5
 
 **pg-boss** als echte wachtrij met gescheiden concurrency voor zware en lichte taken; de werker draait nog in het API-proces. Uitgebreide PPTX-QA op echte klantdata schuift naar fase 9. Verder is het 3D-camerablok afhankelijk van fase 7.
