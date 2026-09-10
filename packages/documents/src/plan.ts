@@ -2,7 +2,7 @@ import { symbolSvg } from "../../geometry/src/symbol";
 import type { Scene } from "../../contracts/src/index";
 import {
   endpoints,
-  wallSegments,
+  wallOutlines,
   dimensionGeometry,
   formatMm,
 } from "../../geometry/src/index";
@@ -45,16 +45,27 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
       "Ontwerp past niet op A4 liggend bij deze schaal. Kies een kleinere schaal.",
     );
   const referenceMm = scale === 20 ? 1000 : 5000;
+  // Versneden contouren in plaats van dikke lijnen: stompe uiteinden laten in
+  // elke hoek een hap open. Alle muurvlakken gaan er eerst op, daarna pas de
+  // doorsnede op 1.200 mm, zodat een aangrenzende muur nooit een opening dicht
+  // tekent die vlak bij een hoek ligt.
+  const outlines = new Map(wallOutlines(scene).map((o) => [o.wallId, o.points]));
   const walls = scene.walls
-    .map((w) => {
-      const { a, b, length } = endpoints(scene, w);
-      return wallSegments(scene, w)
-        .filter((s) => s.bottom <= 1200 && s.bottom + s.height > 1200)
-        .map(
-          (s) =>
-            `<line x1="${a.x + ((b.x - a.x) * s.offset) / length}" y1="${a.y + ((b.y - a.y) * s.offset) / length}" x2="${a.x + ((b.x - a.x) * (s.offset + s.width)) / length}" y2="${a.y + ((b.y - a.y) * (s.offset + s.width)) / length}" stroke="#343b32" stroke-width="${w.thickness}"/>`,
-        )
-        .join("");
+    .map(
+      (w) =>
+        `<polygon points="${(outlines.get(w.id) ?? [])
+          .map((p) => `${p.x},${p.y}`)
+          .join(" ")}" fill="#343b32"/>`,
+    )
+    .join("");
+  const cuts = scene.openings
+    .filter((o) => o.sillHeight <= 1200 && o.sillHeight + o.height > 1200)
+    .map((o) => {
+      const w = scene.walls.find((wall) => wall.id === o.wallId)!;
+      const { a, b, length, angle } = endpoints(scene, w);
+      const x = a.x + ((b.x - a.x) * o.offset) / length,
+        y = a.y + ((b.y - a.y) * o.offset) / length;
+      return `<g transform="translate(${x},${y}) rotate(${(angle * 180) / Math.PI})"><rect x="0" y="${-w.thickness / 2 - 1}" width="${o.width}" height="${w.thickness + 2}" fill="white"/></g>`;
     })
     .join("");
   const openings = scene.openings
@@ -88,5 +99,5 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
       return `<g>${helpers}<line x1="${d.line.from.x}" y1="${d.line.from.y}" x2="${d.line.to.x}" y2="${d.line.to.y}" stroke="#343b32" stroke-width="${0.3 * scale}"/><text x="${d.label.x}" y="${d.label.y}" transform="rotate(${d.label.angle} ${d.label.x} ${d.label.y})" text-anchor="middle" dy="${-1 * scale}" font-size="${2.5 * scale}" fill="#343b32">${escapeXml(formatMm(d.lengthMm))}</text></g>`;
     })
     .join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="297mm" height="210mm" viewBox="0 0 297 210"><rect width="297" height="210" fill="white"/><g font-family="Arial,sans-serif" transform="translate(10 12) scale(${1 / scale}) translate(${-minX} ${-minY})">${walls}${openings}${items}${annotations}</g><g font-family="Arial,sans-serif" fill="#343b32"><line x1="10" y1="180" x2="287" y2="180" stroke="#9b9c92" stroke-width="0.3"/><text x="10" y="190" font-size="5">STUDIO / Ontwerpblad</text><text x="10" y="198" font-size="3">Revisie ${scene.revision} · 1:${scale} · A4 liggend · Print op 100%</text><line id="scale-reference-${referenceMm}mm" x1="175" y1="195" x2="${175 + referenceMm / scale}" y2="195" stroke="#343b32" stroke-width="0.5"/><text x="175" y="191" font-size="3">${referenceMm.toLocaleString("nl-NL")} mm</text></g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="297mm" height="210mm" viewBox="0 0 297 210"><rect width="297" height="210" fill="white"/><g font-family="Arial,sans-serif" transform="translate(10 12) scale(${1 / scale}) translate(${-minX} ${-minY})">${walls}${cuts}${openings}${items}${annotations}</g><g font-family="Arial,sans-serif" fill="#343b32"><line x1="10" y1="180" x2="287" y2="180" stroke="#9b9c92" stroke-width="0.3"/><text x="10" y="190" font-size="5">STUDIO / Ontwerpblad</text><text x="10" y="198" font-size="3">Revisie ${scene.revision} · 1:${scale} · A4 liggend · Print op 100%</text><line id="scale-reference-${referenceMm}mm" x1="175" y1="195" x2="${175 + referenceMm / scale}" y2="195" stroke="#343b32" stroke-width="0.5"/><text x="175" y="191" font-size="3">${referenceMm.toLocaleString("nl-NL")} mm</text></g></svg>`;
 }

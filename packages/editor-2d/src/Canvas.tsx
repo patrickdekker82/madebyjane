@@ -18,6 +18,7 @@ import {
   endpoints,
   snapPoint,
   itemsInRect,
+  wallOutlines,
   underlayPlacement,
   worldToUnderlay,
   dimensionGeometry,
@@ -284,6 +285,11 @@ export function PlanCanvas({
     setZoom(next);
   };
   const gridSpacing = (100 * zoom >= 8 ? 100 : 500) * zoom;
+  // Versneden muurcontouren: dikke lijnen met stompe uiteinden laten in elke
+  // hoek een hap open.
+  const outlines = new Map(
+    wallOutlines(scene).map((o) => [o.wallId, o.points]),
+  );
   // Een muurpunt of muur legt een concreet punt vast; dat verdient een markering.
   const anchor = snapped.find((t) => t.kind === "node" || t.kind === "wall");
   const snapMarker =
@@ -389,13 +395,16 @@ export function PlanCanvas({
         <Layer x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom}>
           {scene.walls.map((w) => {
             const { a, b, length } = endpoints(scene, w);
+            const outline = outlines.get(w.id);
             return (
               <Group key={w.id}>
                 <Line
-                  points={[a.x, a.y, b.x, b.y]}
-                  stroke={selected.includes(w.id) ? "#b47b45" : "#465044"}
-                  strokeWidth={w.thickness}
-                  hitStrokeWidth={Math.max(20 / zoom, w.thickness)}
+                  points={(outline ?? []).flatMap((p) => [p.x, p.y])}
+                  closed
+                  fill={selected.includes(w.id) ? "#b47b45" : "#465044"}
+                  // Een dunne muur is bij uitzoomen maar enkele pixels breed;
+                  // deze trefzone rond de contour houdt hem aanwijsbaar.
+                  hitStrokeWidth={20 / zoom}
                   onClick={() => wallClick(w.id)}
                   onTap={() => wallClick(w.id)}
                 />

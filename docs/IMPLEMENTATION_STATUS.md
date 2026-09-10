@@ -364,3 +364,26 @@ Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
 De browsertest controleert de schaal met een marge tussen 12,3 en 12,7 mm per pixel in plaats van exact 12,5. Een muisklik landt op een hele schermpixel, hier ongeveer 0,65 afbeeldingspixel; de kalibratie gebruikt wat de gebruiker werkelijk heeft aangewezen en niet wat de test bedoelde. Dat is geen onnauwkeurigheid in de berekening.
 
 Nog open in fase 2: PDF-pagina als onderlegger; EXIF verwijderen; de onderlegger verslepen en draaien; annotatieteksten en een legenda; groeperen; opt-in lokaal herstel via IndexedDB; laagpresets per tekenblad; muurjoins. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — muurhoeken versneden
+
+Muren werden getekend als dikke lijnen met stompe uiteinden. Op elke hoek liet dat aan de buitenzijde een hap open — zichtbaar op iedere schermopname in dit document, en het duidelijkst bij de schuine hoek van de demoruimte. Dit stond sinds fase 0 als openstaand punt genoteerd.
+
+`packages/geometry/src/walls.ts` levert nu per muur een gesloten contour waarvan de uiteinden versneden zijn tegen de aansluitende muur. Vanaf een gedeeld punt wijzen beide muren weg; de plus-zijde van de een sluit daarom aan op de min-zijde van de ander. Muren van verschillende dikte sluiten net zo goed aan.
+
+Bewuste beperkingen, met reden:
+- **Versnijden gebeurt alleen wanneer op een punt precies één andere muur uitkomt.** Op een T-aansluiting of kruising is er geen enkele juiste versnijding. Daar eindigt de muur stomp op het punt zelf; dat valt niet op omdat de doorgaande muur het uiteinde bedekt.
+- **Bij zeer scherpe hoeken vervalt de versnijding.** Voorbij zes keer de muurdikte zou er een lange punt uitsteken; dan is een stomp uiteinde beter.
+
+Zowel het canvas als het geëxporteerde planblad gebruiken dezelfde contouren. Op het planblad worden de muurvlakken eerst allemaal getekend en pas daarna de doorsnede op 1.200 mm uit de openingen gewit, zodat een aangrenzende muur nooit een opening dichttekent die vlak bij een hoek ligt.
+
+Verificatie 10 september, Linux x64, Node 22.22.2:
+- **132 tests / 22 bestanden geslaagd, 19,9 s** (was 124). Acht contourtests: los uiteinde, rechte hoek, verschillende diktes, T-aansluiting, zeer scherpe hoek, collineaire muren, en 200 gegenereerde gevallen die aantonen dat elke contour vier eindige punten houdt.
+- **14 browserroutes geslaagd, 1,2 min.** TypeScript strict en productiebuild geslaagd (7,5 s).
+- Zowel het canvas als het geëxporteerde planblad naar afbeelding gerenderd en bekeken: de hoeken zijn dicht, ook de schuine hoek, en de openingen blijven schone gaten.
+
+Twee dingen die het testen opleverde:
+- Mijn eerste testverwachting was dat versnijden oppervlak toevoegt. Dat klopt niet: bij een rechte hoek verplaatst het materiaal — wat de buitenhoek erbij krijgt, verliest de binnenhoek. De test controleert nu waar het werkelijk om gaat, namelijk dat een punt vlak buiten de hoek gedekt is.
+- De gevulde contour verving een lijn met een gegarandeerde trefzone van twintig pixels. Zonder die zone is een dunne muur bij uitzoomen niet meer aan te wijzen. De trefzone is teruggezet en een browserroute controleert nu dat een muur op het canvas aanklikbaar blijft.
+
+Nog open in fase 2: annotatieteksten en een legenda; groeperen; opt-in lokaal herstel via IndexedDB; laagpresets per tekenblad; de onderlegger verslepen; PDF-pagina als onderlegger; EXIF verwijderen. In 3D zijn de muren nog losse blokken zonder versneden hoeken; dat hoort bij fase 7. Fase 2 is niet afgerond.

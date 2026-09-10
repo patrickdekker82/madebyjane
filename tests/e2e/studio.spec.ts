@@ -1440,6 +1440,15 @@ test("sleepkader selecteert meerdere meubels → maatlijn verplaatsen en omklapp
     page.getByRole("heading", { name: "Elk detail telt.", exact: true }),
   ).toBeVisible();
 
+  // Een muur blijft aanwijsbaar op het canvas zelf, ook nu hij als gevulde
+  // contour getekend wordt in plaats van als dikke lijn. Het raam loopt van
+  // 1.600 tot 4.200 mm, dus daarbuiten aanwijzen.
+  await page.mouse.click(at(5000, 0).x, at(5000, 0).y);
+  await expect(
+    page.getByRole("heading", { name: "Muur op maat", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+
   // Maatlijn tekenen langs de bovenmuur en daarna bijstellen.
   await page.keyboard.press("t");
   await page.mouse.click(at(0, 0).x, at(0, 0).y);

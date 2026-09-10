@@ -117,6 +117,7 @@ export function validateGeometry(scene: Scene) {
       throw new Error("Opening heeft geen muur.");
 }
 export { detectRooms, type Room, type RoomDetection } from "./rooms";
+export { wallOutlines, type WallOutline } from "./walls";
 export {
   underlayScale,
   underlayPlacement,
