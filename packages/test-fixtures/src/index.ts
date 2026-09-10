@@ -16,6 +16,8 @@ export function emptyScene(
     walls: [],
     openings: [],
     items: [],
+    annotations: [],
+    underlay: null,
   };
 }
 export function demoScene(

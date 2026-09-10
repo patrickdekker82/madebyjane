@@ -1,5 +1,21 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 10 september 2026 — afronding offerteworkflow fase 6
+
+Deze aanvulling is leidend voor fase 6; de oudere rapportages hieronder blijven als historische testregistraties staan. De wijzigingen zijn samengevoegd met main cb03021, inclusief de materiaalberekeningen en nieuwe editor-/browsertests. Het eerste offertedeel uit PR #2 staat al in main; de afronding krijgt een afzonderlijke pull request.
+
+Beschikbaar: decimale rekenkern en jaar-/organisatienummering, ontwerp- en materiaalbronnen, bronverschillen, aparte commerciële catalogusprijsversies, dubbele-broncontrole, vaste bedrijfs-/klantgegevens, voorwaarden, tekst-/materiaal-/planbijlagen, PDF-download, vervolgconcepten, versiegeschiedenis, expliciete statusovergangen en intrekbare PDF-deellinks. Migration 0011 voegt immutable prijzen, bijlagen, gebeurtenissen en PDF-bytes toe; FORCE RLS en servercontrole beperken interne toegang tot owner/admin/finance. Deellinks zijn beperkt tot één exacte PDF, gehasht opgeslagen, maximaal 30 dagen via API (7 in UI), intrekbaar en zonder verdere projecttoegang.
+
+Finalisatie bewaart inhoudshash en snapshots. De eerste PDF wordt opgeslagen met templateversie en PDF-hash; volgende downloads gebruiken dezelfde bytes. Een nieuwe definitieve versie krijgt een nieuw nummer en een expliciete vervangen-gebeurtenis bij de vorige versie. Een statusregistratie bevat actor, gebeurtenisdatum, registratie-tijdstip, onderbouwing en inhoudshash. PDF/download/deellink maken verzendt geen e-mail en simuleert geen klantacceptatie.
+
+Bronconsistentie: dezelfde ontwerprevisie per variant; materiaalbladen en posten gebruiken dezelfde materiaalversie. Berekende materiaalhoeveelheden worden ook aan de ontwerprevisies getoetst. Cataloguswijzigingen kunnen een definitieve offerte niet aanpassen. Indicatieve prijzen bij materiaalkeuzes blijven afzonderlijk van de commerciële catalogusprijs; de gebruiker kiest die expliciet. Inkoop/marge worden niet opgeslagen of uitgeleverd.
+
+Verificatie vóór samenvoegen met de nieuwste main: 11 offertests geslaagd met echte PostgreSQL en Chrome; alle 6 browserroutes geslaagd (1,3 min), inclusief PDF, delen/intrekken, statusregistratie en het ongewijzigd openen van oudere versies. De PDF-proef met 40 posten heeft 7 visueel gecontroleerde pagina's, totaal 3508,09 EUR, alle posten precies eenmaal en een 5-meterreferentie die bij 1:50 100 mm meet. De volledige suite na samenvoegen en Linux-CI worden hieronder aangevuld wanneer voltooid. Een bestaande Windows-symlinktest vereist rechten die op deze machine ontbreken; deze test blijft actief voor Linux-CI.
+
+Na samenvoegen met main: TypeScript strict geslaagd; productiebuild geslaagd (14,61 s); alle 10 browserroutes geslaagd (1,3 min). De volledige Vitest-run telde 96 geslaagde tests, één nieuwe fixturefout en de bestaande Windows-symlinkbeperking. Na correctie van het veld keywords zijn alle 8 offerte-integratietests opnieuw geslaagd (15,74 s), inclusief de nieuwe gecombineerde broncontrole. Linux-CI moet de volledige 98-test-suite bevestigen. De Windows-browsertest stopt PostgreSQL nu vóór Playwright de procesboom beëindigt; de vorige force-stop kon een IO-worker achterlaten. De echte API-PDF (3 pagina's) is aanvullend visueel gecontroleerd.
+
+Grenzen buiten deze fase: volledige fase-5-presentatiebouwer/PPTX/beeldimport, productie-exportqueue en opslagadapter, installatie/back-up/herstel en fase-9-hardening. De huidige bijlagen zijn vaste tekst-, materiaal- en planblokken; willekeurige geüploade PDF's en renderbeelden zijn geen ondersteunde bijlagebron. Maximaal 200 posten, 12 bijlagen, 500 versies per offerte, 20 MB per PDF en één actieve render per serverproces. Geen productie-uitrol.
+
 ## Aanvulling 8 september 2026 — fase 6, offerteconcepten en finalisatie
 
 Toegevoegd: offerteformulier met klant-/adresgegevens, datum/geldigheid, voorwaarden, maximaal 200 posten, handmatige prijzen en materiaalkeuzebronnen. EUR-bedragen gebruiken decimal.js met geïsoleerde precisie 40: hoeveelheid × eenheidsprijs × (1 − korting/100), netto per regel op centen ROUND_HALF_UP, daarna belasting over de som per categorie op centen. Negatieve eenheidsprijzen zijn correcties, hoeveelheden zijn niet-negatief. Belastingtarieven zijn per categorie instelbaar. Lege concepten zijn toegestaan, lege finalisatie niet.
@@ -52,7 +68,7 @@ Open: account recovery/password reset, expliciete projectmembership, volledige r
 
 ## Fase 2 — gedeeltelijke proef, niet afgerond
 
-Muren/openingen/items/commands aanwezig. Nog geen robuuste muurjoins of netto ruimteoppervlakken, groepen/multi-select, onderleggers, lokale opt-in IndexedDB recovery of conflictvariantduplicatie. Schrijflease hervat na herladen direct via sessionStorage + Web Locks. Een gedupliceerde tab met gekopieerde sessionStorage krijgt geen schrijfrechten. Zonder Web Locks blijft de veilige terugval met maximaal 45 s wachttijd bestaan. RestoreContent is een interne proefcommand en moet naar expliciete revisie-/undo-semantiek voor release.
+Muren/openingen/items/commands aanwezig. **Deze alinea is bijgewerkt op 10 september 2026;** de aanvullingen onderaan dit document zijn leidend voor wat er sindsdien bij is gekomen. Inmiddels wel aanwezig en getoetst: versneden muurhoeken, netto ruimteoppervlakken, meervoudige selectie met sleepkader, groeperen, lagen met vergrendelen/verbergen/volgorde, maatlijnen en notities, een ingemeten onderlegger die te verplaatsen en te draaien is, en opt-in lokaal herstel via IndexedDB. Nog open in fase 2: **PDF-pagina als onderlegger**, **EXIF-metadata verwijderen** en **veilig dupliceren naar een variant bij een conflict** — bij een conflict blijft het lokale werk behouden en kan het worden geexporteerd of weggegooid, maar er is nog geen knop die er een aparte variant van maakt. Schrijflease hervat na herladen direct via sessionStorage + Web Locks. Een gedupliceerde tab met gekopieerde sessionStorage krijgt geen schrijfrechten. Zonder Web Locks blijft de veilige terugval met maximaal 45 s wachttijd bestaan. RestoreContent is een interne proefcommand en moet naar expliciete revisie-/undo-semantiek voor release.
 
 ## Fasen 3–10 — niet afgerond
 
@@ -273,3 +289,251 @@ Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
 - Screenshots `outputs/qa/vangen.png`, `outputs/qa/vanghulplijn.png` en `outputs/qa/uitlijnen.png` daadwerkelijk geïnspecteerd. Twee correcties na inspectie: een sleep van 2 px startte nooit omdat Konva pas vanaf 3 px sleept — de test drukt de afstanden nu in pixels uit; en de zes uitlijnknoppen braken af als 5+1, nu een raster van drie kolommen.
 
 Nog open in fase 2: maatlijnen, annotaties, legenda en meetgereedschap; vergrendelen, laagvolgorde en zichtbaarheid; laagpresets voor inrichting, afwerking, elektra en verlichting; import van rasteronderlegger en PDF-pagina met kalibratie via twee punten; rubberband-selectie op het canvas; groeperen; opt-in lokaal herstel via IndexedDB; toetsenbordsnelkoppelingen. Muurjoins blijven ook open. Fase 2 is daarmee niet afgerond.
+
+## Aanvulling 10 september 2026 — PR's samengevoegd, lagen in de 2D-editor
+
+Beide openstaande PR's zijn afgehandeld. PR #1 is met een merge-commit in `main` gezet (`cb03021`), zodat de commits van `codex/phase-6-quotes` met hun oorspronkelijke auteurschap in de geschiedenis blijven. PR #2 kon daarna niet meer gemerged worden — zijn head is een voorouder van `main` geworden — en is gesloten met uitleg. `main` bevat nu fase 4, fase 6 en de editoruitbreidingen.
+
+### Lagen, vergrendelen, zichtbaarheid en volgorde
+
+Objecten krijgen drie optionele velden: `layer`, `locked` en `hidden`. Optioneel, dus scenes van vóór deze wijziging blijven geldig zonder scene-migratie; ontbreekt de laag, dan telt het object als inrichting. De lagen zijn inrichting, afwerking, elektra, verlichting en technische presentatie — dezelfde indeling die fase 4 nodig heeft voor elektra en licht.
+
+Twee nieuwe opdrachten: `SetItemDisplay` zet laag, vergrendeling of zichtbaarheid voor een groep objecten tegelijk, waarbij alleen meegegeven velden veranderen; `ReorderItems` verschuift de tekenvolgorde. `packages/domain/src/order.ts` is de pure functie daarachter. Bij een meervoudige selectie blijft de onderlinge volgorde intact en schuift de selectie als geheel over precies één niet-geselecteerd object. Bij een onderbroken selectie telt de bovenste respectievelijk onderste, en komt de hele selectie bij elkaar te liggen; dat is voorspelbaarder dan elk object apart verschuiven.
+
+Vergrendeling wordt afgedwongen in `applyOperations`, dus ook wanneer een opdracht niet uit de editor komt: `TransformItem` en `DeleteSelection` op een vergrendeld object leveren een leesbare fout. Ontgrendelen mag altijd. Verborgen objecten worden niet getekend en doen ook niet mee aan het vangen, maar blijven in de objectlijst staan met een oog- en slotpictogram.
+
+Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+- **104 tests / 17 bestanden geslaagd, 26,5 s** (was 94). Nieuw: zeven volgordetests en drie commandotests voor lagen, vergrendeling en volgorde.
+- **11 browserroutes geslaagd, 1,5 min.** De nieuwe route wisselt een meubel van laag, verbergt de laag en controleert dat het object uit beeld is maar in de lijst blijft, vergrendelt de laag, ziet verwijderen afgewezen worden met de servermelding, ontgrendelt, verandert de volgorde en vindt alles terug na herladen.
+- TypeScript strict en productiebuild geslaagd (9,8 s). Bekende chunkgroottewaarschuwing blijft open.
+- Screenshot `outputs/qa/lagen.png` geïnspecteerd: de laaglijst toont Inrichting 3 en Verlichting 1, het oog van Verlichting is doorgestreept en de salontafel is inderdaad uit het plan verdwenen. De testverwachting moest eerst aangescherpt: "Verlichting" kwam zowel in de laaglijst als in de keuzelijst voor.
+
+Nog open in fase 2: maatlijnen, annotaties, legenda en meetgereedschap; import van rasteronderlegger en PDF-pagina met kalibratie via twee punten; rubberband-selectie op het canvas; groeperen; opt-in lokaal herstel via IndexedDB; toetsenbordsnelkoppelingen; muurjoins. Laagpresets bestaan nu als indeling, maar er is nog geen presetknop die een set lagen in één keer toont of verbergt voor een tekenblad. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — meten, maatlijnen en sneltoetsen
+
+### Maatlijnen als eigen objecten
+
+De scene krijgt `annotations`, een lijst met een standaardwaarde van een lege array, zodat bestaande scenes geldig blijven zonder scene-migratie. Voorlopig is er één soort annotatie: een maatlijn met twee punten en een loodrechte verschuiving. **De lengte wordt niet opgeslagen** — die komt uit `packages/geometry/src/dimension.ts` en is dus altijd wat de geometrie zegt; een maatlijn kan nooit iets anders beweren. Een bewaarde maatlijn ligt 400 mm naast de gemeten lijn, aan de linkerzijde van de tekenrichting, met hulplijnen naar de meetpunten. Het label draait mee maar staat nooit op zijn kop.
+
+Het gereedschap **Maat** meet en legt vast in één handeling: na de eerste klik loopt een gestreepte lijn mee met een live afleesbare maat, de tweede klik bewaart de maatlijn. Wil je alleen meten, dan breek je af met Escape. Het vangen werkt hier net zo goed als bij het tekenen, dus meten tussen twee muurpunten geeft exact de muurlengte.
+
+Maatlijnen staan ook op het geëxporteerde planblad; lijndikte en tekstgrootte volgen de schaal en de bladomvang houdt rekening met de verschoven lijn.
+
+Daarbij opgelost: het canvas gaf een klik alleen door wanneer die op leeg vlak viel. Beginnen op een bestaand muurpunt was daardoor onmogelijk — precies wat je wil doen bij meten en bij het aansluiten van een nieuwe muur. Meten en muren tekenen krijgen de klik nu altijd; selecteren blijft aan het gereedschap Selecteren voorbehouden.
+
+### Toetsenbordbediening
+
+`v` selecteren, `m` muur, `d` deur, `r` raam, `t` maat. Escape gaat terug naar selecteren en heft de selectie op, Delete of Backspace verwijdert de selectie, Ctrl/Cmd+Z is een stap terug en met Shift erbij opnieuw. De afhandeling slaat invoervelden over, zodat typen in een maatveld nooit van gereedschap wisselt of iets verwijdert.
+
+Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+- **111 tests / 18 bestanden geslaagd, 25,1 s** (was 104). Zeven nieuwe maatlijntests, waaronder 300 gegenereerde gevallen die aantonen dat het label nooit op zijn kop staat en de lengte altijd heel is.
+- **12 browserroutes geslaagd, 1,5 min.** De nieuwe route kiest het maatgereedschap met een sneltoets, meet tussen twee muurpunten, controleert dat het geëxporteerde planblad **6.200 mm** bevat — de muurlengte uit de geometrie, niet uit de muispositie — verwijdert de maatlijn met Delete en zet dat terug met Ctrl+Z.
+- TypeScript strict en productiebuild geslaagd (9,5 s).
+- Screenshots `outputs/qa/meten.png` en `outputs/qa/maatlijn.png` geïnspecteerd, plus `outputs/qa/maatblad.png`: het geëxporteerde blad zelf is naar afbeelding gerenderd en bekeken, met hulplijnen en label op de juiste plek. De eerste versie legde de maatlijn precies op de muur; daarom nu de vaste verschuiving van 400 mm.
+
+Onderweg gevonden en hersteld: de nieuwe knop **Maat** maakte de gereedschapsbalk breder dan een tablet van 1024 px, waardoor de hele pagina horizontaal ging schuiven. De balk schuift nu zelf zijwaarts. Die ene fout liet ook twee andere browserroutes omvallen met een verloren sessie; na het herstel slaagt de volledige suite weer in 1,5 minuut. Het precieze mechanisme van die gevolgschade is niet uitgezocht — alleen vastgesteld dat het met de herstelde eerste route verdwijnt.
+
+Nog open in fase 2: annotatieteksten en een legenda naast maatlijnen; het verplaatsen of omklappen van een bestaande maatlijn; import van rasteronderlegger en PDF-pagina met kalibratie via twee punten; rubberband-selectie; groeperen; opt-in lokaal herstel via IndexedDB; laagpresets per tekenblad; muurjoins. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — sleepkader en bewerkbare maatlijnen
+
+### Sleepkader
+
+Met het gereedschap Selecteren trek je op leeg vlak een kader; alles wat het kader raakt komt in de selectie. `itemsInRect` in `packages/geometry/src/arrange.ts` werkt op de asgerichte omhullende, dus een gedraaid meubel wordt geraakt op wat je op het plan ziet. Aanraken is genoeg — een object hoeft niet helemaal binnen het kader te liggen — en het kader mag in elke richting getrokken worden. Verborgen objecten doen niet mee. Een klik zonder sleep (minder dan vijf schermpixels) heft de selectie op, zoals eerst. Het kader vangt bewust niet aan raster of objecten; het is een aanwijsactie, geen maat.
+
+### Maatlijnen bijstellen
+
+Een geselecteerde maatlijn krijgt een eigen eigenschappenpaneel met de gemeten lengte, een veld voor de afstand tot de gemeten lijn en een knop **Naar de andere kant**. De lengte staat er alleen ter informatie: die is afgeleid en niet los te bewerken. De nieuwe opdracht `SetAnnotationOffset` verzet alleen de verschuiving.
+
+Twee dingen die daarbij opvielen en zijn hersteld:
+- Maatlijnen stonden niet in de objectlijst, terwijl die lijst juist het toegankelijke alternatief voor aanwijzen op het canvas hoort te zijn. Ze staan er nu als **Maat 1**, **Maat 2** enzovoort, en tellen mee in het objectaantal.
+- **Passend** keek alleen naar muurpunten. Een maatlijn die buiten de muren ligt — na omklappen bijvoorbeeld — viel daardoor buiten beeld en was niet meer aan te klikken. De berekening neemt nu ook de maatlijnen mee.
+
+Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+- **113 tests / 18 bestanden geslaagd, 18,6 s** (was 111). Twee nieuwe kadertests, inclusief precies op de rand raken, een kader dat van rechtsonder naar linksboven loopt en een gedraaid meubel.
+- **13 browserroutes geslaagd, 1,1 min.** De nieuwe route trekt een kader over de linkerhelft en krijgt twee van de vier meubels, controleert dat een klik zonder sleep de selectie opheft, tekent een maatlijn, verzet die naar 900 mm, klapt hem om naar -900 mm en vindt dat na herladen terug.
+- TypeScript strict en productiebuild geslaagd (7,1 s).
+- Screenshots `outputs/qa/sleepkader-actief.png`, `outputs/qa/sleepkader.png` en `outputs/qa/maatlijn-omgeklapt.png` geïnspecteerd. De eerste is bewust middenin de sleep gemaakt: zonder die opname zou de test slagen ook als het kader helemaal niet getekend werd, want de selectie komt uit de staat en niet uit de weergave.
+
+Nog open in fase 2: annotatieteksten en een legenda; import van rasteronderlegger en PDF-pagina met kalibratie via twee punten; groeperen; opt-in lokaal herstel via IndexedDB; laagpresets per tekenblad; muurjoins. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — onderlegger met tweepuntskalibratie
+
+Een verdieping kan nu een onderlegger hebben: een foto of scan van een bestaande plattegrond om overheen te tekenen. Migration `0011_underlay_assets` bewaart de afbeeldingen per werkruimte onder FORCE RLS met alleen SELECT en INSERT voor de runtime-rol, met een quotum van 50 afbeeldingen of 200 MiB.
+
+**Alleen PNG en JPEG.** SVG en PDF worden geweigerd: dat is actieve inhoud die scripts en externe verwijzingen kan bevatten. De server leest alleen de bestandskop — een eigen parser van enkele tientallen regels in `packages/image-import` — en slaat de bytes ongewijzigd op. Er komt geen beeldbibliotheek aan te pas; de browser decodeert, en die is daarop gehard. Uitleveren gebeurt met een vast content-type dat uit die gelezen kop komt en nooit uit de invoer van de client, met `nosniff` en een restrictieve `Content-Security-Policy`. De afbeelding wordt in de editor met `fetch` opgehaald in plaats van via een `img src`, omdat een `img` geen werkruimte-header kan meesturen; de autorisatie op de route blijft daardoor gelijk aan die van alle andere gegevens. De blob-URL wordt weer vrijgegeven zodra de onderlegger wisselt.
+
+**De schaal wordt niet opgeslagen.** Vastgelegd zijn twee punten in afbeeldingspixels en de werkelijke afstand daartussen; de millimeters per pixel volgen daaruit. Zo blijft de kalibratie navolgbaar. Zonder kalibratie geldt een aangenomen 10 mm per pixel en toont het paneel **nog niet gekalibreerd** met de vraag een bekende maat in te meten — er staat dus nooit een schaal die nergens op stoelt. Doorzichtigheid is instelbaar; de onderlegger ligt in een eigen laag onder de tekening en vangt geen muisacties af.
+
+De keuze voor raster in plaats van PDF staat in `docs/adr/0004-underlay-images.md`, met de gevolgen: wie alleen een PDF heeft moet die zelf omzetten, en EXIF-metadata blijft staan omdat verwijderen opnieuw encoderen vraagt.
+
+Daarbij opgelost: **Passend** keek niet naar de onderlegger, net zoals het eerder niet naar maatlijnen keek. Een onderlegger die groter is dan het plan viel daardoor buiten beeld. Dat kwam aan het licht doordat de browsertest een schaal van 20,8 mm per pixel kreeg in plaats van 12,5: mijn omrekening van scherm naar wereld klopte niet, omdat de app anders inzoomde dan de test aannam.
+
+Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+- **124 tests / 21 bestanden geslaagd, 19,2 s** (was 113). Vijf kopleestests met een in de test zelf gemaakt geldig PNG en JPEG, inclusief afgekapte en misvormde bestanden, SVG, PDF, GIF en onmogelijke maten. Vijf kalibratietests met 200 gegenereerde gevallen voor heen-en-terug rekenen.
+- Eén nieuwe integratietest tegen echte PostgreSQL: type- en maatcontrole, herhaling met dezelfde ID, een ander bestand onder dezelfde ID (409), geweigerde SVG/PDF/GIF/afgekapt bestand (422) zonder dat er een rij achterblijft, vast content-type met nosniff, andere werkruimte krijgt 404, alleen-lezen mag niet uploaden maar wel bekijken, geen UPDATE-recht voor de runtime-rol, en het quotum.
+- **14 browserroutes geslaagd, 1,3 min.** De nieuwe route weigert eerst een SVG, uploadt dan een echt PNG van 1000 × 800, meet twee punten in op 5.000 mm en controleert de schaal.
+- TypeScript strict en productiebuild geslaagd (6,8 s). Release-manifest bijgewerkt naar elf migrations.
+- Screenshots `outputs/qa/onderlegger.png` en `outputs/qa/onderlegger-gekalibreerd.png` geïnspecteerd: de afbeelding ligt zichtbaar onder het plan en schaalt mee. De testafbeelding is bewust middengrijs gemaakt, want een lichte afbeelding op 45% doorzichtigheid is op een schermopname niet van de achtergrond te onderscheiden — de test zou dan slagen zonder dat iemand ziet of er iets getekend wordt.
+
+De browsertest controleert de schaal met een marge tussen 12,3 en 12,7 mm per pixel in plaats van exact 12,5. Een muisklik landt op een hele schermpixel, hier ongeveer 0,65 afbeeldingspixel; de kalibratie gebruikt wat de gebruiker werkelijk heeft aangewezen en niet wat de test bedoelde. Dat is geen onnauwkeurigheid in de berekening.
+
+Nog open in fase 2: PDF-pagina als onderlegger; EXIF verwijderen; de onderlegger verslepen en draaien; annotatieteksten en een legenda; groeperen; opt-in lokaal herstel via IndexedDB; laagpresets per tekenblad; muurjoins. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — muurhoeken versneden
+
+Muren werden getekend als dikke lijnen met stompe uiteinden. Op elke hoek liet dat aan de buitenzijde een hap open — zichtbaar op iedere schermopname in dit document, en het duidelijkst bij de schuine hoek van de demoruimte. Dit stond sinds fase 0 als openstaand punt genoteerd.
+
+`packages/geometry/src/walls.ts` levert nu per muur een gesloten contour waarvan de uiteinden versneden zijn tegen de aansluitende muur. Vanaf een gedeeld punt wijzen beide muren weg; de plus-zijde van de een sluit daarom aan op de min-zijde van de ander. Muren van verschillende dikte sluiten net zo goed aan.
+
+Bewuste beperkingen, met reden:
+- **Versnijden gebeurt alleen wanneer op een punt precies één andere muur uitkomt.** Op een T-aansluiting of kruising is er geen enkele juiste versnijding. Daar eindigt de muur stomp op het punt zelf; dat valt niet op omdat de doorgaande muur het uiteinde bedekt.
+- **Bij zeer scherpe hoeken vervalt de versnijding.** Voorbij zes keer de muurdikte zou er een lange punt uitsteken; dan is een stomp uiteinde beter.
+
+Zowel het canvas als het geëxporteerde planblad gebruiken dezelfde contouren. Op het planblad worden de muurvlakken eerst allemaal getekend en pas daarna de doorsnede op 1.200 mm uit de openingen gewit, zodat een aangrenzende muur nooit een opening dichttekent die vlak bij een hoek ligt.
+
+Verificatie 10 september, Linux x64, Node 22.22.2:
+- **132 tests / 22 bestanden geslaagd, 19,9 s** (was 124). Acht contourtests: los uiteinde, rechte hoek, verschillende diktes, T-aansluiting, zeer scherpe hoek, collineaire muren, en 200 gegenereerde gevallen die aantonen dat elke contour vier eindige punten houdt.
+- **14 browserroutes geslaagd, 1,2 min.** TypeScript strict en productiebuild geslaagd (7,5 s).
+- Zowel het canvas als het geëxporteerde planblad naar afbeelding gerenderd en bekeken: de hoeken zijn dicht, ook de schuine hoek, en de openingen blijven schone gaten.
+
+Twee dingen die het testen opleverde:
+- Mijn eerste testverwachting was dat versnijden oppervlak toevoegt. Dat klopt niet: bij een rechte hoek verplaatst het materiaal — wat de buitenhoek erbij krijgt, verliest de binnenhoek. De test controleert nu waar het werkelijk om gaat, namelijk dat een punt vlak buiten de hoek gedekt is.
+- De gevulde contour verving een lijn met een gegarandeerde trefzone van twintig pixels. Zonder die zone is een dunne muur bij uitzoomen niet meer aan te wijzen. De trefzone is teruggezet en een browserroute controleert nu dat een muur op het canvas aanklikbaar blijft.
+
+Nog open in fase 2: annotatieteksten en een legenda; groeperen; opt-in lokaal herstel via IndexedDB; laagpresets per tekenblad; de onderlegger verslepen; PDF-pagina als onderlegger; EXIF verwijderen. In 3D zijn de muren nog losse blokken zonder versneden hoeken; dat hoort bij fase 7. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — notities, laagpresets en legenda
+
+### Tekstnotities
+
+Annotaties zijn een discriminated union geworden: naast een maatlijn bestaat er nu een notitie met een punt en een tekst van maximaal 300 tekens. Het gereedschap **Notitie** plaatst er een en springt meteen terug naar Selecteren, zodat de tekst direct in het eigenschappenpaneel te wijzigen is. Notities staan in de objectlijst, doorgenummerd per soort, en komen op het geëxporteerde planblad.
+
+### Laagpresets
+
+Het lagenpaneel heeft knoppen **Alles** en één per aanwezige laag. Een preset toont die ene laag en verbergt de rest, als één opdracht en dus als één stap terug. Zichtbaarheid hoort bij de objecten zelf, dus een preset is een gewone wijziging die in de export doorwerkt — wat je op het scherm ziet is wat er op het blad komt.
+
+### Legenda
+
+Het tekenblad heeft een legenda die per laag meldt hoeveel objecten getoond en hoeveel verborgen zijn. Zo is aan het blad zelf te zien dat er iets ontbreekt, in plaats van dat een lezer een onvolledige tekening voor compleet aanziet.
+
+**Daarbij een echte fout gevonden.** De legenda meldde "Inrichting: 0 getoond, 3 verborgen" terwijl het blad die drie meubels gewoon tekende: het exportpad filterde verborgen objecten niet. Dat is precies de fout die de legenda hoort te voorkomen. Verborgen objecten tellen nu ook niet meer mee voor de bladomvang. De browsertest controleert sindsdien niet alleen de legendatekst maar ook dat de verborgen namen werkelijk niet in de SVG staan; die tweede controle ontbrak eerst, en daardoor zag alleen de visuele inspectie het.
+
+Verificatie 10 september, Linux x64, Node 22.22.2:
+- **132 tests / 22 bestanden geslaagd, 22,0 s** en **15 browserroutes geslaagd, 1,5 min.** TypeScript strict en productiebuild geslaagd (7,7 s).
+- De nieuwe browserroute plaatst een notitie, wijzigt de tekst, controleert die op het planblad, zet een meubel op de laag Verlichting, past de preset toe en controleert dat legenda en tekening hetzelfde zeggen — beide kanten op.
+- Het geëxporteerde blad is naar afbeelding gerenderd en bekeken, vóór en na de correctie.
+
+Nog open in fase 2: groeperen; opt-in lokaal herstel via IndexedDB; de onderlegger verslepen en draaien; PDF-pagina als onderlegger; EXIF verwijderen. De legenda somt lagen en aantallen op, nog geen symbolen; dat wordt pas zinvol met de elektra- en lichtsymbolen uit fase 4. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — groeperen
+
+Objecten met dezelfde `groupId` horen bij elkaar. **Er is bewust geen aparte groepenlijst**: een groep is niet meer dan een gedeelde verwijzing op de objecten zelf. Dat scheelt een tweede administratie die uit de pas kan lopen met de objecten, en een groep verdwijnt vanzelf zodra er te weinig leden over zijn. `applyOperations` maakt na elke opdracht een groepsverwijzing los die nog maar één object heeft, zodat er nooit een groep achterblijft die niets groepeert. De opdracht `SetItemGroup` groepeert of heft op en weigert een groep van één.
+
+Eén lid aanwijzen pakt de hele groep — op het canvas, met het sleepkader en in de objectlijst. Die laatste is het gelijkwaardige alternatief voor aanwijzen op het canvas en moest zich dus hetzelfde gedragen; dat was eerst niet zo en is hersteld toen de browsertest erop viel.
+
+Slepen verplaatst alle leden met dezelfde verschuiving, als één batch en dus één stap terug. Konva verplaatst alleen het aangewezen object; de groepsgenoten krijgen tijdens de sleep dezelfde verschuiving mee, anders valt de groep visueel uit elkaar tot de opdracht landt. Een vergrendeld lid laat de hele verplaatsing afwijzen — dat is dezelfde transactionele regel als elders, met een leesbare melding.
+
+Verificatie 10 september, Linux x64, Node 22.22.2:
+- **139 tests / 23 bestanden geslaagd, 28,2 s** (was 132). Zeven groepstests: selectie uitbreiden, losse objecten met rust laten, twee groepen tegelijk, groeperen en opheffen via opdrachten, de weigering van een groep van één, en het opruimen van een groepsverwijzing nadat leden verwijderd zijn.
+- **16 browserroutes geslaagd, 1,9 min.** De nieuwe route groepeert twee meubels, controleert dat één aanwijzen de groep pakt, sleept ze samen, controleert dat de derde niet meebeweegt, zet het met één stap terug en heft de groep weer op.
+- Schermopname midden in de sleep bekeken: beide leden schuiven mee, de eettafel blijft staan.
+
+De browsertest leest de posities uit het geëxporteerde planblad in plaats van uit het eigenschappenpaneel. Een gegroepeerd meubel aanwijzen toont namelijk het groepspaneel zonder losse coördinaten — dat is juist gedrag, maar de test moest zich eraan aanpassen. Uit het blad lezen toetst meteen de echte uitvoer.
+
+Nog open in fase 2: opt-in lokaal herstel via IndexedDB; de onderlegger verslepen en draaien; PDF-pagina als onderlegger; EXIF verwijderen. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — opt-in lokaal herstel
+
+### Wat er nu gebeurt
+
+De editor kan niet-opgeslagen werk als **klad** in IndexedDB zetten, onder de sleutel `gebruiker:organisatie:variant`. Het staat standaard uit; de statusbalk heeft een schakelaar **Lokaal herstel**. De keuze staat per gebruiker in `localStorage` en gaat niet naar de server.
+
+Er staat hoogstens één klad per ontwerp, want zolang een opdracht niet bevestigd is neemt de editor geen nieuwe opdrachten aan. Het klad bevat de opdracht, het document zoals dit venster het zag, het tijdstip en de naam van de variant.
+
+De statusbalk toont precies één van zes toestanden, uit de pure functie `saveState`: leesmodus, synchroniseren, **niet opgeslagen · alleen in dit venster**, **lokaal bewaard op dit apparaat · nog niet op de server**, server opgeslagen, en **conflict · de server heeft een nieuwere versie**. Het woord back-up komt in geen enkele tekst voor; een test controleert dat op alle labels.
+
+Bij het openen zoekt de editor naar een klad van een eerdere sessie en zet niets automatisch terug. Wat er ligt wordt gemeld, met de keuze om terug te halen, te downloaden of weg te gooien.
+
+**Terughalen kan alleen wanneer het klad exact op de huidige serverrevisie voortbouwt.** Dat is geen voorzichtigheid maar een sluitende redenering: elke aangekomen opdracht verhoogt de revisie, dus een gelijke revisie betekent dat de opdracht nooit is aangekomen. Staat de server verder, dan meldt de balk dat terugsturen niet meer kan en blijven alleen downloaden en weggooien over. Zie ADR 0005 voor het volledige besluit, inclusief waarom de teruggehaalde opdracht een nieuwe opdracht-ID en de lease van dit venster krijgt.
+
+Bij het afmelden worden de kladden van de betreffende gebruiker getoond met naam, revisie en tijdstip, kan er eerst een herstelbestand worden gedownload, en worden ze daarna verwijderd. Kladden van andere gebruikers op dezelfde computer blijven staan: afmelden mag het onopgeslagen werk van een collega niet weggooien.
+
+Zolang er een klad is, blokkeert de editor het verlaten van de pagina niet meer — het werk staat er na terugkomst weer. Zonder klad blijft de bestaande waarschuwing staan.
+
+### Wat er onderweg is gerepareerd
+
+- **Netwerkfouten waren geen `ApiError`.** Een afgebroken verbinding leverde de ruwe `TypeError: Failed to fetch` in de meldingsbalk. `api()` vertaalt dat nu naar een `ApiError` met code `NETWORK` en een Nederlandse melding, zodat elke oproeper netwerk- en serverfouten hetzelfde behandelt.
+- **De eerste geldigheidscontrole op een klad was fout.** Die eiste dat het bewaarde document op de basisrevisie stond, maar de editor past de opdracht meteen lokaal toe, dus het document staat één revisie verder. Elk klad werd daardoor als onbruikbaar weggegooid en de browsertest viel er direct op. De controle laat nu precies nul of één stap toe en legt uit waarom die twee.
+- **De statusbalk kon overlopen** door de extra schakelaar. `.statusbar` schuift nu horizontaal in plaats van de pagina breder te maken; de bestaande tabletcontrole op 1024 px dekt dat af.
+
+### Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+- **151 tests / 22 bestanden geslaagd, 26,8 s** (was 139). Twaalf nieuwe tests op de pure laag: sleutelvorming, de vier uitkomsten van `draftVerdict` inclusief verlopen en zelftegensprekende kladden, alle zes toestanden van `saveState` met de voorrang van conflict, welke toestanden bij weggaan waarschuwen, dat geen enkel label back-up zegt, en dat er zonder IndexedDB geen lokale opslag wordt voorgewend.
+- **17 browserroutes geslaagd, 2,1 min.** De nieuwe route zet lokaal herstel aan, breekt het opslaan af op netwerkniveau, controleert de toestand "lokaal bewaard", herlaadt, vindt het klad terug, controleert dat de server de wijziging niet heeft, haalt het werk terug, ziet het opgeslagen worden en het klad verdwijnen. Daarna een **echt conflict**: een tweede schrijver landt een opdracht op de server, waarna opnieuw opslaan de servermelding `REVISION_CONFLICT` oplevert en de balk op conflict springt. Na herladen biedt de melding geen terughaalknop meer. Tot slot waarschuwt het afmelden, levert het herstelbestand de opdracht en het document op, en verdwijnt het klad.
+- TypeScript strict en productiebuild geslaagd (9,9 s). Bekende chunkgroottewaarschuwing blijft open.
+- Screenshots `outputs/qa/herstel-gevonden.png`, `herstel-conflict.png` en `herstel-afmelden.png` daadwerkelijk bekeken: de melding is leesbaar zonder overlap, de conflicttoestand staat in de balk, en de afmelddialoog noemt het ontwerp bij naam.
+
+### Beperkingen
+
+- Dit is geen offline bewerken en wordt ook niet zo genoemd. Er past één opdracht in het klad; een echte commandobuffer met samenvoegen bij terugkomst hoort bij een later conflictmodel.
+- Het klad staat onversleuteld in het browserprofiel. Daarom staat het uit tenzij de gebruiker het aanzet en verdwijnt het bij afmelden.
+- Mislukt het schrijven — privévenster, geweigerde opslag — dan meldt de editor dat en blijft de toestand "alleen in dit venster". Die mislukking is in de browserroute niet nagespeeld; de node-test dekt alleen het geval zonder IndexedDB.
+- Het conflict in de browserroute wordt gemaakt door een tweede schrijver die dezelfde bewerktoegang hergebruikt. De bewerktoegang is exclusief, dus overname door een tweede echte sessie is een apart scenario dat hier niet is getest.
+
+Nog open in fase 2: de onderlegger verslepen en draaien; PDF-pagina als onderlegger; EXIF verwijderen. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — de onderlegger verplaatsen en draaien
+
+De onderlegger heeft een hoek gekregen, als veld met standaardwaarde in `underlaySchema`; bestaande scenes blijven geldig zonder scene-migratie. Het draaipunt in het model is de linkerbovenhoek, precies zoals de tekenlaag een afbeelding om haar eigen oorsprong draait — zo kunnen model en tekening niet uit elkaar lopen. Wat de gebruiker doet is iets anders: een hoek intikken of een kwartslag maken draait **om het midden**, en de verschuiving die daarbij hoort wordt meteen verrekend in `rotateUnderlay`. Anders zwaait de afbeelding onder je cursor vandaan.
+
+De kalibratie blijft in afbeeldingspixels bewaard en draait dus niet mee: verplaatsen en draaien laten de schaal met rust. `underlayToWorld` en `worldToUnderlay` rekenen de draaiing wel mee, zodat een inmeting na het draaien nog steeds op de juiste plek belandt.
+
+Verplaatsen gaat met een eigen gereedschap, aan te zetten in het onderleggerpaneel. Alleen dan luistert de onderleggerlaag mee en is de afbeelding versleepbaar; in alle andere standen ligt de onderlegger onder alles en vangt hij geen klikken van muren of meubels af. Slepen landt op het raster wanneer rastervangen aan staat. Daarnaast zijn X, Y en de hoek in te tikken.
+
+`fitToProject` gebruikt nu alle vier de hoeken van de onderlegger: een gedraaide afbeelding is geen rechthoek meer en zou anders half buiten beeld vallen.
+
+Onderweg gecorrigeerd: de eerste normalisatie van de kwartslagknop leverde −180 in plaats van 180 graden — dezelfde hoek, maar een verwarrend getal in het veld. De knop houdt nu, net als bij meubels, 0 tot 359 graden aan.
+
+Verificatie 10 september, Linux x64, Node 22.22.2:
+- **156 tests / 22 bestanden geslaagd, 28,7 s** (was 151). Vijf nieuwe onderleggertests: omrekenen om de hoek bij 90 graden, de draaiing in de plaatsing, de vier hoeken van een gedraaide afbeelding, draaien dat het midden op zijn plaats houdt in hele millimeters, en draaien naar dezelfde hoek dat niets verplaatst. De bestaande eigenschapstest met 200 gevallen draait nu ook over willekeurige hoeken van −360 tot 360.
+- **17 browserroutes geslaagd, 2,1 min.** De onderleggerroute plaatst de afbeelding numeriek, draait hem 90 graden, controleert dat de hoek daarbij verschuift, maakt vier kwartslagen en komt binnen 3 mm terug op het beginpunt, sleept de afbeelding over het canvas en controleert dat de plaatsing op hele honderden millimeters landt, en vindt plaats en hoek terug na herladen.
+- TypeScript strict en productiebuild geslaagd (10,4 s).
+- Screenshots `outputs/qa/onderlegger-gedraaid.png` en `onderlegger-verplaatst.png` bekeken: de afbeelding staat na een kwartslag rechtop in plaats van liggend, met het midden op dezelfde plek, en na het slepen op de ingevulde coördinaten.
+
+Beperkingen: draaien gaat via het paneel, niet met een greep op het canvas. De draaiing werkt niet door in het planblad of de 3D-weergave, want de onderlegger komt daar bewust niet in voor — het is een natekenhulp, geen tekeninhoud.
+
+Daarmee zijn de openstaande punten van fase 2 afgewerkt. Nog steeds bewust buiten deze fase gelaten: **PDF-pagina als onderlegger** (zie ADR 0004; vraagt een PDF-engine in de browser) en **EXIF-metadata verwijderen** (vraagt opnieuw encoderen en dus een beeldbibliotheek op de server). Beide staan als open punt genoteerd en zijn geen stille weglating. De symbolenlegenda op het planblad wacht op de elektra- en lichtsymbolen uit fase 4.
+
+## Aanvulling 10 september 2026 — fase 6 van Codex samengevoegd, met twee correcties
+
+`codex/phase-6-completion` ([PR #3](https://github.com/patrickdekker82/madebyjane/pull/3)) is met een merge-commit in deze tak gezet, zodat de commits van Codex met hun oorspronkelijke auteurschap in de geschiedenis blijven. De tak vertrok van `main` en wist niets van het fase-2-werk dat daarna is gemaakt. Wat er binnenkomt: offerte-PDF met vaste bijlagen, prijsbronnen, statusovergangen, intrekbare deellinks, vervolgconcepten en een Windows-afsluitpad voor de testdatabase.
+
+### Wat er bij het samenvoegen is opgelost
+
+- **Twee migrations met nummer 0011.** Deze tak had `0011_underlay_assets.sql`, Codex `0011_quote_workflow.sql`. Git ziet dat niet als conflict — de bestandsnamen verschillen — maar de nummering zou stilzwijgend dubbel zijn. Die van Codex is `0012_quote_workflow.sql` geworden; de inhoud en dus de hash zijn ongewijzigd en het release-manifest noemt nu beide.
+- **Twee namen voor hetzelfde Chromium-pad** in `playwright.config.ts` (`PLAYWRIGHT_EXECUTABLE_PATH` van Codex, `PLAYWRIGHT_CHROMIUM_EXECUTABLE` van hier), waarvan er één stil werd overschreven. Beide worden nu geaccepteerd, met één regel die zegt welke voorgaat.
+- Het offertepaneel kreeg een nieuwe eigenschap `organizationName`; die is meegenomen in de samengevoegde editor.
+
+### De offerte-PDF klopte niet
+
+De bouwstraat van PR #3 was rood en bleef dat om een reden die niets met de merge te maken had: `pnpm probe:quote` kan Chromium niet met sandbox starten op ubuntu-24.04, omdat die versie onbevoorrechte gebruikersnamespaces via AppArmor verbiedt. De sandbox uitzetten om de bouwstraat tevreden te stellen is geen optie; CI zet daarom nu `kernel.apparmor_restrict_unprivileged_userns=0`, precies de oplossing die Chromium zelf aanwijst.
+
+Toen de PDF eenmaal gemaakt kon worden, bleek **de bijgeleverde plattegrond niet op schaal te staan**. Codex' eigen controlescript `scripts/verify-quote-pdf.py` viel er meteen op om, maar het stond nergens in de bouwstraat en was dus nooit gedraaid.
+
+Het planblad is A4 liggend van rand tot rand en heeft daarvoor een eigen paginastijl zonder marges. Het omhullende blok had echter zelf `width:297mm;height:210mm;overflow:hidden` gekregen, en daardoor negeerde Chromium die paginastijl: het blad belandde op een gewone pagina met marges van 17 mm, waarna Chromium het **hele document naar 88,6% kromp**. De schaalbalk die 100 mm hoort te zijn mat 88,6 mm; de plattegrond in de offerte was geen 1:50 maar ongeveer 1:56. Bovendien liep het blad over en kwam er een lege pagina achteraan.
+
+De maten op het omhullende blok zijn weg; de tekening zelf houdt haar eigen maat. Nagemeten in de gemaakte PDF: planblad 296,995 × 209,996 mm op één pagina, schaalbalk 99,998 mm, zeven pagina's zonder lege. Het controlescript draait nu in de bouwstraat, met een gepinde `pdfplumber`, zodat een lay-outfout het planblad niet nog eens ongemerkt kan verkleinen.
+
+Dat een verkeerde maat in een document dat naar een klant gaat als "geverifieerd" kon passeren, komt doordat de controle wel geschreven maar niet uitgevoerd was. Dat is precies het soort claim dat het masterprompt verbiedt.
+
+### Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+- **160 tests / 22 bestanden geslaagd, 33,6 s.** Inclusief de acht offerte-integratietests van Codex, met echte PDF-uitvoer.
+- **17 browserroutes geslaagd, 2,3 min.** De offerteroute downloadt nu een echte PDF, maakt een deellink, trekt die in en controleert dat de ingetrokken link 404 geeft.
+- `pnpm probe:quote` gevolgd door `scripts/verify-quote-pdf.py`: 7 pagina's, 40 unieke posten, exact totaal en een schaalbalk van 100 mm.
+- TypeScript strict en productiebuild geslaagd (10,9 s).
+- Pagina 1 en het planblad van `outputs/qa/offerte-demo.pdf` naar afbeelding gerenderd en bekeken: marges kloppen, het planblad staat compleet op één pagina met tekening, titelblok, legenda en schaalbalk.
+
+**Deze verificatie is niet als root gedraaid.** Chromium weigert te sandboxen als root, dus de testronde is uitgevoerd onder een gewone gebruiker in dezelfde container. Als root falen twee offertetests op het starten van de browser; dat is een eigenschap van deze omgeving, niet van de code. Of de sysctl-instelling op de GitHub-runner het beoogde effect heeft, is hier niet na te bootsen en moet uit de bouwstraat zelf blijken.

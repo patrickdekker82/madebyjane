@@ -10,18 +10,34 @@ import {
   Circle,
   Arc,
   Ellipse,
+  Image as KonvaImage,
 } from "react-konva";
 import type Konva from "konva";
 import type { Scene, Operation, Point } from "../../contracts/src/index";
-import { endpoints, snapPoint, type SnapTarget } from "../../geometry/src/index";
+import {
+  endpoints,
+  snapPoint,
+  itemsInRect,
+  expandSelection,
+  wallOutlines,
+  underlayPlacement,
+  underlayCorners,
+  worldToUnderlay,
+  dimensionGeometry,
+  formatMm,
+  type SnapTarget,
+} from "../../geometry/src/index";
 import { useEditor } from "./store";
 export function PlanCanvas({
   scene,
   onCommand,
+  onCalibrate,
   disabled,
 }: {
   scene: Scene;
   onCommand: (ops: Operation[]) => void;
+  /** Twee aangewezen punten op de onderlegger, in afbeeldingspixels. */
+  onCalibrate?: (from: Point, to: Point) => void;
   disabled: boolean;
 }) {
   const el = useRef<HTMLDivElement>(null),
@@ -39,16 +55,41 @@ export function PlanCanvas({
     objectSnap,
     select,
     toggleSelected,
+    selectMany,
     setZoom,
   } = useEditor();
   const [snapped, setSnapped] = useState<SnapTarget[]>([]);
+  const [underlayImage, setUnderlayImage] = useState<HTMLImageElement | null>(
+    null,
+  );
+  /**
+   * Lopende sleep van een groep. Konva verplaatst alleen het aangewezen object;
+   * de groepsgenoten krijgen dezelfde verschuiving mee zolang de sleep duurt,
+   * zodat de groep niet uit elkaar lijkt te vallen.
+   */
+  const [dragging, setDragging] = useState<{
+    leader: string;
+    ids: string[];
+    dx: number;
+    dy: number;
+  } | null>(null);
+  /** Sleepkader in wereldcoordinaten; alleen actief met het gereedschap Selecteren. */
+  const [band, setBand] = useState<{
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  } | null>(null);
   /**
    * Vangtolerantie: twaalf schermpixels omgerekend naar millimeters. Bij elke
    * zoomstand voelt het vangen daardoor even ver, terwijl de opgeslagen maat
    * nooit met de schermzoom vermenigvuldigd wordt.
    */
+  // Verborgen objecten doen niet mee: niet tekenen, en niet vangen.
+  const visible = scene.items.filter((i) => !i.hidden);
+  const snapScene = { ...scene, items: visible };
   const snapTo = (point: Point, exclude?: string[]) =>
-    snapPoint(scene, point, {
+    snapPoint(snapScene, point, {
       toleranceMm: 12 / zoom,
       grid,
       exclude,
@@ -59,10 +100,23 @@ export function PlanCanvas({
   /** Het hele plan met een rand van 60 px in beeld brengen. */
   const fitToProject = (width: number, height: number) => {
     if (width <= 0 || height <= 0) return;
-    const minX = Math.min(0, ...scene.nodes.map((n) => n.x)),
-      minY = Math.min(0, ...scene.nodes.map((n) => n.y)),
-      maxX = Math.max(6200, ...scene.nodes.map((n) => n.x)),
-      maxY = Math.max(4800, ...scene.nodes.map((n) => n.y));
+    // Maatlijnen en de onderlegger liggen naast de geometrie en kunnen er dus
+    // buiten steken; ook die horen in beeld te komen.
+    // Een gedraaide onderlegger is geen rechthoek meer; alle vier de hoeken tellen.
+    const corners = scene.underlay ? underlayCorners(scene.underlay) : [];
+    const points = [
+      ...scene.nodes,
+      ...corners,
+      ...scene.annotations.flatMap((a) => {
+        if (a.type === "note") return [{ x: a.x, y: a.y }];
+        const d = dimensionGeometry(a.from, a.to, a.offset);
+        return [a.from, a.to, d.line.from, d.line.to];
+      }),
+    ];
+    const minX = Math.min(0, ...points.map((n) => n.x)),
+      minY = Math.min(0, ...points.map((n) => n.y)),
+      maxX = Math.max(6200, ...points.map((n) => n.x)),
+      maxY = Math.max(4800, ...points.map((n) => n.y));
     const fit = Math.min(
       (width - 120) / (maxX - minX),
       (height - 120) / (maxY - minY),
@@ -87,6 +141,42 @@ export function PlanCanvas({
   useEffect(() => {
     setStart(null);
   }, [tool]);
+  /**
+   * De onderlegger wordt met fetch opgehaald in plaats van via een img-src,
+   * omdat een img geen werkruimte-header kan meesturen. De autorisatie op de
+   * route blijft daardoor precies zoals bij alle andere gegevens. De blob-URL
+   * is same-origin en wordt weer vrijgegeven zodra de afbeelding wisselt.
+   */
+  const assetId = scene.underlay?.assetId ?? null,
+    organizationId = scene.organizationId;
+  useEffect(() => {
+    if (!assetId) {
+      setUnderlayImage(null);
+      return;
+    }
+    let url = "";
+    const image = new window.Image();
+    const load = async () => {
+      const response = await fetch("/api/v1/underlay-assets/" + assetId, {
+        credentials: "same-origin",
+        headers: { "x-organization-id": organizationId },
+      });
+      if (!response.ok) return;
+      url = URL.createObjectURL(await response.blob());
+      image.onload = () => setUnderlayImage(image);
+      image.src = url;
+    };
+    void load();
+    return () => {
+      image.onload = null;
+      setUnderlayImage(null);
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [assetId, organizationId]);
+  const rawWorld = () => {
+    const p = stage.current?.getPointerPosition();
+    return p ? { x: (p.x - pan.x) / zoom, y: (p.y - pan.y) / zoom } : null;
+  };
   const world = () => {
     const p = stage.current?.getPointerPosition();
     if (!p) return null;
@@ -119,7 +209,7 @@ export function PlanCanvas({
           },
         },
       ]);
-    } else select(wallId);
+    } else if (tool === "select") select(wallId);
   };
   const click = () => {
     if (disabled || !stage.current) return;
@@ -151,6 +241,63 @@ export function PlanCanvas({
         },
       ]);
       setStart(null);
+    } else if (tool === "measure") {
+      const p = world();
+      if (!p) return;
+      if (!start) {
+        setStart(p);
+        return;
+      }
+      if (p.x === start.x && p.y === start.y) return;
+      onCommand([
+        {
+          type: "AddAnnotation",
+          annotation: {
+            type: "dimension",
+            id: crypto.randomUUID(),
+            from: start,
+            to: p,
+            // Vaste tekenafstand naast de gemeten lijn, aan de linkerzijde van
+            // de tekenrichting. De hulplijnen verbinden hem met de meetpunten.
+            offset: 400,
+          },
+        },
+      ]);
+      setStart(null);
+    } else if (tool === "note") {
+      const p = world();
+      if (!p) return;
+      onCommand([
+        {
+          type: "AddAnnotation",
+          annotation: {
+            type: "note",
+            id: crypto.randomUUID(),
+            x: p.x,
+            y: p.y,
+            text: "Notitie",
+          },
+        },
+      ]);
+      // Meteen terug naar selecteren, zodat de tekst direct te bewerken is.
+      useEditor.getState().setTool("select");
+    } else if (tool === "calibrate") {
+      const underlay = scene.underlay;
+      if (!underlay) return;
+      const p = rawWorld();
+      if (!p) return;
+      if (!start) {
+        setStart(p);
+        return;
+      }
+      if (p.x === start.x && p.y === start.y) return;
+      // De twee punten worden in afbeeldingspixels bewaard, zodat de kalibratie
+      // blijft kloppen wanneer de onderlegger later verschoven wordt.
+      onCalibrate?.(
+        worldToUnderlay(underlay, start),
+        worldToUnderlay(underlay, p),
+      );
+      setStart(null);
     } else if (tool === "select") select(null);
   };
   const wheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -168,6 +315,11 @@ export function PlanCanvas({
     setZoom(next);
   };
   const gridSpacing = (100 * zoom >= 8 ? 100 : 500) * zoom;
+  // Versneden muurcontouren: dikke lijnen met stompe uiteinden laten in elke
+  // hoek een hap open.
+  const outlines = new Map(
+    wallOutlines(scene).map((o) => [o.wallId, o.points]),
+  );
   // Een muurpunt of muur legt een concreet punt vast; dat verdient een markering.
   const anchor = snapped.find((t) => t.kind === "node" || t.kind === "wall");
   const snapMarker =
@@ -188,10 +340,41 @@ export function PlanCanvas({
         height={size.height}
         onWheel={wheel}
         onMouseMove={() => {
-          if (tool === "wall" && start) setCursor(world());
+          if ((tool === "wall" || tool === "measure") && start)
+            setCursor(world());
+          if (tool === "calibrate" && start) setCursor(rawWorld());
+          if (band) {
+            const p = rawWorld();
+            if (p) setBand({ ...band, x2: p.x, y2: p.y });
+          }
+        }}
+        onMouseUp={() => {
+          if (!band) return;
+          const dragged =
+            Math.abs(band.x2 - band.x1) > 5 / zoom ||
+            Math.abs(band.y2 - band.y1) > 5 / zoom;
+          // Een klik zonder sleep blijft gewoon de selectie opheffen.
+          if (dragged)
+            selectMany(
+              expandSelection(scene.items, itemsInRect(visible, band)),
+            );
+          else select(null);
+          setBand(null);
         }}
         onMouseDown={(e) => {
-          if (e.target === stage.current) click();
+          // Meten en muren tekenen moeten juist op bestaande muren en punten
+          // kunnen beginnen; anders is aansluiten op wat er staat onmogelijk.
+          if (
+            tool === "measure" ||
+            tool === "wall" ||
+            tool === "note" ||
+            tool === "calibrate"
+          )
+            return click();
+          if (e.target !== stage.current) return;
+          if (tool !== "select") return click();
+          const p = rawWorld();
+          if (p) setBand({ x1: p.x, y1: p.y, x2: p.x, y2: p.y });
         }}
         onTouchStart={(e) => {
           if (e.target === stage.current) click();
@@ -233,16 +416,59 @@ export function PlanCanvas({
               ),
             )}
         </Layer>
+        <Layer
+          x={pan.x}
+          y={pan.y}
+          scaleX={zoom}
+          scaleY={zoom}
+          // De onderlegger ligt onder alles en mag geen klikken van muren of
+          // meubels afvangen. Alleen met het gereedschap Onderlegger luistert
+          // deze laag mee, en dan is er verder niets aan te wijzen.
+          listening={tool === "underlay" && !disabled}
+        >
+          {scene.underlay &&
+            underlayImage &&
+            (({ x, y, width, height, rotation }) => (
+              <KonvaImage
+                image={underlayImage}
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+                rotation={rotation}
+                opacity={scene.underlay!.opacity / 100}
+                draggable={tool === "underlay" && !disabled}
+                onDragEnd={(event) => {
+                  const grain = grid ? 100 : 1;
+                  const place = (value: number) =>
+                    Math.round(value / grain) * grain;
+                  onCommand([
+                    {
+                      type: "SetUnderlay",
+                      underlay: {
+                        ...scene.underlay!,
+                        x: place(event.target.x()),
+                        y: place(event.target.y()),
+                      },
+                    },
+                  ]);
+                }}
+              />
+            ))(underlayPlacement(scene.underlay))}
+        </Layer>
         <Layer x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom}>
           {scene.walls.map((w) => {
             const { a, b, length } = endpoints(scene, w);
+            const outline = outlines.get(w.id);
             return (
               <Group key={w.id}>
                 <Line
-                  points={[a.x, a.y, b.x, b.y]}
-                  stroke={selected.includes(w.id) ? "#b47b45" : "#465044"}
-                  strokeWidth={w.thickness}
-                  hitStrokeWidth={Math.max(20 / zoom, w.thickness)}
+                  points={(outline ?? []).flatMap((p) => [p.x, p.y])}
+                  closed
+                  fill={selected.includes(w.id) ? "#b47b45" : "#465044"}
+                  // Een dunne muur is bij uitzoomen maar enkele pixels breed;
+                  // deze trefzone rond de contour houdt hem aanwijsbaar.
+                  hitStrokeWidth={20 / zoom}
                   onClick={() => wallClick(w.id)}
                   onTap={() => wallClick(w.id)}
                 />
@@ -307,46 +533,83 @@ export function PlanCanvas({
               </Group>
             );
           })}
-          {scene.items.map((i) => (
+          {visible.map((i) => (
             <Group
               key={i.id}
-              x={i.x}
-              y={i.y}
-              rotation={i.rotation}
-              draggable={!disabled && tool === "select"}
-              onClick={(e) =>
-                e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey
-                  ? toggleSelected(i.id)
-                  : select(i.id)
+              x={
+                dragging &&
+                dragging.ids.includes(i.id) &&
+                dragging.leader !== i.id
+                  ? i.x + dragging.dx
+                  : i.x
               }
+              y={
+                dragging &&
+                dragging.ids.includes(i.id) &&
+                dragging.leader !== i.id
+                  ? i.y + dragging.dy
+                  : i.y
+              }
+              rotation={i.rotation}
+              draggable={!disabled && tool === "select" && !i.locked}
+              onClick={(e) => {
+                if (tool !== "select") return;
+                const group = expandSelection(scene.items, [i.id]);
+                if (e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey)
+                  selectMany(
+                    selected.includes(i.id)
+                      ? selected.filter((id) => !group.includes(id))
+                      : [...new Set([...selected, ...group])],
+                  );
+                else selectMany(group);
+              }}
               onTap={() => select(i.id)}
               onDragStart={() => {
-                if (!useEditor.getState().selected.includes(i.id)) select(i.id);
+                const group = expandSelection(scene.items, [i.id]);
+                if (!useEditor.getState().selected.includes(i.id))
+                  selectMany(group);
+                setDragging({ leader: i.id, ids: group, dx: 0, dy: 0 });
               }}
               onDragMove={(e) => {
+                const moving = expandSelection(scene.items, [i.id]);
                 setSnapped(
-                  snapTo({ x: e.target.x(), y: e.target.y() }, [i.id]).targets,
+                  snapTo({ x: e.target.x(), y: e.target.y() }, moving).targets,
                 );
+                if (moving.length > 1)
+                  setDragging({
+                    leader: i.id,
+                    ids: moving,
+                    dx: e.target.x() - i.x,
+                    dy: e.target.y() - i.y,
+                  });
               }}
               onDragEnd={(e) => {
+                // Het gesleepte object en zijn groepsgenoten vangen niet aan
+                // zichzelf; ze bewegen allemaal met dezelfde verschuiving.
+                const moving = expandSelection(scene.items, [i.id]);
                 const { x, y } = snapTo(
                   { x: e.target.x(), y: e.target.y() },
-                  [i.id],
+                  moving,
                 );
                 e.target.position({ x, y });
                 setSnapped([]);
-                onCommand([
-                  {
-                    type: "TransformItem",
-                    id: i.id,
-                    x,
-                    y,
-                    width: i.width,
-                    depth: i.depth,
-                    rotation: i.rotation,
-                    custom: i.custom,
-                  },
-                ]);
+                setDragging(null);
+                const dx = x - i.x,
+                  dy = y - i.y;
+                onCommand(
+                  scene.items
+                    .filter((other) => moving.includes(other.id))
+                    .map((other) => ({
+                      type: "TransformItem" as const,
+                      id: other.id,
+                      x: other.id === i.id ? x : other.x + dx,
+                      y: other.id === i.id ? y : other.y + dy,
+                      width: other.width,
+                      depth: other.depth,
+                      rotation: other.rotation,
+                      custom: other.custom,
+                    })),
+                );
               }}
             >
               {i.symbol ? (
@@ -456,7 +719,7 @@ export function PlanCanvas({
               )}
             </Group>
           ))}
-          {start && cursor && (
+          {tool === "wall" && start && cursor && (
             <Line
               listening={false}
               points={[start.x, start.y, cursor.x, cursor.y]}
@@ -464,6 +727,104 @@ export function PlanCanvas({
               strokeWidth={180}
               opacity={0.5}
             />
+          )}
+          {scene.annotations.map((annotation) => {
+            const chosen = selected.includes(annotation.id);
+            if (annotation.type === "note")
+              return (
+                <Text
+                  key={annotation.id}
+                  x={annotation.x}
+                  y={annotation.y}
+                  text={annotation.text}
+                  fontSize={13 / zoom}
+                  fill={chosen ? "#a36432" : "#343b32"}
+                  onClick={() => select(annotation.id)}
+                  onTap={() => select(annotation.id)}
+                />
+              );
+            const d = dimensionGeometry(
+              annotation.from,
+              annotation.to,
+              annotation.offset,
+            );
+            return (
+              <Group key={annotation.id} onClick={() => select(annotation.id)}>
+                {d.extensions.map((extension, index) => (
+                  <Line
+                    key={index}
+                    listening={false}
+                    points={[
+                      extension.from.x,
+                      extension.from.y,
+                      extension.to.x,
+                      extension.to.y,
+                    ]}
+                    stroke="#8a8f83"
+                    strokeWidth={1 / zoom}
+                  />
+                ))}
+                <Line
+                  points={[
+                    d.line.from.x,
+                    d.line.from.y,
+                    d.line.to.x,
+                    d.line.to.y,
+                  ]}
+                  stroke={chosen ? "#a36432" : "#4c5148"}
+                  strokeWidth={(chosen ? 2 : 1) / zoom}
+                  hitStrokeWidth={20 / zoom}
+                />
+                <Text
+                  listening={false}
+                  x={d.label.x}
+                  y={d.label.y}
+                  offsetY={14 / zoom}
+                  rotation={d.label.angle}
+                  text={formatMm(d.lengthMm)}
+                  fontSize={12 / zoom}
+                  align="center"
+                  width={2000}
+                  offsetX={1000}
+                  fill="#4c5148"
+                />
+              </Group>
+            );
+          })}
+          {tool === "calibrate" && start && cursor && (
+            <Line
+              listening={false}
+              points={[start.x, start.y, cursor.x, cursor.y]}
+              stroke="#2f6f8f"
+              strokeWidth={2 / zoom}
+            />
+          )}
+          {tool === "measure" && start && cursor && (
+            <>
+              <Line
+                listening={false}
+                points={[start.x, start.y, cursor.x, cursor.y]}
+                stroke="#a36432"
+                strokeWidth={1 / zoom}
+                dash={[10 / zoom, 6 / zoom]}
+              />
+              <Text
+                listening={false}
+                x={(start.x + cursor.x) / 2}
+                y={(start.y + cursor.y) / 2}
+                offsetY={14 / zoom}
+                text={formatMm(
+                  Math.round(
+                    Math.hypot(cursor.x - start.x, cursor.y - start.y),
+                  ),
+                )}
+                fontSize={12 / zoom}
+                align="center"
+                width={2000}
+                offsetX={1000}
+                fill="#a36432"
+              />
+            </>
           )}
           {/* Vangfeedback: hulplijnen bij uitlijnen, een markering op het vangpunt. */}
           {snapped.map((target, index) =>
@@ -482,6 +843,19 @@ export function PlanCanvas({
                 dash={[8 / zoom, 6 / zoom]}
               />
             ) : null,
+          )}
+          {band && (
+            <Rect
+              listening={false}
+              x={Math.min(band.x1, band.x2)}
+              y={Math.min(band.y1, band.y2)}
+              width={Math.abs(band.x2 - band.x1)}
+              height={Math.abs(band.y2 - band.y1)}
+              fill="#a3643222"
+              stroke="#a36432"
+              strokeWidth={1 / zoom}
+              dash={[8 / zoom, 6 / zoom]}
+            />
           )}
           {snapMarker && (
             <Circle

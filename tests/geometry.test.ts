@@ -234,3 +234,83 @@ test("gedeeld muurpunt verplaatst aansluitingen zonder dubbele knopen", () => {
   }
   expect(before.nodes.find((n) => n.id === point.id)!.x).toBe(point.x);
 });
+test("lagen, vergrendelen en zichtbaarheid zijn optioneel en blijven bewaard", () => {
+  const s = demo(),
+    sofa = s.items[0]!,
+    table = s.items[1]!;
+  // Een scene van voor deze velden blijft geldig.
+  expect(sofa.layer).toBeUndefined();
+  expect(validateScene(s).items[0]!.locked).toBeUndefined();
+  const marked = applyOperations(s, [
+    {
+      type: "SetItemDisplay",
+      ids: [sofa.id, table.id],
+      layer: "technical",
+      hidden: true,
+    },
+  ]);
+  expect(marked.items.slice(0, 2).map((i) => i.layer)).toEqual([
+    "technical",
+    "technical",
+  ]);
+  expect(marked.items.slice(2).every((i) => i.layer === undefined)).toBe(true);
+  expect(marked.items[0]!.hidden).toBe(true);
+  // Alleen meegegeven velden veranderen; vergrendeling blijft ongemoeid.
+  expect(marked.items[0]!.locked).toBeUndefined();
+  const unhidden = applyOperations(marked, [
+    { type: "SetItemDisplay", ids: [sofa.id], hidden: false },
+  ]);
+  expect(unhidden.items[0]!.layer).toBe("technical");
+  expect(unhidden.items[0]!.hidden).toBe(false);
+  expect(() =>
+    applyOperations(s, [
+      { type: "SetItemDisplay", ids: [crypto.randomUUID()], locked: true },
+    ]),
+  ).toThrow("niet gevonden");
+});
+
+test("een vergrendeld meubel is niet te verplaatsen of te verwijderen", () => {
+  const s = demo(),
+    sofa = s.items[0]!;
+  const locked = applyOperations(s, [
+    { type: "SetItemDisplay", ids: [sofa.id], locked: true },
+  ]);
+  const move = {
+    type: "TransformItem" as const,
+    id: sofa.id,
+    x: 1,
+    y: 1,
+    width: sofa.width,
+    depth: sofa.depth,
+    rotation: 0,
+    custom: false,
+  };
+  expect(() => applyOperations(locked, [move])).toThrow("vergrendeld");
+  expect(() =>
+    applyOperations(locked, [{ type: "DeleteSelection", ids: [sofa.id] }]),
+  ).toThrow("vergrendeld");
+  // Ontgrendelen mag altijd, ook op een vergrendeld object.
+  const free = applyOperations(locked, [
+    { type: "SetItemDisplay", ids: [sofa.id], locked: false },
+  ]);
+  expect(applyOperations(free, [move]).items[0]!.x).toBe(1);
+});
+
+test("laagvolgorde verandert de tekenvolgorde en niets anders", () => {
+  const s = demo(),
+    ids = s.items.map((i) => i.id);
+  const front = applyOperations(s, [
+    { type: "ReorderItems", ids: [ids[0]!], direction: "front" },
+  ]);
+  expect(front.items.map((i) => i.id)).toEqual([...ids.slice(1), ids[0]!]);
+  expect(front.items).toHaveLength(s.items.length);
+  const back = applyOperations(front, [
+    { type: "ReorderItems", ids: [ids[0]!], direction: "back" },
+  ]);
+  expect(back.items.map((i) => i.id)).toEqual([ids[0]!, ...ids.slice(1)]);
+  expect(() =>
+    applyOperations(s, [
+      { type: "ReorderItems", ids: [crypto.randomUUID()], direction: "front" },
+    ]),
+  ).toThrow("niet gevonden");
+});

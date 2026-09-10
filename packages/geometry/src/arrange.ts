@@ -106,3 +106,27 @@ export function distributeItems(items: Placed[], axis: "x" | "y"): Placement[] {
     };
   });
 }
+
+/**
+ * Objecten binnen een sleepkader. Het kader mag in elke richting getrokken zijn
+ * en werkt op de asgerichte omhullende, dus een gedraaid meubel wordt geraakt
+ * op wat je op het plan ziet. Aanraken is genoeg; een object hoeft niet
+ * helemaal binnen het kader te liggen.
+ */
+export function itemsInRect(
+  items: Placed[],
+  rect: { x1: number; y1: number; x2: number; y2: number },
+): string[] {
+  const minX = Math.min(rect.x1, rect.x2),
+    maxX = Math.max(rect.x1, rect.x2),
+    minY = Math.min(rect.y1, rect.y2),
+    maxY = Math.max(rect.y1, rect.y2);
+  return items
+    .filter((item) => {
+      const b = bounds(item);
+      return (
+        b.minX <= maxX && b.maxX >= minX && b.minY <= maxY && b.maxY >= minY
+      );
+    })
+    .map((item) => item.id);
+}

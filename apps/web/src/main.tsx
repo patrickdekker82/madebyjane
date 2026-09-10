@@ -54,24 +54,45 @@ import {
   Save,
   Grid2X2,
   Magnet,
+  Ruler,
+  StickyNote,
+  EyeOff,
+  Lock,
   Copy,
   X,
   Armchair,
+  HardDriveDownload,
 } from "lucide-react";
 import { api, login, logout, authRequest, ApiError } from "./api";
 import { Arrange } from "./Arrange";
+import { expandSelection } from "../../../packages/geometry/src/grouping";
+import { LayerPanel } from "./Layers";
+import { UnderlayPanel } from "./Underlay";
+import { DimensionProperties, NoteProperties } from "./DimensionProperties";
 import { PlanCanvas } from "../../../packages/editor-2d/src/Canvas";
-import { useEditor } from "../../../packages/editor-2d/src/store";
+import { useEditor, type Tool } from "../../../packages/editor-2d/src/store";
+import {
+  draftKey,
+  draftVerdict,
+  indexedDbDrafts,
+  recoveryEnabled,
+  saveState,
+  saveStateLabel,
+  setRecoveryEnabled,
+  type Draft,
+  type DraftVerdict,
+} from "../../../packages/editor-2d/src/recovery";
 import {
   applyOperations,
   contentOf,
   canWrite,
   type Role,
 } from "../../../packages/domain/src/index";
-import type {
-  Scene,
-  Item,
-  Operation,
+import {
+  sceneSchema,
+  type Scene,
+  type Item,
+  type Operation,
 } from "../../../packages/contracts/src/index";
 import { parseDutchNumber } from "../../../packages/geometry/src/index";
 import "./style.css";
@@ -234,6 +255,8 @@ function App() {
   });
   const navigate = useNavigate();
   const [orgId, setOrgId] = useState("");
+  /** Kladden van deze gebruiker die bij het afmelden nog niet op de server staan. */
+  const [leaving, setLeaving] = useState<Draft[] | null>(null);
   if (probe) return <Outlet />;
   if (query.isPending) return <div className="center">Studio openen…</div>;
   if (query.isError)
@@ -305,16 +328,19 @@ function App() {
             aria-label="Afmelden"
             onClick={async () => {
               try {
-                if (useEditor.getState().hasPending) {
+                const editor = useEditor.getState();
+                if (editor.hasPending && !editor.localDraft) {
                   alert(
                     "Bewaar eerst je lokale herstelbestand of rond het opslaan af.",
                   );
                   return;
                 }
-                await logout();
-                qc.clear();
-                await navigate({ to: "/" });
-                location.reload();
+                const stored = await ownDrafts(me.user.id);
+                if (stored.length) {
+                  setLeaving(stored);
+                  return;
+                }
+                await signOut(navigate);
               } catch (e) {
                 alert((e as Error).message);
               }
@@ -327,8 +353,104 @@ function App() {
       <WorkspaceContext.Provider value={org}>
         <Outlet />
       </WorkspaceContext.Provider>
+      <Dialog.Root
+        open={leaving !== null}
+        onOpenChange={(open) => !open && setLeaving(null)}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="overlay" />
+          <Dialog.Content className="dialog">
+            <Dialog.Title>Er staat werk dat de server niet heeft</Dialog.Title>
+            <Dialog.Description>
+              {leaving?.length === 1
+                ? "Eén ontwerp op dit apparaat"
+                : `${leaving?.length ?? 0} ontwerpen op dit apparaat`}{" "}
+              {leaving?.length === 1 ? "heeft" : "hebben"} nog wijzigingen die
+              niet zijn opgeslagen. Bij het afmelden wordt dit lokale werk van
+              deze computer verwijderd. Download het eerst als je het wilt
+              houden; het is geen back-up en nergens anders bewaard.
+            </Dialog.Description>
+            <Dialog.Close className="dialog-close" aria-label="Sluiten">
+              <X size={18} />
+            </Dialog.Close>
+            <ul className="draft-list">
+              {(leaving ?? []).map((draft) => (
+                <li key={draft.commandId}>
+                  <strong>{draft.label ?? "Ontwerp"}</strong> · werk bovenop
+                  revisie {draft.baseRevision} · bewaard om{" "}
+                  {new Date(draft.savedAt).toLocaleString("nl-NL")}
+                </li>
+              ))}
+            </ul>
+            <div className="dialog-actions">
+              <button
+                onClick={() =>
+                  saveBlob(
+                    new Blob([JSON.stringify(leaving, null, 2)], {
+                      type: "application/json",
+                    }),
+                    "lokaal-herstel.json",
+                  )
+                }
+              >
+                <Download size={15} />
+                Herstelbestand downloaden
+              </button>
+              <button
+                className="danger"
+                onClick={async () => {
+                  try {
+                    await clearOwnDrafts(me.user.id);
+                    await signOut(navigate);
+                  } catch (e) {
+                    alert((e as Error).message);
+                  }
+                }}
+              >
+                Verwijderen en afmelden
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
+}
+/**
+ * Kladden van deze gebruiker, gescheiden van die van anderen op dezelfde
+ * computer: afmelden mag het onopgeslagen werk van een collega niet weggooien.
+ */
+async function ownDrafts(userId: string) {
+  const store = indexedDbDrafts();
+  if (!store) return [];
+  try {
+    const keys = (await store.keys()).filter((k) => k.startsWith(userId + ":"));
+    const found: Draft[] = [];
+    for (const key of keys) {
+      const draft = await store.read(key);
+      if (draft) found.push(draft);
+    }
+    return found;
+  } catch {
+    // Onleesbare opslag: dan valt er ook niets te tonen of te verwijderen.
+    return [];
+  }
+}
+async function clearOwnDrafts(userId: string) {
+  const store = indexedDbDrafts();
+  if (!store) return;
+  for (const key of (await store.keys()).filter((k) =>
+    k.startsWith(userId + ":"),
+  ))
+    await store.clear(key);
+}
+async function signOut(navigate: ReturnType<typeof useNavigate>) {
+  await logout();
+  qc.clear();
+  useEditor.getState().setPending(false);
+  useEditor.getState().setLocalDraft(false);
+  await navigate({ to: "/" });
+  location.reload();
 }
 function useWorkspace() {
   // Root data is reused from the authenticated query; selected organization is provided through route context below.
@@ -597,16 +719,24 @@ function Editor() {
     [view, setView] = useState<"2d" | "3d">("2d");
   const [undo, setUndo] = useState<Scene[]>([]),
     [redo, setRedo] = useState<Scene[]>([]);
+  /** Twee punten die op de onderlegger zijn aangewezen, in afwachting van de maat. */
+  const [calibration, setCalibration] = useState<{
+    from: { x: number; y: number };
+    to: { x: number; y: number };
+  } | null>(null);
   const pending = useRef<{
     commandId: string;
     baseRevision: number;
     leaseId: string;
     operations: Operation[];
   } | null>(null);
+  /** Lokaal bewaard werk staat na terugkomen weer klaar, dus dat hoeft niets te blokkeren. */
+  const wouldLoseWork = () =>
+    pending.current !== null && !useEditor.getState().localDraft;
   useBlocker({
-    enableBeforeUnload: () => pending.current !== null,
+    enableBeforeUnload: () => wouldLoseWork(),
     shouldBlockFn: () => {
-      if (pending.current) {
+      if (wouldLoseWork()) {
         setError(
           "Bewaar eerst je lokale herstelbestand of rond het opslaan af.",
         );
@@ -616,6 +746,72 @@ function Editor() {
     },
   });
   const leaseId = useRef<string>(crypto.randomUUID());
+  const me = useWorkspace();
+  /** Eén opslag per browserprofiel; null wanneer de browser geen IndexedDB heeft. */
+  const drafts = useRef(indexedDbDrafts()).current;
+  const draftName = draftKey(me.user.id, org.id, variantId);
+  const [localRecovery, setLocalRecovery] = useState(() =>
+    recoveryEnabled(me.user.id),
+  );
+  /** Staat de openstaande opdracht ook als klad op dit apparaat? */
+  const [storedLocally, setStoredLocally] = useState(false);
+  /** Een klad dat bij het openen is aangetroffen, met wat ermee kan. */
+  const [found, setFound] = useState<{
+    draft: Draft;
+    verdict: DraftVerdict;
+  } | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const [recoveryNote, setRecoveryNote] = useState("");
+  /**
+   * IndexedDB-werk loopt achter elkaar aan. Anders kan een wegschrijven dat nog
+   * onderweg is een opruimactie inhalen, en blijft er een klad achter voor werk
+   * dat allang op de server staat.
+   */
+  const draftQueue = useRef(Promise.resolve());
+  const queueDraft = (job: () => Promise<void>) => {
+    draftQueue.current = draftQueue.current.then(job).catch((e: Error) => {
+      setRecoveryNote(
+        "Lokaal herstel werkt niet in deze browser: " +
+          e.message +
+          " Je werk staat alleen in dit venster.",
+      );
+    });
+  };
+  const rememberDraft = (
+    cmd: NonNullable<typeof pending.current>,
+    document: Scene,
+  ) => {
+    if (!localRecovery || !drafts) return;
+    const variants = qc.getQueryData<{ id: string; name: string }[]>([
+      "variant-names",
+      org.id,
+      variantId,
+    ]);
+    queueDraft(async () => {
+      await drafts.write(draftName, {
+        savedAt: Date.now(),
+        label: variants?.find((v) => v.id === variantId)?.name,
+        baseRevision: cmd.baseRevision,
+        commandId: cmd.commandId,
+        leaseId: cmd.leaseId,
+        operations: cmd.operations,
+        scene: document,
+      });
+      setStoredLocally(true);
+      useEditor.getState().setLocalDraft(true);
+    });
+  };
+  /** Ook opruimen wanneer de voorkeur intussen uit staat: het klad is van eerder. */
+  const forgetDraft = () => {
+    setStoredLocally(false);
+    useEditor.getState().setLocalDraft(false);
+    if (!drafts) return;
+    queueDraft(async () => {
+      await drafts.clear(draftName);
+      setStoredLocally(false);
+      useEditor.getState().setLocalDraft(false);
+    });
+  };
   const {
     tool,
     setTool,
@@ -628,6 +824,7 @@ function Editor() {
     objectSnap,
     toggleObjectSnap,
     toggleSelected,
+    selectMany,
   } = useEditor();
   useEffect(() => {
     if (query.data) {
@@ -637,6 +834,35 @@ function Editor() {
       select(null);
     }
   }, [query.data, select]);
+  /**
+   * Zoekt bij het openen naar lokaal werk van een eerdere sessie. Er wordt niets
+   * automatisch teruggezet: de gebruiker ziet wat er ligt en kiest zelf.
+   */
+  useEffect(() => {
+    const server = query.data;
+    if (!drafts || !server || pending.current) return;
+    let alive = true;
+    drafts
+      .read(draftName)
+      .then((draft) => {
+        if (!alive) return;
+        const verdict = draftVerdict(draft, server.revision, Date.now());
+        if (verdict === "verlopen" || verdict === "onbruikbaar") {
+          void drafts.clear(draftName);
+          return;
+        }
+        if (verdict === "geen" || !draft) return;
+        setFound({ draft, verdict });
+        useEditor.getState().setLocalDraft(true);
+      })
+      .catch((e: Error) => {
+        if (alive)
+          setRecoveryNote("Lokaal herstel is niet te lezen: " + e.message);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [query.data, draftName, drafts]);
   useEffect(() => {
     if (!canWrite(org.role)) return;
     let alive = true;
@@ -729,7 +955,7 @@ function Editor() {
   }, [variantId, org.id, org.role]);
   useEffect(() => {
     const before = (e: BeforeUnloadEvent) => {
-      if (pending.current) {
+      if (wouldLoseWork()) {
         e.preventDefault();
         e.returnValue = "";
       }
@@ -747,11 +973,15 @@ function Editor() {
       );
       pending.current = null;
       useEditor.getState().setPending(false);
+      forgetDraft();
+      setConflict(false);
       setScene(result.scene);
       setError("");
       setNotice("");
     } catch (e) {
       setError((e as Error).message);
+      if (e instanceof ApiError && e.code === "REVISION_CONFLICT")
+        setConflict(true);
     } finally {
       setBusy(false);
     }
@@ -778,10 +1008,51 @@ function Editor() {
       setScene(next);
       pending.current = cmd;
       useEditor.getState().setPending(true);
+      rememberDraft(cmd, next);
       void send(cmd);
     } catch (e) {
       setError((e as Error).message);
     }
+  };
+  /**
+   * Zet lokaal werk terug en stuurt de opdracht opnieuw. Dit wordt alleen
+   * aangeboden wanneer het klad precies op de revisie staat die de server nu
+   * heeft. Daaruit volgt dat de opdracht nooit is aangekomen, want elke
+   * aangekomen opdracht verhoogt de revisie. De opdracht krijgt daarom een
+   * nieuwe opdracht-ID en de lease van dit venster: de lease van de vorige
+   * sessie bestaat na herladen niet meer, en een replay met een andere lease
+   * zou de server als een andere opdracht met dezelfde ID afwijzen.
+   */
+  const recover = (draft: Draft) => {
+    if (!lease) {
+      setError(
+        "Wacht tot je bewerktoegang hebt en haal het lokale werk daarna terug.",
+      );
+      return;
+    }
+    let document: Scene;
+    try {
+      document = sceneSchema.parse(draft.scene);
+    } catch {
+      setError(
+        "Het lokaal bewaarde ontwerp is niet meer te lezen. Download het herstelbestand en gooi het lokale werk weg.",
+      );
+      return;
+    }
+    const cmd = {
+      commandId: crypto.randomUUID(),
+      baseRevision: draft.baseRevision,
+      leaseId: leaseId.current,
+      operations: draft.operations,
+    };
+    setFound(null);
+    if (scene) setUndo((h) => [...h.slice(-49), scene]);
+    setRedo([]);
+    setScene(document);
+    pending.current = cmd;
+    useEditor.getState().setPending(true);
+    rememberDraft(cmd, document);
+    void send(cmd);
   };
   const history = (direction: "undo" | "redo") => {
     if (!scene || pending.current) return;
@@ -797,6 +1068,50 @@ function Editor() {
     }
     command([{ type: "RestoreContent", content: contentOf(target) }], false);
   };
+  /**
+   * Toetsenbordbediening. Werkt alleen buiten invoervelden, zodat typen in een
+   * maatveld nooit per ongeluk van gereedschap wisselt of iets verwijdert.
+   */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.isContentEditable ||
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "")
+      )
+        return;
+      const meta = event.metaKey || event.ctrlKey;
+      if (meta && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        history(event.shiftKey ? "redo" : "undo");
+        return;
+      }
+      if (meta) return;
+      if (event.key === "Escape") {
+        select(null);
+        setTool("select");
+        return;
+      }
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (!selected.length || disabled) return;
+        event.preventDefault();
+        command([{ type: "DeleteSelection", ids: selected }]);
+        select(null);
+        return;
+      }
+      const shortcuts: Record<string, Tool> = {
+        v: "select",
+        m: "wall",
+        d: "door",
+        r: "window",
+        t: "measure",
+      };
+      const next = shortcuts[event.key.toLowerCase()];
+      if (next && !disabled) setTool(next);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   const add = (kind: Item["kind"]) => {
     const defaults = {
       sofa: {
@@ -865,9 +1180,21 @@ function Editor() {
       </div>
     );
   const single = selected.length === 1 ? selected[0]! : null;
+  const annotation = single
+    ? scene.annotations.find((a) => a.id === single)
+    : undefined;
+  const dimension = annotation?.type === "dimension" ? annotation : undefined;
+  const note = annotation?.type === "note" ? annotation : undefined;
   const item = single ? scene.items.find((i) => i.id === single) : undefined;
   const selectedItems = scene.items.filter((i) => selected.includes(i.id));
   const disabled = busy || !!pending.current || !lease || !canWrite(org.role);
+  const state = saveState({
+    canWrite: lease,
+    syncing: busy,
+    pending: !!pending.current,
+    conflict,
+    storedLocally,
+  });
   return (
     <main className="editor">
       <div className="editor-heading">
@@ -875,7 +1202,7 @@ function Editor() {
           className="back"
           aria-label="Terug naar projecten"
           onClick={() => {
-            if (pending.current) {
+            if (wouldLoseWork()) {
               setError(
                 "Bewaar eerst je lokale herstelbestand of rond het opslaan af.",
               );
@@ -926,6 +1253,8 @@ function Editor() {
               { id: "wall", icon: BrickWall, label: "Muur" },
               { id: "door", icon: DoorOpen, label: "Deur" },
               { id: "window", icon: AppWindow, label: "Raam" },
+              { id: "measure", icon: Ruler, label: "Maat" },
+              { id: "note", icon: StickyNote, label: "Notitie" },
             ] as const
           ).map((t) => (
             <button
@@ -956,8 +1285,19 @@ function Editor() {
           </button>
         </div>
         <span className="tools-spacer" />
-        <Materials organizationId={org.id} projectId={scene.projectId} variantId={variantId} canEdit={canWrite(org.role)} />
-        {["owner", "admin", "finance"].includes(org.role) && <Quotes organizationId={org.id} projectId={scene.projectId} />}
+        <Materials
+          organizationId={org.id}
+          projectId={scene.projectId}
+          variantId={variantId}
+          canEdit={canWrite(org.role)}
+        />
+        {["owner", "admin", "finance"].includes(org.role) && (
+          <Quotes
+            organizationId={org.id}
+            organizationName={org.name}
+            projectId={scene.projectId}
+          />
+        )}
         <Variants
           organizationId={org.id}
           variantId={variantId}
@@ -995,14 +1335,51 @@ function Editor() {
           Revisie bewaren
         </button>
       </div>
-      {(error || leaseError || notice) && (
+      {found && (
+        <div className="editor-message" role="status">
+          <span>
+            <strong>Lokaal werk gevonden op dit apparaat</strong>, bewaard om{" "}
+            {new Date(found.draft.savedAt).toLocaleString("nl-NL")}. Dit is geen
+            back-up: het staat alleen in deze browser, op deze computer.{" "}
+            {found.verdict === "herstelbaar"
+              ? "Het sluit aan op de versie die nu op de server staat en kan opnieuw worden opgeslagen."
+              : "Op de server staat intussen een nieuwere versie, dus dit werk kan niet meer worden teruggestuurd. Download het en zet het handmatig over."}
+          </span>
+          {found.verdict === "herstelbaar" && (
+            <button onClick={() => recover(found.draft)}>
+              Lokaal werk terughalen
+            </button>
+          )}
+          <button
+            onClick={() =>
+              saveBlob(
+                new Blob([JSON.stringify(found.draft, null, 2)], {
+                  type: "application/json",
+                }),
+                "lokaal-herstel.json",
+              )
+            }
+          >
+            Herstelbestand downloaden
+          </button>
+          <button
+            onClick={() => {
+              setFound(null);
+              forgetDraft();
+            }}
+          >
+            Lokaal werk verwijderen
+          </button>
+        </div>
+      )}
+      {(error || leaseError || notice || recoveryNote) && (
         <div
           className={
             error || leaseError ? "editor-message error" : "editor-message"
           }
           role={error || leaseError ? "alert" : "status"}
         >
-          {error || leaseError || notice}
+          {error || leaseError || notice || recoveryNote}
           {pending.current && (
             <>
               <button
@@ -1027,6 +1404,8 @@ function Editor() {
                 onClick={() => {
                   pending.current = null;
                   useEditor.getState().setPending(false);
+                  forgetDraft();
+                  setConflict(false);
                   void query.refetch();
                   setError("");
                 }}
@@ -1090,10 +1469,27 @@ function Editor() {
               </button>
             ))}
           </div>
+          <UnderlayPanel
+            scene={scene}
+            organizationId={org.id}
+            disabled={disabled}
+            pending={calibration}
+            onCommand={command}
+            onCalibrated={() => setCalibration(null)}
+          />
+          <LayerPanel
+            items={scene.items}
+            selected={selected}
+            disabled={disabled}
+            onCommand={command}
+          />
           <div className="objects-heading">
             <span className="eyebrow">OBJECTEN</span>
             <span>
-              {scene.walls.length + scene.items.length + scene.openings.length}
+              {scene.walls.length +
+                scene.items.length +
+                scene.openings.length +
+                scene.annotations.length}
             </span>
           </div>
           <div className="object-list">
@@ -1101,14 +1497,23 @@ function Editor() {
               <button
                 className={selected.includes(i.id) ? "selected" : ""}
                 key={i.id}
-                onClick={(event) =>
-                  event.shiftKey || event.metaKey || event.ctrlKey
-                    ? toggleSelected(i.id)
-                    : select(i.id)
-                }
+                onClick={(event) => {
+                  // De objectlijst is het gelijkwaardige alternatief voor
+                  // aanwijzen op het canvas en pakt dus ook hele groepen.
+                  const group = expandSelection(scene.items, [i.id]);
+                  if (event.shiftKey || event.metaKey || event.ctrlKey)
+                    selectMany(
+                      selected.includes(i.id)
+                        ? selected.filter((id) => !group.includes(id))
+                        : [...new Set([...selected, ...group])],
+                    );
+                  else selectMany(group);
+                }}
               >
                 <span className="color-dot" style={{ background: i.color }} />
                 {i.name}
+                {i.hidden && <EyeOff size={12} />}
+                {i.locked && <Lock size={12} />}
               </button>
             ))}
             {scene.walls.map((w, i) => (
@@ -1131,11 +1536,36 @@ function Editor() {
                 {o.kind === "door" ? "Deur" : "Raam"} {i + 1}
               </button>
             ))}
+            {scene.annotations.map((a, i) => {
+              // Doornummeren per soort, zodat de eerste notitie ook Notitie 1 heet.
+              const rank = scene.annotations
+                .slice(0, i + 1)
+                .filter((other) => other.type === a.type).length;
+              return (
+                <button
+                  key={a.id}
+                  className={selected.includes(a.id) ? "selected" : ""}
+                  onClick={() => select(a.id)}
+                >
+                  {a.type === "note" ? (
+                    <StickyNote size={14} />
+                  ) : (
+                    <Ruler size={14} />
+                  )}
+                  {a.type === "note" ? "Notitie" : "Maat"} {rank}
+                </button>
+              );
+            })}
           </div>
         </aside>
         <section className="drawing">
           {view === "2d" ? (
-            <PlanCanvas scene={scene} onCommand={command} disabled={disabled} />
+            <PlanCanvas
+              scene={scene}
+              onCommand={command}
+              onCalibrate={(from, to) => setCalibration({ from, to })}
+              disabled={disabled}
+            />
           ) : (
             <ViewError>
               <Suspense
@@ -1165,6 +1595,20 @@ function Editor() {
                 item.y
               }
               item={item}
+              disabled={disabled}
+              onCommand={command}
+            />
+          ) : note ? (
+            <NoteProperties
+              key={note.id + ":" + scene.revision}
+              annotation={note}
+              disabled={disabled}
+              onCommand={command}
+            />
+          ) : dimension ? (
+            <DimensionProperties
+              key={dimension.id + ":" + scene.revision}
+              annotation={dimension}
               disabled={disabled}
               onCommand={command}
             />
@@ -1231,13 +1675,7 @@ function Editor() {
       <footer className="statusbar">
         <span>
           <span className={"status-dot " + (disabled ? "muted" : "")} />
-          {busy
-            ? "Synchroniseren…"
-            : pending.current
-              ? "Niet opgeslagen · lokaal werk in dit venster"
-              : lease
-                ? "Server opgeslagen"
-                : "Leesmodus"}
+          {saveStateLabel[state]}
           <span className="status-revision">Revisie {scene.revision}</span>
         </span>
         <div>
@@ -1252,6 +1690,30 @@ function Editor() {
           >
             <Magnet size={13} />
             {objectSnap ? "Vangen aan objecten" : "Vangen uit"}
+          </button>
+          <button
+            className={localRecovery ? "active" : ""}
+            disabled={!drafts}
+            title={
+              drafts
+                ? "Bewaart niet-opgeslagen werk als klad in deze browser, zodat je het na een herlaadbeurt terugvindt. Dit is geen back-up."
+                : "Deze browser biedt geen lokale opslag."
+            }
+            onClick={() => {
+              const next = !localRecovery;
+              setRecoveryEnabled(me.user.id, next);
+              setLocalRecovery(next);
+              if (next) {
+                if (pending.current && scene)
+                  rememberDraft(pending.current, scene);
+              } else {
+                setFound(null);
+                forgetDraft();
+              }
+            }}
+          >
+            <HardDriveDownload size={13} />
+            {localRecovery ? "Lokaal herstel aan" : "Lokaal herstel uit"}
           </button>
           <span>mm</span>
           <button aria-label="Uitzoomen" onClick={() => setZoom(zoom / 1.2)}>
@@ -1294,12 +1756,14 @@ function ItemProperties({
           haar opgeslagen maten.
         </p>
       )}
-      {item.catalog && <div className="small" aria-label="Opgeslagen productgegevens">
-        {item.catalog.category && <p>Categorie: {item.catalog.category}</p>}
-        {item.catalog.supplier && <p>Leverancier: {item.catalog.supplier}</p>}
-        {item.catalog.sku && <p>Artikelnummer: {item.catalog.sku}</p>}
-        {item.catalog.description && <p>{item.catalog.description}</p>}
-      </div>}
+      {item.catalog && (
+        <div className="small" aria-label="Opgeslagen productgegevens">
+          {item.catalog.category && <p>Categorie: {item.catalog.category}</p>}
+          {item.catalog.supplier && <p>Leverancier: {item.catalog.supplier}</p>}
+          {item.catalog.sku && <p>Artikelnummer: {item.catalog.sku}</p>}
+          {item.catalog.description && <p>{item.catalog.description}</p>}
+        </div>
+      )}
       <div className="material-chip">
         <span style={{ background: item.color }} />
         Basismateriaal
@@ -1504,3 +1968,4 @@ createRoot(document.getElementById("root")!).render(
     <RouterProvider router={router} />
   </QueryClientProvider>,
 );
+

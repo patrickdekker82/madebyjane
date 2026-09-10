@@ -91,6 +91,7 @@ export function validateGeometry(scene: Scene) {
     ...scene.walls,
     ...scene.openings,
     ...scene.items,
+    ...scene.annotations,
   ].map((x) => x.id);
   if (new Set(all).size !== all.length) throw new Error("Dubbele object-ID.");
   for (const wall of scene.walls) {
@@ -116,9 +117,34 @@ export function validateGeometry(scene: Scene) {
       throw new Error("Opening heeft geen muur.");
 }
 export { detectRooms, type Room, type RoomDetection } from "./rooms";
+export { wallOutlines, type WallOutline } from "./walls";
+export {
+  expandSelection,
+  groupsIn,
+  singletonGroupMembers,
+  type Groupable,
+} from "./grouping";
+export {
+  underlayScale,
+  underlayPlacement,
+  underlayToWorld,
+  worldToUnderlay,
+  underlayCorners,
+  underlayCenter,
+  rotateUnderlay,
+  ASSUMED_MM_PER_PIXEL,
+  type UnderlayLike,
+  type Calibration,
+} from "./underlay";
+export {
+  dimensionGeometry,
+  formatMm,
+  type DimensionGeometry,
+} from "./dimension";
 export {
   alignItems,
   distributeItems,
+  itemsInRect,
   bounds,
   halfExtent,
   type Placed,

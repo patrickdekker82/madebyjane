@@ -73,22 +73,51 @@ export const symbolShapeSchema = z
   });
 export const symbolSchema = z.array(symbolShapeSchema).min(1).max(32);
 export type SymbolShape = z.infer<typeof symbolShapeSchema>;
-export const catalogSchema = z.object({
-  category: z.string().trim().max(80),
-  description: z.string().trim().max(2000),
-  keywords: z.array(z.string().trim().min(1).max(80)).max(20),
-  supplier: z.string().trim().max(120),
-  sku: z.string().trim().max(120),
-}).strict();
-export const libraryQuerySchema = z.object({
-  offset: z.coerce.number().int().min(0).max(100000).default(0),
-  q: z.string().trim().max(120).default(""),
-  category: z.string().trim().max(80).default(""),
-}).strict();
+export const catalogSchema = z
+  .object({
+    category: z.string().trim().max(80),
+    description: z.string().trim().max(2000),
+    keywords: z.array(z.string().trim().min(1).max(80)).max(20),
+    supplier: z.string().trim().max(120),
+    sku: z.string().trim().max(120),
+  })
+  .strict();
+export const libraryQuerySchema = z
+  .object({
+    offset: z.coerce.number().int().min(0).max(100000).default(0),
+    q: z.string().trim().max(120).default(""),
+    category: z.string().trim().max(80).default(""),
+  })
+  .strict();
+/**
+ * Laagindeling van het plan. Ontbreekt de laag bij een ouder object, dan telt
+ * het als inrichting; oude scenes blijven daardoor geldig zonder migratie.
+ */
+export const itemLayers = {
+  furniture: "Inrichting",
+  finish: "Afwerking",
+  electrical: "Elektra",
+  lighting: "Verlichting",
+  technical: "Technische presentatie",
+} as const;
+export const itemLayerSchema = z.enum([
+  "furniture",
+  "finish",
+  "electrical",
+  "lighting",
+  "technical",
+]);
+export type ItemLayer = z.infer<typeof itemLayerSchema>;
 export const itemSchema = z
   .object({
     id,
     name: z.string().trim().min(1).max(120),
+    layer: itemLayerSchema.optional(),
+    /** Vergrendelde objecten blijven zichtbaar maar zijn niet te verplaatsen of te verwijderen. */
+    locked: z.boolean().optional(),
+    /** Gedeelde verwijzing tussen objecten die als geheel bewegen. */
+    groupId: id.optional(),
+    hidden: z.boolean().optional(),
     x: mm,
     y: mm,
     width: size,
@@ -99,7 +128,10 @@ export const itemSchema = z
     custom: z.boolean(),
     symbol: symbolSchema.optional(),
     catalog: catalogSchema.optional(),
-    model: z.object({ assetId: id, width: size, depth: size, height: size }).strict().optional(),
+    model: z
+      .object({ assetId: id, width: size, depth: size, height: size })
+      .strict()
+      .optional(),
     libraryRef: z
       .object({
         entryId: id,
@@ -111,6 +143,88 @@ export const itemSchema = z
     kind: z.enum(["sofa", "table", "cabinet", "light"]),
   })
   .strict();
+/**
+ * Annotaties op het tekenblad. De gemeten lengte wordt niet opgeslagen: die is
+ * afgeleid uit de twee punten, zodat een maatlijn nooit iets anders kan beweren
+ * dan de geometrie zegt. `offset` is de loodrechte verschuiving van de maatlijn
+ * ten opzichte van de gemeten lijn, zodat hij naast het object komt te liggen.
+ */
+export const annotationSchema = z
+  .discriminatedUnion("type", [
+    z
+      .object({
+        type: z.literal("dimension"),
+        id,
+        from: z.object({ x: mm, y: mm }).strict(),
+        to: z.object({ x: mm, y: mm }).strict(),
+        offset: z.number().int().min(-10000).max(10000),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("note"),
+        id,
+        x: mm,
+        y: mm,
+        text: z.string().trim().min(1).max(300),
+      })
+      .strict(),
+  ])
+  .superRefine((annotation, ctx) => {
+    if (
+      annotation.type === "dimension" &&
+      annotation.from.x === annotation.to.x &&
+      annotation.from.y === annotation.to.y
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "Een maatlijn heeft twee verschillende punten nodig.",
+      });
+  });
+export type Annotation = z.infer<typeof annotationSchema>;
+/**
+ * Onderlegger per verdieping: een foto of scan om op na te tekenen. De schaal
+ * staat er bewust niet in; die volgt uit de twee kalibratiepunten en de
+ * opgegeven werkelijke afstand. Zonder kalibratie geldt een aangenomen schaal
+ * die de interface als schatting moet tonen.
+ */
+export const underlaySchema = z
+  .object({
+    assetId: id,
+    widthPx: z.number().int().min(1).max(20000),
+    heightPx: z.number().int().min(1).max(20000),
+    x: mm,
+    y: mm,
+    /**
+     * Graden met de klok mee om de linkerbovenhoek. Standaardwaarde, dus
+     * scenes van voor deze stap blijven geldig zonder scene-migratie.
+     */
+    rotation: z.number().finite().min(-360).max(360).default(0),
+    opacity: z.number().int().min(10).max(100),
+    calibration: z
+      .object({
+        from: z
+          .object({ x: z.number().finite(), y: z.number().finite() })
+          .strict(),
+        to: z
+          .object({ x: z.number().finite(), y: z.number().finite() })
+          .strict(),
+        lengthMm: z.number().int().min(1).max(100000),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict()
+  .superRefine((underlay, ctx) => {
+    const c = underlay.calibration;
+    if (c && c.from.x === c.to.x && c.from.y === c.to.y)
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Kalibreren vraagt twee verschillende punten op de afbeelding.",
+      });
+  });
+export type Underlay = z.infer<typeof underlaySchema>;
 export const sceneSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -123,6 +237,8 @@ export const sceneSchema = z
     walls: z.array(wallSchema).max(1000),
     openings: z.array(openingSchema).max(500),
     items: z.array(itemSchema).max(2000),
+    annotations: z.array(annotationSchema).max(500).default([]),
+    underlay: underlaySchema.nullable().default(null),
   })
   .strict();
 export type Scene = z.infer<typeof sceneSchema>;
@@ -142,6 +258,22 @@ export const operationSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   z.object({ type: z.literal("RestoreRevision"), revisionId: id }).strict(),
+  z
+    .object({
+      type: z.literal("SetItemDisplay"),
+      ids: z.array(id).min(1).max(500),
+      layer: itemLayerSchema.optional(),
+      locked: z.boolean().optional(),
+      hidden: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("ReorderItems"),
+      ids: z.array(id).min(1).max(500),
+      direction: z.enum(["front", "back", "forward", "backward"]),
+    })
+    .strict(),
   z
     .object({
       type: z.literal("AddWall"),
@@ -172,6 +304,36 @@ export const operationSchema = z.discriminatedUnion("type", [
     .strict(),
   z.object({ type: z.literal("PlaceItem"), item: itemSchema }).strict(),
   z
+    .object({ type: z.literal("AddAnnotation"), annotation: annotationSchema })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SetUnderlay"),
+      underlay: underlaySchema.nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SetAnnotationOffset"),
+      id,
+      offset: z.number().int().min(-10000).max(10000),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SetItemGroup"),
+      ids: z.array(id).min(1).max(500),
+      groupId: id.nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SetAnnotationText"),
+      id,
+      text: z.string().trim().min(1).max(300),
+    })
+    .strict(),
+  z
     .object({
       type: z.literal("TransformItem"),
       id,
@@ -197,6 +359,8 @@ export const operationSchema = z.discriminatedUnion("type", [
         walls: true,
         openings: true,
         items: true,
+        annotations: true,
+        underlay: true,
       }),
     })
     .strict(),

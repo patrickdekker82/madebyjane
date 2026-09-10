@@ -3,6 +3,7 @@ import {
   distributeItems,
   type Alignment,
 } from "../../../packages/geometry/src/arrange";
+import { groupsIn } from "../../../packages/geometry/src/grouping";
 import type { Item, Operation } from "../../../packages/contracts/src/index";
 import {
   AlignStartVertical,
@@ -13,6 +14,8 @@ import {
   AlignEndHorizontal,
   AlignHorizontalSpaceAround,
   AlignVerticalSpaceAround,
+  Group as GroupIcon,
+  Ungroup,
 } from "lucide-react";
 
 const alignments: [Alignment, string, typeof AlignStartVertical][] = [
@@ -37,6 +40,10 @@ export function Arrange({
   disabled: boolean;
   onCommand: (operations: Operation[]) => void;
 }) {
+  const groups = groupsIn(items, items.map((item) => item.id));
+  // Een groep die de hele selectie al beslaat, opnieuw groeperen verandert niets.
+  const fullyGrouped =
+    groups.length === 1 && items.every((item) => item.groupId === groups[0]);
   const apply = (placements: { id: string; x: number; y: number }[]) => {
     const operations = placements.flatMap((placement): Operation[] => {
       const item = items.find((i) => i.id === placement.id);
@@ -94,6 +101,47 @@ export function Arrange({
           <AlignVerticalSpaceAround size={15} />
         </button>
       </div>
+      <div className="arrange-row pair">
+        <button
+          aria-label="Groeperen"
+          title="Groeperen"
+          disabled={disabled || items.length < 2 || fullyGrouped}
+          onClick={() =>
+            onCommand([
+              {
+                type: "SetItemGroup",
+                ids: items.map((item) => item.id),
+                groupId: crypto.randomUUID(),
+              },
+            ])
+          }
+        >
+          <GroupIcon size={15} />
+        </button>
+        <button
+          aria-label="Groep opheffen"
+          title="Groep opheffen"
+          disabled={disabled || !groups.length}
+          onClick={() =>
+            onCommand([
+              {
+                type: "SetItemGroup",
+                ids: items.map((item) => item.id),
+                groupId: null,
+              },
+            ])
+          }
+        >
+          <Ungroup size={15} />
+        </button>
+      </div>
+      {!!groups.length && (
+        <p className="small">
+          {groups.length === 1
+            ? "Deze meubels vormen een groep en bewegen samen."
+            : `${groups.length} groepen geselecteerd; opheffen maakt ze allemaal los.`}
+        </p>
+      )}
       {items.length < 3 && (
         <p className="small">
           Gelijk verdelen vraagt minimaal drie meubels; de buitenste blijven

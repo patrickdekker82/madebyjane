@@ -1,9 +1,13 @@
 import { useState, useRef } from "react";
+import { QuoteResources } from "./QuoteResources";
+import { QuoteActions } from "./QuoteActions";
+import { quoteStatuses } from "../../../packages/contracts/src/quotes";
 import * as Dialog from "@radix-ui/react-dialog";
 import { api, ApiError } from "./api";
 import {
   quoteDefinitionSchema,
   type QuoteRecord,
+  type QuoteSummary,
   type QuoteDefinition,
   type QuoteLine,
 } from "../../../packages/contracts/src/quotes";
@@ -38,12 +42,14 @@ const newLine = (): QuoteLine => ({
 export function Quotes({
   organizationId,
   projectId,
+  organizationName,
 }: {
   organizationId: string;
   projectId: string;
+  organizationName?: string;
 }) {
   const [open, setOpen] = useState(false),
-    [rows, setRows] = useState<QuoteRecord[]>([]),
+    [rows, setRows] = useState<QuoteSummary[]>([]),
     [editing, setEditing] = useState(false),
     [row, setRow] = useState<QuoteRecord | null>(null),
     [value, setValue] = useState(fresh),
@@ -54,6 +60,7 @@ export function Quotes({
       {
         lineId: string;
         name: string;
+        kind?: string;
         latestVersionId: string;
         previous: any;
         current: any;
@@ -64,7 +71,7 @@ export function Quotes({
   const endpoint = `/projects/${projectId}/quotes`;
   const load = async () => {
     setRows(
-      (await api<{ items: QuoteRecord[] }>(endpoint, organizationId)).items,
+      (await api<{ items: QuoteSummary[] }>(endpoint, organizationId)).items,
     );
   };
   const run = async (fn: () => Promise<void>) => {
@@ -80,11 +87,24 @@ export function Quotes({
   };
   const edit = (r: QuoteRecord | null) => {
     setRow(r);
-    setValue(r ? structuredClone(r.definition) : fresh());
+    setValue(
+      r
+        ? structuredClone(r.definition)
+        : { ...fresh(), seller: organizationName ?? "" },
+    );
     setEditing(true);
     setDifferences([]);
     setError("");
     newId.current = crypto.randomUUID();
+  };
+  const openVersion = async (q: { id: string; version: number }) => {
+    edit(
+      await api<QuoteRecord>(
+        `${endpoint}/${q.id}/versions/${q.version}`,
+        organizationId,
+      ),
+    );
+    await load();
   };
   const save = async (finalize = false) => {
     if (!pending.current) {
@@ -125,7 +145,12 @@ export function Quotes({
   };
   const result = quoteDefinitionSchema.safeParse(value);
   const totals = result.success ? calculateQuote(result.data) : null;
-  const frozen = !!row?.number;
+  const latestVersion = Math.max(
+    row?.version ?? 0,
+    ...rows.filter((r) => r.id === row?.id).map((r) => r.version),
+  );
+  const historical = !!row && row.version < latestVersion;
+  const frozen = !!row?.number || historical;
   const dirty = row
     ? JSON.stringify(value) !== JSON.stringify(row.definition)
     : JSON.stringify(value) !== JSON.stringify(fresh());
@@ -193,11 +218,18 @@ export function Quotes({
                   </h3>
                   <p>
                     Versie {r.version} · {money(r.totals.total)} ·{" "}
-                    {r.number
-                      ? "Definitief · niet door de app verzonden"
-                      : "Bewerkbaar concept"}
+                    {r.status && !["draft", "final"].includes(r.status)
+                      ? quoteStatuses[r.status]
+                      : r.number
+                        ? "Definitief · niet door de app verzonden"
+                        : "Bewerkbaar concept"}
                   </p>
-                  <button onClick={() => edit(r)}>Open offerte</button>
+                  <button
+                    disabled={busy}
+                    onClick={() => void run(() => openVersion(r))}
+                  >
+                    Open offerte
+                  </button>
                 </article>
               ))}
               <Dialog.Close asChild>
@@ -253,6 +285,16 @@ export function Quotes({
                   </label>
                 </div>
                 <label>
+                  Bedrijfsgegevens afzender
+                  <textarea
+                    maxLength={2000}
+                    value={value.seller ?? ""}
+                    onChange={(e) =>
+                      setValue({ ...value, seller: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
                   Klant / bedrijf en adres
                   <textarea
                     value={value.customer}
@@ -299,13 +341,17 @@ export function Quotes({
                           ["taxCategory", "Belastingcategorie"],
                           ["taxRate", "Tarief %"],
                           ["priceNote", "Prijsbron / datum"],
+                          [
+                            "overlapReason",
+                            "Onderbouwing mogelijke dubbeltelling",
+                          ],
                         ] as const
                       ).map(([key, label]) => (
                         <label key={key}>
                           {label}
                           <input
                             aria-label={`${label} post ${i + 1}`}
-                            value={l[key]}
+                            value={l[key] ?? ""}
                             onChange={(e) => updateLine(i, key, e.target.value)}
                           />
                         </label>
@@ -402,9 +448,33 @@ export function Quotes({
                   </p>
                 </section>
               )}
+              <QuoteResources
+                key={`${row?.id ?? newId.current}:${row?.version ?? 0}`}
+                organizationId={organizationId}
+                projectId={projectId}
+                value={value}
+                onChange={setValue}
+                disabled={busy || frozen || !!pending.current}
+                onBusy={setBusy}
+              />
               {differences.map((d) => (
-                <article key={d.lineId}>
+                <article key={`${d.lineId}:${d.kind}`}>
                   <h4>Gewijzigd: {d.name}</h4>
+                  {d.kind === "price" && (
+                    <p>
+                      Prijs was {d.previous.unitPrice} EUR, nu{" "}
+                      {d.current.unitPrice} EUR. Prijsdatum {d.current.date} ·{" "}
+                      {d.current.note}
+                    </p>
+                  )}
+                  {d.kind === "design" && (
+                    <p>
+                      Het actuele ontwerp is revisie {d.current.revision}; deze
+                      post blijft gekoppeld aan revisie {d.previous.revision}.
+                      Voor de nieuwste inhoud: bewaar een nieuwe ontwerprevisie
+                      en voeg het object en planblad daarvan opnieuw toe.
+                    </p>
+                  )}
                   <p>
                     Was: {d.previous.name} · {d.previous.quantity ?? "onbekend"}{" "}
                     {d.previous.unit}. Nu: {d.current.name} ·{" "}
@@ -415,7 +485,7 @@ export function Quotes({
                     {d.current.supplier} · {d.current.sku} ·{" "}
                     {d.current.colorCode}.
                   </p>
-                  {!frozen && (
+                  {!frozen && d.kind !== "design" && (
                     <button
                       disabled={busy || !!pending.current}
                       onClick={() => {
@@ -423,25 +493,43 @@ export function Quotes({
                           ...value,
                           lines: value.lines.map((l) =>
                             l.id === d.lineId
-                              ? {
-                                  ...l,
-                                  description: d.current.name,
-                                  quantity: d.current.quantity ?? "",
-                                  unit: d.current.unit,
-                                  source: {
-                                    ...l.source!,
-                                    versionId: d.latestVersionId,
-                                  },
-                                }
+                              ? d.kind === "price"
+                                ? {
+                                    ...l,
+                                    unitPrice: d.current.unitPrice,
+                                    unit: d.current.unit,
+                                    taxCategory: d.current.taxCategory,
+                                    taxRate: d.current.taxRate,
+                                    priceNote:
+                                      `${d.current.date} · ${d.current.note}`.slice(
+                                        0,
+                                        300,
+                                      ),
+                                    priceRef: { id: d.latestVersionId },
+                                  }
+                                : {
+                                    ...l,
+                                    description: d.current.name,
+                                    quantity: d.current.quantity ?? "",
+                                    unit: d.current.unit,
+                                    source: {
+                                      ...l.source!,
+                                      versionId: d.latestVersionId,
+                                    },
+                                  }
                               : l,
                           ),
                         });
                         setDifferences(
-                          differences.filter((x) => x.lineId !== d.lineId),
+                          differences.filter(
+                            (x) => x.lineId !== d.lineId || x.kind !== d.kind,
+                          ),
                         );
                       }}
                     >
-                      Nieuwe materiaalgegevens overnemen; prijs behouden
+                      {d.kind === "price"
+                        ? "Nieuwe prijsversie overnemen"
+                        : "Nieuwe materiaalgegevens overnemen; prijs behouden"}
                     </button>
                   )}
                 </article>
@@ -457,7 +545,7 @@ export function Quotes({
                     : "Concept bewaren"}
                 </button>
               )}
-              {row && (
+              {row && !historical && (
                 <button
                   disabled={busy || dirty || !!pending.current}
                   onClick={() =>
@@ -499,9 +587,21 @@ export function Quotes({
               )}
               {frozen && (
                 <p>
-                  Deze versie is vastgezet. Presentatiebijlagen, PDF-export en
-                  verdere statusovergangen zijn nog niet beschikbaar.
+                  Deze versie is vastgezet. Bekijk de geschiedenis of maak
+                  vanuit de nieuwste definitieve versie een vervolgconcept.
                 </p>
+              )}
+              {row && (
+                <QuoteActions
+                  key={`${row.id}:${row.version}:${row.event_version ?? 0}`}
+                  organizationId={organizationId}
+                  projectId={projectId}
+                  row={row}
+                  disabled={busy || dirty || !!pending.current}
+                  latestVersion={latestVersion}
+                  onOpen={openVersion}
+                  onBusy={setBusy}
+                />
               )}
               <button
                 disabled={busy || !!pending.current}

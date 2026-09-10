@@ -5,6 +5,7 @@ import {
   distributeItems,
   bounds,
   halfExtent,
+  itemsInRect,
   type Placed,
 } from "../packages/geometry/src/arrange";
 
@@ -150,4 +151,33 @@ test("uitkomsten zijn altijd hele millimeters", () => {
     ),
     { numRuns: 200 },
   );
+});
+
+test("een sleepkader raakt objecten die het kader aanraken", () => {
+  const items = [
+    placed("a", 1000, 1000, 1000, 400),
+    placed("b", 5000, 1000, 1000, 400),
+    placed("c", 1000, 5000, 1000, 400),
+  ];
+  const rect = { x1: 0, y1: 0, x2: 2000, y2: 2000 };
+  expect(itemsInRect(items, rect)).toEqual(["a"]);
+  // Alleen de rand raken is genoeg: a loopt van 500 tot 1500.
+  expect(itemsInRect(items, { x1: 1500, y1: 1000, x2: 1600, y2: 1100 })).toEqual(["a"]);
+  expect(itemsInRect(items, { x1: 1501, y1: 1000, x2: 1600, y2: 1100 })).toEqual([]);
+  // Het kader mag van rechtsonder naar linksboven getrokken zijn.
+  expect(itemsInRect(items, { x1: 2000, y1: 2000, x2: 0, y2: 0 })).toEqual(["a"]);
+  expect(itemsInRect(items, { x1: -1000, y1: -1000, x2: 9000, y2: 9000 })).toEqual([
+    "a",
+    "b",
+    "c",
+  ]);
+});
+
+test("het sleepkader gebruikt de gedraaide omhullende", () => {
+  const upright = placed("a", 1000, 1000, 400, 3000);
+  const turned = placed("b", 6000, 1000, 400, 3000, 90);
+  // Gedraaid is b 3000 breed: van 4500 tot 7500.
+  expect(itemsInRect([upright, turned], { x1: 4600, y1: 900, x2: 4700, y2: 1100 })).toEqual(["b"]);
+  // Ongedraaid zou b daar niet komen.
+  expect(itemsInRect([{ ...turned, rotation: 0 }], { x1: 4600, y1: 900, x2: 4700, y2: 1100 })).toEqual([]);
 });

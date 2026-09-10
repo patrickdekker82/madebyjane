@@ -1,8 +1,19 @@
 import { create } from "zustand";
-export type Tool = "select" | "wall" | "door" | "window";
+export type Tool =
+  | "select"
+  | "wall"
+  | "door"
+  | "window"
+  | "measure"
+  | "note"
+  | "calibrate"
+  | "underlay";
 export const useEditor = create<{
   hasPending: boolean;
   setPending: (value: boolean) => void;
+  /** Staat het onbevestigde werk ook als klad op dit apparaat? */
+  localDraft: boolean;
+  setLocalDraft: (value: boolean) => void;
   tool: Tool;
   /** Meerdere objecten tegelijk; bij een enkele selectie is dit een lijst van een. */
   selected: string[];
@@ -21,6 +32,8 @@ export const useEditor = create<{
 }>((set) => ({
   hasPending: false,
   setPending: (hasPending) => set({ hasPending }),
+  localDraft: false,
+  setLocalDraft: (localDraft) => set({ localDraft }),
   tool: "select",
   selected: [],
   zoom: 0.09,

@@ -5,6 +5,8 @@ import {
   type Operation,
 } from "../../contracts/src/index";
 import { validateGeometry } from "../../geometry/src/index";
+import { reorder } from "./order";
+import { singletonGroupMembers } from "../../geometry/src/grouping";
 export class DomainError extends Error {
   constructor(
     public code: string,
@@ -72,9 +74,67 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
       case "PlaceItem":
         s.items.push(op.item);
         break;
+      case "SetUnderlay":
+        s.underlay = op.underlay;
+        break;
+      case "AddAnnotation":
+        s.annotations.push(op.annotation);
+        break;
+      case "SetAnnotationOffset": {
+        const annotation = s.annotations.find((a) => a.id === op.id);
+        if (!annotation || annotation.type !== "dimension")
+          throw new Error("Maatlijn niet gevonden.");
+        annotation.offset = op.offset;
+        break;
+      }
+      case "SetAnnotationText": {
+        const annotation = s.annotations.find((a) => a.id === op.id);
+        if (!annotation || annotation.type !== "note")
+          throw new Error("Notitie niet gevonden.");
+        annotation.text = op.text;
+        break;
+      }
+      case "SetItemGroup": {
+        const targets = s.items.filter((i) => op.ids.includes(i.id));
+        if (targets.length !== op.ids.length)
+          throw new Error("Meubel niet gevonden.");
+        if (op.groupId !== null && targets.length < 2)
+          throw new Error("Een groep heeft minimaal twee meubels nodig.");
+        for (const item of targets)
+          if (op.groupId === null) delete item.groupId;
+          else item.groupId = op.groupId;
+        break;
+      }
+      case "SetItemDisplay": {
+        const targets = s.items.filter((i) => op.ids.includes(i.id));
+        if (targets.length !== op.ids.length)
+          throw new Error("Meubel niet gevonden.");
+        for (const item of targets) {
+          if (op.layer !== undefined) item.layer = op.layer;
+          if (op.locked !== undefined) item.locked = op.locked;
+          if (op.hidden !== undefined) item.hidden = op.hidden;
+        }
+        break;
+      }
+      case "ReorderItems": {
+        if (!op.ids.every((id) => s.items.some((i) => i.id === id)))
+          throw new Error("Meubel niet gevonden.");
+        const order = reorder(
+          s.items.map((i) => i.id),
+          op.ids,
+          op.direction,
+        );
+        s.items = order.map((id) => s.items.find((i) => i.id === id)!);
+        break;
+      }
       case "TransformItem": {
         const item = s.items.find((i) => i.id === op.id);
         if (!item) throw new Error("Meubel niet gevonden.");
+        // Vergrendelen moet ook gelden wanneer de opdracht niet uit de editor komt.
+        if (item.locked)
+          throw new Error(
+            "Dit meubel is vergrendeld. Ontgrendel het eerst om het te verplaatsen.",
+          );
         if (!op.custom && (item.width !== op.width || item.depth !== op.depth))
           throw new Error("Kies eerst maatwerk om handelsmaten te wijzigen.");
         Object.assign(item, {
@@ -88,7 +148,12 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
         break;
       }
       case "DeleteSelection":
+        if (s.items.some((i) => op.ids.includes(i.id) && i.locked))
+          throw new Error(
+            "Dit meubel is vergrendeld. Ontgrendel het eerst om het te verwijderen.",
+          );
         s.items = s.items.filter((i) => !op.ids.includes(i.id));
+        s.annotations = s.annotations.filter((a) => !op.ids.includes(a.id));
         s.walls = s.walls.filter((w) => !op.ids.includes(w.id));
         s.openings = s.openings.filter(
           (o) =>
@@ -103,11 +168,24 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
         break;
     }
   }
+  // Een groep van een enkel object groepeert niets; die verwijzing hoort weg,
+  // bijvoorbeeld nadat de andere leden verwijderd zijn.
+  for (const id of singletonGroupMembers(s.items)) {
+    const item = s.items.find((i) => i.id === id);
+    if (item) delete item.groupId;
+  }
   s.revision++;
   return validateScene(s);
 }
-export const contentOf = ({ nodes, walls, openings, items }: Scene) =>
-  structuredClone({ nodes, walls, openings, items });
+export const contentOf = ({
+  nodes,
+  walls,
+  openings,
+  items,
+  annotations,
+  underlay,
+}: Scene) =>
+  structuredClone({ nodes, walls, openings, items, annotations, underlay });
 export type Role = "owner" | "admin" | "designer" | "finance" | "viewer";
 export function canWrite(role: Role) {
   return ["owner", "admin", "designer"].includes(role);
