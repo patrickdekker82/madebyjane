@@ -427,3 +427,43 @@ Verificatie 10 september, Linux x64, Node 22.22.2:
 De browsertest leest de posities uit het geëxporteerde planblad in plaats van uit het eigenschappenpaneel. Een gegroepeerd meubel aanwijzen toont namelijk het groepspaneel zonder losse coördinaten — dat is juist gedrag, maar de test moest zich eraan aanpassen. Uit het blad lezen toetst meteen de echte uitvoer.
 
 Nog open in fase 2: opt-in lokaal herstel via IndexedDB; de onderlegger verslepen en draaien; PDF-pagina als onderlegger; EXIF verwijderen. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — opt-in lokaal herstel
+
+### Wat er nu gebeurt
+
+De editor kan niet-opgeslagen werk als **klad** in IndexedDB zetten, onder de sleutel `gebruiker:organisatie:variant`. Het staat standaard uit; de statusbalk heeft een schakelaar **Lokaal herstel**. De keuze staat per gebruiker in `localStorage` en gaat niet naar de server.
+
+Er staat hoogstens één klad per ontwerp, want zolang een opdracht niet bevestigd is neemt de editor geen nieuwe opdrachten aan. Het klad bevat de opdracht, het document zoals dit venster het zag, het tijdstip en de naam van de variant.
+
+De statusbalk toont precies één van zes toestanden, uit de pure functie `saveState`: leesmodus, synchroniseren, **niet opgeslagen · alleen in dit venster**, **lokaal bewaard op dit apparaat · nog niet op de server**, server opgeslagen, en **conflict · de server heeft een nieuwere versie**. Het woord back-up komt in geen enkele tekst voor; een test controleert dat op alle labels.
+
+Bij het openen zoekt de editor naar een klad van een eerdere sessie en zet niets automatisch terug. Wat er ligt wordt gemeld, met de keuze om terug te halen, te downloaden of weg te gooien.
+
+**Terughalen kan alleen wanneer het klad exact op de huidige serverrevisie voortbouwt.** Dat is geen voorzichtigheid maar een sluitende redenering: elke aangekomen opdracht verhoogt de revisie, dus een gelijke revisie betekent dat de opdracht nooit is aangekomen. Staat de server verder, dan meldt de balk dat terugsturen niet meer kan en blijven alleen downloaden en weggooien over. Zie ADR 0005 voor het volledige besluit, inclusief waarom de teruggehaalde opdracht een nieuwe opdracht-ID en de lease van dit venster krijgt.
+
+Bij het afmelden worden de kladden van de betreffende gebruiker getoond met naam, revisie en tijdstip, kan er eerst een herstelbestand worden gedownload, en worden ze daarna verwijderd. Kladden van andere gebruikers op dezelfde computer blijven staan: afmelden mag het onopgeslagen werk van een collega niet weggooien.
+
+Zolang er een klad is, blokkeert de editor het verlaten van de pagina niet meer — het werk staat er na terugkomst weer. Zonder klad blijft de bestaande waarschuwing staan.
+
+### Wat er onderweg is gerepareerd
+
+- **Netwerkfouten waren geen `ApiError`.** Een afgebroken verbinding leverde de ruwe `TypeError: Failed to fetch` in de meldingsbalk. `api()` vertaalt dat nu naar een `ApiError` met code `NETWORK` en een Nederlandse melding, zodat elke oproeper netwerk- en serverfouten hetzelfde behandelt.
+- **De eerste geldigheidscontrole op een klad was fout.** Die eiste dat het bewaarde document op de basisrevisie stond, maar de editor past de opdracht meteen lokaal toe, dus het document staat één revisie verder. Elk klad werd daardoor als onbruikbaar weggegooid en de browsertest viel er direct op. De controle laat nu precies nul of één stap toe en legt uit waarom die twee.
+- **De statusbalk kon overlopen** door de extra schakelaar. `.statusbar` schuift nu horizontaal in plaats van de pagina breder te maken; de bestaande tabletcontrole op 1024 px dekt dat af.
+
+### Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+- **151 tests / 22 bestanden geslaagd, 26,8 s** (was 139). Twaalf nieuwe tests op de pure laag: sleutelvorming, de vier uitkomsten van `draftVerdict` inclusief verlopen en zelftegensprekende kladden, alle zes toestanden van `saveState` met de voorrang van conflict, welke toestanden bij weggaan waarschuwen, dat geen enkel label back-up zegt, en dat er zonder IndexedDB geen lokale opslag wordt voorgewend.
+- **17 browserroutes geslaagd, 2,1 min.** De nieuwe route zet lokaal herstel aan, breekt het opslaan af op netwerkniveau, controleert de toestand "lokaal bewaard", herlaadt, vindt het klad terug, controleert dat de server de wijziging niet heeft, haalt het werk terug, ziet het opgeslagen worden en het klad verdwijnen. Daarna een **echt conflict**: een tweede schrijver landt een opdracht op de server, waarna opnieuw opslaan de servermelding `REVISION_CONFLICT` oplevert en de balk op conflict springt. Na herladen biedt de melding geen terughaalknop meer. Tot slot waarschuwt het afmelden, levert het herstelbestand de opdracht en het document op, en verdwijnt het klad.
+- TypeScript strict en productiebuild geslaagd (9,9 s). Bekende chunkgroottewaarschuwing blijft open.
+- Screenshots `outputs/qa/herstel-gevonden.png`, `herstel-conflict.png` en `herstel-afmelden.png` daadwerkelijk bekeken: de melding is leesbaar zonder overlap, de conflicttoestand staat in de balk, en de afmelddialoog noemt het ontwerp bij naam.
+
+### Beperkingen
+
+- Dit is geen offline bewerken en wordt ook niet zo genoemd. Er past één opdracht in het klad; een echte commandobuffer met samenvoegen bij terugkomst hoort bij een later conflictmodel.
+- Het klad staat onversleuteld in het browserprofiel. Daarom staat het uit tenzij de gebruiker het aanzet en verdwijnt het bij afmelden.
+- Mislukt het schrijven — privévenster, geweigerde opslag — dan meldt de editor dat en blijft de toestand "alleen in dit venster". Die mislukking is in de browserroute niet nagespeeld; de node-test dekt alleen het geval zonder IndexedDB.
+- Het conflict in de browserroute wordt gemaakt door een tweede schrijver die dezelfde bewerktoegang hergebruikt. De bewerktoegang is exclusief, dus overname door een tweede echte sessie is een apart scenario dat hier niet is getest.
+
+Nog open in fase 2: de onderlegger verslepen en draaien; PDF-pagina als onderlegger; EXIF verwijderen. Fase 2 is niet afgerond.

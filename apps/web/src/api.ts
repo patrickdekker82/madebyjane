@@ -13,15 +13,26 @@ export async function api<T>(
   body?: unknown,
   method?: string,
 ): Promise<T> {
-  const response = await fetch("/api/v1" + path, {
-    method: method ?? (body ? "POST" : "GET"),
-    credentials: "same-origin",
-    headers: {
-      ...(organizationId ? { "x-organization-id": organizationId } : {}),
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
+  let response: Response;
+  try {
+    response = await fetch("/api/v1" + path, {
+      method: method ?? (body ? "POST" : "GET"),
+      credentials: "same-origin",
+      headers: {
+        ...(organizationId ? { "x-organization-id": organizationId } : {}),
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch {
+    // Een afgebroken verbinding is geen serverantwoord; de oproeper moet dit
+    // net zo kunnen behandelen als elke andere fout.
+    throw new ApiError(
+      "NETWORK",
+      "De server is niet bereikbaar. Je werk is nog niet opgeslagen.",
+      0,
+    );
+  }
   if (!response.ok) {
     const e = await response.json();
     throw new ApiError(e.code, e.message, response.status);
