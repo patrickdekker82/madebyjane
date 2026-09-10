@@ -55,6 +55,14 @@ Onder **Alternatieven** leg je maximaal tien productvoorstellen vast met hun eig
 
 De keuzestatus loopt van **Nog te kiezen** via voorstel/monster/gekozen naar eventueel **Door klant bevestigd** of **Vervangen**. Klantbevestiging vereist een datum en bron; dit is een handmatige registratie, geen digitaal akkoord van de klant. Iedere wijziging maakt een nieuwe vaste versie met auteur en tijdstip. Bij gelijktijdige wijzigingen vraagt de app om de nieuwste versie te openen. Maximaal 200 materiaalkeuzes per project; gebruikers met alleen leestoegang kunnen de lijst bekijken.
 
+## Offerteconcepten — eerste deel van fase 6
+
+Eigenaar, beheerder en finance openen **Offertes** in het ontwerp. Maak een concept, vul klantgegevens en geldigheid in en voeg handmatige posten of materiaalkeuzes toe. Controleer hoeveelheid, eenheidsprijs, korting, belastingcategorie, tarief en prijsbron. Komma-invoer wordt genormaliseerd. Een materiaal zonder hoeveelheid vereist expliciete invoer. Prijzen zijn exclusief belasting; negatieve eenheidsprijzen zijn correcties.
+
+**Concept bewaren** legt een vaste versie vast. **Materiaalverschillen controleren** toont wijzigingen sinds de gekozen bronversie. Overnemen wijzigt de materiaalgegevens; de handmatige prijs blijft staan en moet opnieuw worden beoordeeld. Een materiaalkeuze kan maar eenmaal in dezelfde offerte voorkomen. **Definitief maken** bevriest klantgegevens, voorwaarden, posten en berekende bedragen en kent transactioneel een nummer per organisatie/offertejaar toe. Deze actie verstuurt niets. Designer en viewer hebben geen toegang tot de offertetools of -API.
+
+Dit is een eerste implementatie, geen volledige fase 6: PDF-export, presentatiebijlagen, vervolgrevisies van definitieve offertes, verdere statussen, ontwerpmeubelbronnen en catalogusprijsversies ontbreken nog. De nieuwe database- en browsercontroles moeten op een ondersteunde testomgeving slagen; zie de implementatiestatus.
+
 ## Verifiëren
 
 ```sh

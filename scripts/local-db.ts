@@ -13,6 +13,7 @@ import { randomBytes } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { z } from "zod";
 import { Pool, guardPool, migrate } from "../packages/db/src/index";
 const run = promisify(execFile);
@@ -70,7 +71,7 @@ export async function localDatabase(directory = "work/local-db", port = 55432) {
     .strict()
     .parse(secrets);
   const socketDir = await mkdtemp(
-    (process.platform === "darwin" ? "/private/tmp" : "/tmp") + "/studio-pg-",
+    resolve(tmpdir(), "studio-pg-"),
   );
   await allowPostgresSystemUser(directory, socketDir);
   let startupLog = "";
@@ -81,7 +82,7 @@ export async function localDatabase(directory = "work/local-db", port = 55432) {
     port,
     persistent: true,
     authMethod: "scram-sha-256",
-    postgresFlags: ["-h", "127.0.0.1", "-k", socketDir],
+    postgresFlags: ["-h", "127.0.0.1", ...(process.platform === "win32" ? [] : ["-k", socketDir])],
     onLog: (message) => {
       startupLog = (startupLog + message).slice(-8000);
     },

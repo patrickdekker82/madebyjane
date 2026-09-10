@@ -291,3 +291,11 @@ Een rij per bronalinea/bullet; samengestelde eisen zijn pas gereed wanneer alle 
 | R23.009 | MASTERPROMPT.md:575 | Definitieve installatie- en gebruikershandleiding, snelstart en tutorial. | Nog toe te wijzen | Geen volledig eisbewijs | Open |
 | R23.010 | MASTERPROMPT.md:576 | Release notes met bekende beperkingen en expliciete vervolgmodules. | Nog toe te wijzen | Geen volledig eisbewijs | Open |
 | R23.011 | MASTERPROMPT.md:578 | Begin nu met fase 0 en ga daarna door met de implementatie. Houd elke fase concreet en verifieerbaar. Als uitvoering wordt onderbroken, laat de repository in een hervatbare toestand met precieze voortgang; markeer onvoltooide fasen nooit als afgerond. | Nog toe te wijzen | Geen volledig eisbewijs | Open |
+# Aanvulling fase 6 — 8 september 2026
+
+| Eis | Implementatie | Testbewijs / status |
+| --- | --- | --- |
+| Decimale offerterekenkern, korting, correcties, configureerbare belastingcategorieën | packages/contracts/src/quotes.ts; packages/domain/src/quote-calculation.ts | 4 lokale Vitest-tests geslaagd in tests/quotes.test.ts |
+| Conceptformulier, klantgegevens, posten, materiaalbron en bronverschillen | apps/web/src/Quotes.tsx; packages/domain/src/quotes.ts | Typecheck/build en afzonderlijke Chrome-UI-proef met gemockte API geslaagd; desktop/mobiel visueel bekeken. Nieuwe echte E2E-route nog niet uitgevoerd |
+| Unieke transactionele nummering, prijsfreeze, immutable opslag, finance-rechten en tenantisolatie | packages/domain/src/quotes.ts; packages/db/migrations/0010_quotes.sql; apps/api/src/server.ts | 4 PostgreSQL/API-tests geslaagd op Linux-CI a27a69b, onderdeel van 57 geslaagde tests. Offerte-E2E eveneens geslaagd; herhaling volledige browsersuite na sessiehergebruik open |
+| PDF, vaste presentatiebijlagen, vervolgversies, statusovergangen en catalogusprijsversies | Nog te implementeren | Open; fase 6 niet afgerond |

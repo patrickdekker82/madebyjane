@@ -1,4 +1,5 @@
 import { Materials } from "./Materials";
+import { Quotes } from "./Quotes";
 import { LibraryPanel } from "./LibraryPanel";
 import { Variants, VariantName } from "./Variants";
 import { RoomSummary } from "./RoomSummary";
@@ -941,6 +942,7 @@ function Editor() {
         </div>
         <span className="tools-spacer" />
         <Materials organizationId={org.id} projectId={scene.projectId} variantId={variantId} canEdit={canWrite(org.role)} />
+        {["owner", "admin", "finance"].includes(org.role) && <Quotes organizationId={org.id} projectId={scene.projectId} />}
         <Variants
           organizationId={org.id}
           variantId={variantId}
