@@ -2742,3 +2742,109 @@ test("spot en wandcontact plaatsen → bundel tonen → symbolenlegenda op het b
   );
   expect(errors).toEqual([]);
 });
+
+test("presentatie samenstellen → publiceren → PDF → deellink intrekken", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) await page.context().addCookies(ownerCookies);
+  await page.goto("/");
+  await expect(
+    page
+      .getByLabel("E-mailadres")
+      .or(page.getByRole("button", { name: "Nieuw project", exact: true }))
+      .first(),
+  ).toBeVisible();
+  if (await page.getByLabel("E-mailadres").isVisible()) {
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+    ownerCookies = await page.context().cookies();
+  }
+  await page
+    .getByRole("button", { name: "Nieuw project", exact: true })
+    .click();
+  await page.getByLabel("Projectnaam").fill("Presentatiestudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+
+  await page.getByRole("button", { name: "Presentaties", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Publiceren legt een versie vast");
+  await dialog
+    .getByRole("button", { name: "Uitgebreid interieurplan", exact: true })
+    .click();
+
+  // Het concept is te bewerken: kop en tekst.
+  await dialog
+    .getByLabel("Presentatieklant", { exact: true })
+    .fill("Familie Voorbeeld");
+  await dialog
+    .getByLabel("Tekst blok 2", { exact: true })
+    .fill("Een rustige basis.");
+  await dialog.getByLabel("Kop blok 2", { exact: true }).blur();
+  await expect(dialog.getByText("Nog niets gepubliceerd.")).toBeVisible();
+
+  // Blokken herschikken: het tweede blok omlaag.
+  const secondBefore = await dialog
+    .locator(".block-list li")
+    .nth(1)
+    .locator("strong")
+    .innerText();
+  await dialog.getByRole("button", { name: "Blok 2 omlaag" }).click();
+  await expect(
+    dialog.locator(".block-list li").nth(2).locator("strong"),
+  ).toHaveText(secondBefore);
+
+  // Publiceren legt een versie vast.
+  await dialog.getByRole("button", { name: "Publiceren", exact: true }).click();
+  await expect(dialog.getByText("Versie 1", { exact: false })).toBeVisible();
+  await page.screenshot({ path: "outputs/qa/presentaties.png" });
+
+  const download = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "PDF", exact: true }).click();
+  const pdf = await download;
+  await pdf.saveAs("outputs/qa/presentatie-browser.pdf");
+
+  // Een deellink wijst naar precies die versie en is in te trekken.
+  await dialog.getByRole("button", { name: "Deellink", exact: true }).click();
+  const link = await dialog
+    .getByLabel("Deellink presentatie", { exact: true })
+    .inputValue();
+  expect((await page.request.get(link)).status()).toBe(200);
+  await dialog
+    .getByRole("button", { name: "Link intrekken", exact: true })
+    .click();
+  await expect(
+    dialog.getByRole("button", { name: "Link intrekken", exact: true }),
+  ).toHaveCount(0);
+  expect((await page.request.get(link)).status()).toBe(404);
+
+  // Het ontwerp wijzigen: de gepubliceerde versie blijft, het paneel meldt het.
+  await dialog.getByRole("button", { name: "Sluiten", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Bank · linnen naturel", exact: true })
+    .click();
+  await page.getByRole("button", { name: "90° draaien", exact: true }).click();
+  await saved();
+  await page.getByRole("button", { name: "Presentaties", exact: true }).click();
+  // Het paneel opent op dezelfde presentatie en haalt hem opnieuw op.
+  await expect(
+    page.getByText("nieuwe ontwerpwijzigingen beschikbaar", { exact: false }),
+  ).toBeVisible();
+  // De gepubliceerde versie blijft staan zoals hij was.
+  await expect(page.getByRole("dialog")).toContainText("Versie 1");
+  expect(errors).toEqual([]);
+});

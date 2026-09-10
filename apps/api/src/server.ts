@@ -25,6 +25,7 @@ import {
   commandSchema,
 } from "../../../packages/contracts/src/index";
 import { planSvg } from "../../../packages/documents/src/plan";
+import { PresentationService } from "../../../packages/domain/src/presentations";
 export function createServer(config: {
   runtime: Pool;
   identity: Pool;
@@ -268,6 +269,7 @@ export function createServer(config: {
   const quotes = new QuoteService(config.runtime);
   const resources = new QuoteResources(config.runtime),
     delivery = new QuoteDelivery(config.runtime, config.secret);
+  const presentations = new PresentationService(config.runtime, config.secret);
   const versionParams = (params: unknown) =>
     z
       .object({
@@ -413,6 +415,126 @@ export function createServer(config: {
         p.version,
         req.body,
       );
+    },
+  );
+
+  const presentationVersionParams = (params: unknown) =>
+    z
+      .object({
+        presentationId: id,
+        version: z.coerce.number().int().min(1).max(10000),
+      })
+      .parse(params);
+  app.get("/api/v1/projects/:id/presentations", async (req) =>
+    presentations.list(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+    ),
+  );
+  app.post("/api/v1/projects/:id/presentations", async (req) =>
+    presentations.create(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+      req.body,
+    ),
+  );
+  app.get("/api/v1/presentations/:presentationId", async (req) =>
+    presentations.get(
+      await context(req.headers),
+      z.object({ presentationId: id }).parse(req.params).presentationId,
+    ),
+  );
+  app.put("/api/v1/presentations/:presentationId", async (req) =>
+    presentations.save(
+      await context(req.headers),
+      z.object({ presentationId: id }).parse(req.params).presentationId,
+      req.body,
+    ),
+  );
+  app.get("/api/v1/presentations/:presentationId/versions", async (req) =>
+    presentations.versions(
+      await context(req.headers),
+      z.object({ presentationId: id }).parse(req.params).presentationId,
+    ),
+  );
+  app.get("/api/v1/presentations/:presentationId/outdated", async (req) =>
+    presentations.outdated(
+      await context(req.headers),
+      z.object({ presentationId: id }).parse(req.params).presentationId,
+    ),
+  );
+  app.post(
+    "/api/v1/presentations/:presentationId/versions",
+    { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+    async (req) =>
+      presentations.publish(
+        await context(req.headers),
+        z.object({ presentationId: id }).parse(req.params).presentationId,
+        req.body,
+      ),
+  );
+  app.get(
+    "/api/v1/presentations/:presentationId/versions/:version/pdf",
+    { config: { rateLimit: { max: 12, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const p = presentationVersionParams(req.params);
+      const r = await presentations.pdf(
+        await context(req.headers),
+        p.presentationId,
+        p.version,
+      );
+      return reply
+        .type("application/pdf")
+        .header(
+          "Content-Disposition",
+          `attachment; filename="presentatie-v${p.version}.pdf"`,
+        )
+        .header("X-Content-SHA256", r.pdf_hash)
+        .send(r.pdf);
+    },
+  );
+  app.get(
+    "/api/v1/presentations/:presentationId/versions/:version/shares",
+    async (req) =>
+      presentations.shares(
+        await context(req.headers),
+        presentationVersionParams(req.params).presentationId,
+      ),
+  );
+  app.post(
+    "/api/v1/presentations/:presentationId/versions/:version/shares",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (req) => {
+      const p = presentationVersionParams(req.params);
+      return presentations.share(
+        await context(req.headers),
+        p.presentationId,
+        p.version,
+        req.body,
+      );
+    },
+  );
+  app.post("/api/v1/presentation-shares/:id/revoke", async (req) =>
+    presentations.revoke(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+    ),
+  );
+  app.get(
+    "/api/v1/presentation-shares/:organization/:token",
+    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const p = z
+          .object({
+            organization: id,
+            token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+          })
+          .parse(req.params),
+        r = await presentations.publicPdf(p.organization, p.token);
+      return reply
+        .type("application/pdf")
+        .header("Content-Disposition", 'attachment; filename="presentatie.pdf"')
+        .send(r.pdf);
     },
   );
   app.post("/api/v1/quote-shares/:id/revoke", async (req) =>

@@ -1,5 +1,6 @@
 import { Materials } from "./Materials";
 import { Quotes } from "./Quotes";
+import { Presentations } from "./Presentations";
 import { LibraryPanel } from "./LibraryPanel";
 import { Variants, VariantName } from "./Variants";
 import { RoomSummary } from "./RoomSummary";
@@ -1315,6 +1316,13 @@ function Editor() {
           projectId={scene.projectId}
           variantId={variantId}
           canEdit={canWrite(org.role)}
+        />
+        <Presentations
+          organizationId={org.id}
+          organizationName={org.name}
+          projectId={scene.projectId}
+          variantId={variantId}
+          disabled={!canWrite(org.role)}
         />
         {["owner", "admin", "finance"].includes(org.role) && (
           <Quotes

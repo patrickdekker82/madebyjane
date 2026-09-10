@@ -708,3 +708,39 @@ Verder aangepast: het titelblok houdt nu de onderste 11 mm vrij, want daar zet d
 ### Nog open in fase 5
 
 Opslaan en bewerken van presentaties in de app, **publiceren als onveranderlijke momentopname** met inhoudshash en vastgelegde assets, intrekbare deellinks met een webviewer, de **PPTX-uitvoer** via PptxGenJS, en de **exportworker** die idempotent en herstartbaar is. Fase 5 is dus bepaald niet afgerond; wat er nu ligt is het document en de PDF eronder.
+
+## Aanvulling 10 september 2026 — fase 5, tweede deel: opslaan, publiceren en delen
+
+Het documentmodel uit het vorige deel is nu een werkende module: presentaties bewaren, bewerken, publiceren en delen.
+
+### Publiceren is onomkeerbaar en dat is het punt
+
+Een presentatie heeft één bewerkbaar concept en daarnaast een reeks gepubliceerde versies die nooit meer veranderen. Publiceren haalt de inhoud op uit het ontwerp zoals het op dat moment is, bevriest die bij de versie — planbladen als vector, moodboardbeelden als data-URI, materiaal- en lichtgegevens als rijen — en legt een inhoudshash vast waarin ook de sjabloonversie zit.
+
+Een deellink wijst altijd naar één versie. Het ontwerp mag daarna verder; de klant ziet wat er stond. Verandert het ontwerp wel, dan meldt het paneel **"Er zijn nieuwe ontwerpwijzigingen beschikbaar (revisie 3 → 4)"** met de knop om opnieuw te publiceren. Het publiceert nooit vanzelf.
+
+**Twee keer publiceren met hetzelfde verzoek-ID levert dezelfde versie op.** Dat is precies de eis uit het masterprompt dat een mislukte poging geen dubbele publicatie maakt. De PDF wordt bij de versie bewaard en is daarna byte-identiek; een deellink wordt pas gemaakt nadat de PDF er is, zodat een gedeelde link nooit naar een half bestand wijst.
+
+Migration `0013_presentations.sql` volgt hetzelfde patroon als de offertes: RLS met `FORCE ROW LEVEL SECURITY`, `tenant_isolation`-policies, en het runtime-account krijgt alleen SELECT en INSERT. Er is één uitzondering, expliciet toegekend: het concept mag worden bijgewerkt en een deellink mag worden ingetrokken. Gepubliceerde versies en exports kunnen niet worden gewijzigd, ook niet door de applicatie zelf.
+
+### Twee echte fouten in het paneel
+
+Beide kwamen aan het licht doordat de browserroute struikelde, en beide zouden een gebruiker echt hebben geraakt:
+
+- **Een wijziging verdween zodra er twee in dezelfde tel gebeurden.** Het verlaten van een tekstveld en het klikken op een pijltje horen bij één handeling; beide handlers gingen uit van de definitie zoals die bij het renderen in de closure zat, dus de tweede overschreef de eerste. Elke wijziging loopt nu via één functie die van de laatst bekende definitie uitgaat, en de verzoeken gaan achter elkaar naar de server zodat die ze in dezelfde volgorde ziet.
+- **De app slikte de klik in.** De knoppen om blokken te verschuiven stonden uit zolang er werd opgeslagen. Klikken vlak na het typen zette met het verlaten van het veld precies die knop uit, vóórdat de klik aankwam. Die knoppen blijven nu bruikbaar; het opslaan loopt toch op de achtergrond.
+
+Verder: het paneel haalt een geopende presentatie opnieuw op bij het openen. Anders meldde het dat er geen ontwerpwijzigingen waren terwijl er sinds het sluiten van alles gebeurd kon zijn.
+
+### Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+- **219 tests / 27 bestanden geslaagd, 42,4 s** (was 213). Zes nieuwe integratietests tegen een echte database: maken, bewerken en publiceren; hetzelfde verzoek dat geen tweede publicatie maakt; een gepubliceerde versie die niet meeverandert terwijl het concept de wijziging meldt; PDF die byte-identiek terugkomt plus deellink openen en intrekken; viewers die lezen maar niet schrijven en een andere organisatie die niets ziet; en een presentatie in een onbekend project.
+- **20 browserroutes geslaagd, 2,7 min.** De nieuwe route stelt een presentatie samen, bewerkt kop en tekst, verschuift een blok, publiceert, haalt de PDF op, maakt een deellink en controleert dat die na intrekken 404 geeft, wijzigt daarna het ontwerp en ziet de melding over nieuwe wijzigingen terwijl versie 1 blijft staan.
+- TypeScript strict en productiebuild geslaagd (11,5 s).
+- Het paneel bekeken op de schermafbeelding.
+
+**Eén testronde is anders afgelopen dan de andere.** Om 19:27 viel er één testbestand om met vier overgeslagen tests; drie ronden daarna waren schoon. Ik heb het niet kunnen herhalen en de oorzaak dus niet vastgesteld; het vermoeden is dat de ingebedde PostgreSQL op dat moment niet opstartte, vlak nadat de werkmap was opgeschoond. Dat is een vermoeden, geen conclusie.
+
+### Nog open in fase 5
+
+De **PPTX-uitvoer** via PptxGenJS en de **exportworker** die idempotent en herstartbaar is met taakstatus, retries en resulthash. De publicatie is nu synchroon: bij het publiceren wordt de PDF pas gemaakt zodra iemand hem opvraagt, en er is geen wachtrij die zware exports van lichte scheidt. Ook open: een webviewer die de presentatie in de browser toont in plaats van een PDF te downloaden, en het moodboard vullen vanuit de app (de beelden komen nu uit de bestaande afbeeldingsopslag, die nog "onderlegger" heet).
