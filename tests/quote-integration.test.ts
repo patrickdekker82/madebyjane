@@ -5,6 +5,7 @@ import { localDatabase } from "../scripts/local-db";
 import { createAuth } from "../packages/auth/src/index";
 import { createServer } from "../apps/api/src/server";
 import { inTenant } from "../packages/db/src/index";
+import type { QuoteDefinition } from "../packages/contracts/src/quotes";
 let db: Awaited<ReturnType<typeof localDatabase>>,
   server: ReturnType<typeof createServer>;
 const org = randomUUID(),
@@ -30,7 +31,7 @@ const call = (
     },
     ...(payload ? { payload: payload as any } : {}),
   });
-const definition = () => ({
+const definition = (): QuoteDefinition => ({
   seller: "Fictieve studio, Voorbeeldweg 2",
   customer: "Fictieve klant, Voorbeeldstraat 1",
   title: "Interieur",
@@ -121,7 +122,19 @@ afterAll(async () => {
 test("finance mag offertes beheren; designer/viewer en andere organisaties niet", async () => {
   const path = `/api/v1/projects/${project}/quotes`,
     d = draft();
-  expect((await call("POST", path, d, "finance")).statusCode).toBe(200);
+  d.definition.lines[0] = {
+    ...d.definition.lines[0]!,
+    purchaseUnitPrice: "60.00",
+    purchaseNote: "Fictieve leverancier 10 september",
+  };
+  const saved = await call("POST", path, d, "finance");
+  expect(saved.statusCode).toBe(200);
+  expect(saved.json().totals.commercial).toMatchObject({
+    knownCost: "120.00",
+    margin: "80.01",
+    marginPercent: "40.00",
+    missingLineIds: [],
+  });
   for (const role of ["designer", "viewer"]) {
     expect((await call("GET", path, undefined, role)).statusCode).toBe(403);
     expect((await call("POST", path, draft(), role)).statusCode).toBe(403);
@@ -532,10 +545,23 @@ test("catalogusprijsfreeze, vaste bijlagen, PDF-herhaling en intrekbare exacte v
       )
     ).statusCode,
   ).toBe(403);
-  expect(
-    (await call("POST", `/api/v1/quote-shares/${shareBody.id}/revoke`, {}))
-      .statusCode,
-  ).toBe(200);
+  const revokePath = `/api/v1/quote-shares/${shareBody.id}/revoke`;
+  expect((await call("POST", revokePath, {}, "other", other)).statusCode).toBe(
+    404,
+  );
+  const revoked = await Promise.all([
+    call("POST", revokePath, {}),
+    call("POST", revokePath, {}),
+  ]);
+  expect(revoked.map((r) => r.statusCode)).toEqual([200, 200]);
+  expect((await call("POST", revokePath, {})).statusCode).toBe(200);
+  const revocations = await db.admin.query(
+    `SELECT a.organization_id, u.name FROM audit_events a
+     JOIN identity."user" u ON u.id=a.user_id
+     WHERE a.action='quote.share_revoked' AND a.subject_id=$1`,
+    [shareBody.id],
+  );
+  expect(revocations.rows).toEqual([{ organization_id: org, name: "owner" }]);
   expect(
     (await server.app.inject({ method: "GET", url: publicPath })).statusCode,
   ).toBe(404);

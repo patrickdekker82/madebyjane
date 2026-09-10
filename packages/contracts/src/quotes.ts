@@ -18,6 +18,11 @@ export const quoteLineSchema = z
     unit: z.string().trim().min(1).max(30),
     quantity: decimal,
     unitPrice: z.string().regex(/^-?(?:0|[1-9]\d{0,6})(?:\.\d{1,4})?$/),
+    purchaseUnitPrice: z
+      .string()
+      .regex(/^(?:0|[1-9]\d{0,6})(?:\.\d{1,4})?$/)
+      .optional(),
+    purchaseNote: z.string().trim().min(1).max(300).optional(),
     discount: percent,
     taxCategory: z.string().trim().min(1).max(60),
     taxRate: percent,
@@ -74,6 +79,18 @@ export const quoteDefinitionSchema = z
     if (new Set(v.attachments ?? []).size !== (v.attachments ?? []).length)
       ctx.addIssue({ code: "custom", message: "Dubbele bijlage." });
     for (const l of v.lines) {
+      if (l.purchaseUnitPrice !== undefined && !l.purchaseNote)
+        ctx.addIssue({
+          code: "custom",
+          message: "Vermeld de bron of datum van de inkoopprijs.",
+          path: ["lines", v.lines.indexOf(l), "purchaseNote"],
+        });
+      if (l.purchaseUnitPrice === undefined && l.purchaseNote)
+        ctx.addIssue({
+          code: "custom",
+          message: "Een inkoopprijs ontbreekt bij de inkoopbron.",
+          path: ["lines", v.lines.indexOf(l), "purchaseUnitPrice"],
+        });
       if (l.source && l.designSource)
         ctx.addIssue({ code: "custom", message: "Kies één bron per post." });
       if (
@@ -191,6 +208,13 @@ export type QuoteTotals = {
   net: string;
   tax: string;
   total: string;
+  commercial?: {
+    lines: { id: string; cost: string | null }[];
+    knownCost: string;
+    margin: string | null;
+    marginPercent: string | null;
+    missingLineIds: string[];
+  };
 };
 export type QuoteSummary = Omit<QuoteRecord, "definition" | "frozen"> & {
   definition: Pick<QuoteDefinition, "title">;

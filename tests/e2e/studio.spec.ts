@@ -1026,8 +1026,20 @@ test("alternatief met prijsbron vastleggen → kiezen → herkomst en indicatieb
 test("offerteconcept, decimalen, finalisatie en vaste prijzen na herladen", async ({
   page,
 }) => {
-  await page.context().addCookies(ownerCookies);
-  await page.goto("/");
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    const credentials = JSON.parse(
+      await readFile("work/e2e-credentials.json", "utf8"),
+    );
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
   await page.getByRole("button", { name: "Nieuw project" }).click();
   await page.getByLabel("Projectnaam").fill("Offerte woonkamer");
   await page.getByLabel("Klantnaam").fill("Familie Voorbeeld");
@@ -1048,8 +1060,22 @@ test("offerteconcept, decimalen, finalisatie en vaste prijzen na herladen", asyn
     .getByLabel("Eenheidsprijs EUR post 1", { exact: true })
     .fill("19,995");
   await page.getByLabel("Korting % post 1", { exact: true }).fill("10");
+  await page
+    .getByLabel("Inkoopprijs per eenheid EUR post 1", { exact: true })
+    .fill("12");
+  await page
+    .getByLabel("Inkoopbron / datum post 1", { exact: true })
+    .fill("Fictieve leverancier · 10 september 2026");
   await expect(
     page.getByRole("heading", { name: "Totaal: 54,44 €" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Marge excl. belasting: 14,99 € · 33,32% van netto verkoop",
+      {
+        exact: true,
+      },
+    ),
   ).toBeVisible();
   await page
     .getByRole("button", {
@@ -1107,6 +1133,9 @@ test("offerteconcept, decimalen, finalisatie en vaste prijzen na herladen", asyn
   await expect(
     page.getByLabel("Eenheidsprijs EUR post 1", { exact: true }),
   ).toHaveValue("19.995");
+  await expect(
+    page.getByLabel("Inkoopprijs per eenheid EUR post 1", { exact: true }),
+  ).toHaveValue("12");
   const downloaded = page.waitForEvent("download");
   await page
     .getByRole("button", { name: "Offerte-PDF downloaden", exact: true })

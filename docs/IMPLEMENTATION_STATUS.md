@@ -538,6 +538,27 @@ Dat een verkeerde maat in een document dat naar een klant gaat als "geverifieerd
 
 **Deze verificatie is niet als root gedraaid.** Chromium weigert te sandboxen als root, dus de testronde is uitgevoerd onder een gewone gebruiker in dezelfde container. Als root falen twee offertetests op het starten van de browser; dat is een eigenschap van deze omgeving, niet van de code. Of de sysctl-instelling op de GitHub-runner het beoogde effect heeft, is hier niet na te bootsen en moet uit de bouwstraat zelf blijken.
 
+## Aanvulling 10 september 2026 — intrekken van offertelinks vastleggen
+
+De actuele GitHub-versie tot en met `ccdd674` is lokaal samengevoegd. Het overlappende lokale offerteconcept-prototype is apart bewaard en niet over de bestaande offerte-MVP gezet.
+
+Het intrekken van een offertelink schrijft nu een `quote.share_revoked`-auditregel met organisatie, gebruiker, link-ID en tijdstip. Intrekking en audit gebeuren in dezelfde databasetransactie. Alleen de eerste intrekking schrijft een regel; gelijktijdige verzoeken en latere retries blijven succesvol zonder dubbele regels. Onbekende links en links uit een andere organisatie blijven 404; viewers blijven uitgesloten.
+
+Verificatie op macOS arm64, Node 22.23.1: **160 tests / 22 bestanden geslaagd (27,35 s)**, inclusief echte offerte-PDF en de uitgebreide integratieproef voor gelijktijdige intrekking, herhalen, actor en tenantisolatie. TypeScript strict en productiebuild geslaagd (2,80 s); bestaande chunkgroottewaarschuwing blijft. De eerste testronde miste het Chromium-pad; de geslaagde ronde gebruikte `PLAYWRIGHT_BROWSERS_PATH="$PWD/work/browsers"` vooraf in de omgeving. Browserroutes zijn voor deze serverwijziging niet opnieuw uitgevoerd. Dit voegt registratie toe; er is nog geen apart auditoverzicht in de gebruikersinterface.
+
+## Aanvulling 10 september 2026 — interne inkoop en marge
+
+Een offerteregel kan nu naast de verkoopprijs een niet-negatieve inkoopprijs en verplichte inkoopbron/datum bevatten. De server rekent per regel met `Decimal`, rondt de inkoop op centen af en bepaalt de marge exclusief belasting ten opzichte van de netto verkoop. De marge verschijnt alleen wanneer elke regel een inkoopprijs heeft; nul moet expliciet worden ingevuld. Bij ontbrekende inkoop toont de app het bekende inkoopbedrag en meldt zij de marge als onvolledig.
+
+Inkoop en marge zijn onderdeel van de immutable offerteversie en de inhoudshash. Alleen owner, admin en finance kunnen de offerte-API gebruiken; designer en viewer krijgen server-side 403. De klant-PDF en openbare deellink bevatten uitsluitend verkoopposten en klanttotalen. De interne calculatie vermeldt dat expliciet in het scherm.
+
+Verificatie op macOS arm64, Node 22.23.1:
+
+- **161 tests / 22 bestanden geslaagd (15,21 s)**, inclusief echte offerte-PDF. Nieuwe dekking: decimale inkoop, correctieregel met nulinkoop, margepercentage, onvolledige calculatie, verplichte inkoopherkomst, serverberekende totalen en controle dat inkoopgegevens niet in de klant-HTML terechtkomen.
+- TypeScript strict en productiebuild geslaagd (2,74 s). De bestaande waarschuwing over grote chunks blijft open.
+- De zelfstandige offerte-browsertest is geslaagd (5,5 s testtijd; 9,7 s totaal): invoer, marge, definitief maken, herladen, PDF-download, deellink, intrekken en vervolgconcept. Screenshot `outputs/qa/offerte-definitief.png` bekeken; interne totalen zijn leesbaar en duidelijk van de klanttotalen gescheiden.
+
+De eerste losse browserpoging bereikte het projectoverzicht niet, omdat de route alleen cookies uit een eerder uitgevoerde test gebruikte. De route logt nu zelf in wanneer die cookies ontbreken en is daarmee afzonderlijk uitvoerbaar. Nog open binnen de verdere afwerking van fase 6: een auditoverzicht in de interface en aantoonbare PDF-proeven met meerdere planbladen. De productiequeue valt onder de bredere export- en beheerfasen.
 ## Aanvulling 10 september 2026 — fase 4: LED-paden
 
 Fase 4 had de materiaalkant al (catalogus, keuzestatussen, alternatieven, hoeveelheden). Dit is de eerste helft van het lichtplan: **LED-strips als bewerkbare polyline**.

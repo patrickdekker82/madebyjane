@@ -9,7 +9,10 @@ export function calculateQuote(input: unknown): QuoteTotals {
   const value = quoteDefinitionSchema.parse(input);
   const groups = new Map<string, { rate: string; net: Decimal }>();
   let net = new D(0),
-    tax = new D(0);
+    tax = new D(0),
+    knownCost = new D(0);
+  const costLines: { id: string; cost: string | null }[] = [],
+    missingLineIds: string[] = [];
   const lines = value.lines.map((line) => {
     const amount = new D(line.quantity)
       .mul(line.unitPrice)
@@ -22,6 +25,16 @@ export function calculateQuote(input: unknown): QuoteTotals {
     };
     group.net = group.net.plus(amount);
     groups.set(line.taxCategory, group);
+    if (line.purchaseUnitPrice === undefined) {
+      costLines.push({ id: line.id, cost: null });
+      missingLineIds.push(line.id);
+    } else {
+      const cost = new D(line.quantity)
+        .mul(line.purchaseUnitPrice)
+        .toDecimalPlaces(2);
+      knownCost = knownCost.plus(cost);
+      costLines.push({ id: line.id, cost: cost.toFixed(2) });
+    }
     return { id: line.id, net: amount.toFixed(2) };
   });
   const taxes = [...groups]
@@ -36,11 +49,24 @@ export function calculateQuote(input: unknown): QuoteTotals {
         tax: amount.toFixed(2),
       };
     });
+  const complete = missingLineIds.length === 0,
+    margin = complete ? net.minus(knownCost) : null,
+    marginPercent =
+      margin && !net.isZero()
+        ? margin.div(net).mul(100).toDecimalPlaces(2)
+        : null;
   return {
     lines,
     taxes,
     net: net.toFixed(2),
     tax: tax.toFixed(2),
     total: net.plus(tax).toFixed(2),
+    commercial: {
+      lines: costLines,
+      knownCost: knownCost.toFixed(2),
+      margin: margin?.toFixed(2) ?? null,
+      marginPercent: marginPercent?.toFixed(2) ?? null,
+      missingLineIds,
+    },
   };
 }
