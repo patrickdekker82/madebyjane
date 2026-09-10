@@ -950,3 +950,134 @@ test("offerteconcept, decimalen, finalisatie en vaste prijzen na herladen", asyn
     page.getByLabel("Eenheidsprijs EUR post 1", { exact: true }),
   ).toHaveValue("19.995");
 });
+
+test("vangen op het raster en op een ander meubel → passend in beeld → vangen uitschakelen", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
+  await page.getByLabel("Projectnaam").fill("Vangstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  await expect(
+    page.getByText("Server opgeslagen", { exact: false }),
+  ).toBeVisible();
+
+  // Passend in beeld geeft een deterministische uitgangspositie. De omrekening
+  // van wereld naar scherm meten we daarna zelf op, zodat deze test niet op de
+  // fit-formule van de editor leunt.
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  const canvas = page.locator(".canvas-wrap canvas").first();
+  const box = (await canvas.boundingBox())!;
+  const guess = Math.min((box.width - 120) / 6200, (box.height - 120) / 4800);
+  const drag = async (from: { x: number; y: number }, dx: number, dy: number) => {
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(from.x + dx / 2, from.y + dy / 2, { steps: 4 });
+    await page.mouse.move(from.x + dx, from.y + dy, { steps: 4 });
+    await page.mouse.up();
+  };
+  const position = async () => ({
+    x: Number(await page.getByLabel("Positie X", { exact: true }).inputValue()),
+    y: Number(await page.getByLabel("Positie Y", { exact: true }).inputValue()),
+  });
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+
+  // Kalibreren met alle vangen uit: een sleep van 120 px levert de schaal.
+  await page.getByRole("button", { name: "Raster snap · 100 mm", exact: true }).click();
+  await page.getByRole("button", { name: "Vangen aan objecten", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Vangen uit", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  const before = await position();
+  await drag({ x: box.x + 60 + 1700 * guess, y: box.y + 60 + 3300 * guess }, 120, 0);
+  await saved();
+  const calibrated = await position();
+  // Zonder deze verplaatsing heeft de sleep de bank niet geraakt en zegt de rest niets.
+  expect(Math.abs(calibrated.x - before.x)).toBeGreaterThan(200);
+  expect(calibrated.y).toBe(before.y);
+  const mmPerPixel = (calibrated.x - before.x) / 120;
+  const anchor = { x: box.x + 60 + 1700 * guess + 120, y: box.y + 60 + 3300 * guess };
+  const at = (x: number, y: number) => ({
+    x: anchor.x + (x - calibrated.x) / mmPerPixel,
+    y: anchor.y + (y - calibrated.y) / mmPerPixel,
+  });
+
+  // Na de kalibratiesleep ligt de muisaanwijzer gegarandeerd binnen de bank.
+  // Dat punt is daarmee een betrouwbaar grijppunt; het schuift mee met elke sleep.
+  let grip = { ...anchor };
+  const dragSofa = async (dx: number, dy: number) => {
+    await drag(grip, dx, dy);
+    grip = { x: grip.x + dx, y: grip.y + dy };
+    await saved();
+    return position();
+  };
+
+  // Raster aan: elke sleep eindigt op hele honderdtallen.
+  await page.getByRole("button", { name: "Vrij plaatsen", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Raster snap · 100 mm", exact: true })).toBeVisible();
+  const sofa = await dragSofa(41, 27);
+  expect(sofa.x % 100).toBe(0);
+  expect(sofa.y % 100).toBe(0);
+  expect(sofa.x).not.toBe(calibrated.x);
+
+  // Raster uit, vangen aan objecten aan: alleen uitlijnen op de salontafel blijft over.
+  await page.getByRole("button", { name: "Raster snap · 100 mm", exact: true }).click();
+  await page.getByRole("button", { name: "Vangen uit", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Vangen aan objecten", exact: true })).toBeVisible();
+  // Alles in schermpixels uitdrukken: Konva start pas een sleep vanaf 3 pixels
+  // en de vangtolerantie is 12 pixels. Een doel op 10 pixels met een sleep van
+  // 8 pixels ligt dus altijd binnen bereik, bij elke zoomstand.
+  const target = sofa.x + Math.round(10 * mmPerPixel);
+  await page.getByRole("button", { name: "Salontafel · eiken", exact: true }).click();
+  await page.getByLabel("Positie X", { exact: true }).fill(String(target));
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  expect((await position()).x).toBe(target);
+
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  // Halverwege de sleep vasthouden om de hulplijnen daadwerkelijk te zien.
+  await page.mouse.move(grip.x, grip.y);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + 4, grip.y, { steps: 3 });
+  await page.mouse.move(grip.x + 8, grip.y, { steps: 3 });
+  await page.screenshot({ path: "outputs/qa/vanghulplijn.png" });
+  await page.mouse.up();
+  grip = { x: grip.x + 8, y: grip.y };
+  await saved();
+  const snappedSofa = await position();
+  // Het hart van de bank valt exact op het hart van de salontafel.
+  expect(snappedSofa.x).toBe(target);
+  expect(snappedSofa.y).toBe(sofa.y);
+  await page.screenshot({ path: "outputs/qa/vangen.png" });
+
+  // Vangen uit: de bank blijft staan waar zij losgelaten wordt.
+  await page.getByRole("button", { name: "Vangen aan objecten", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Vangen uit", exact: true })).toBeVisible();
+  const free = await dragSofa(9, 0);
+  expect(free.x).not.toBe(snappedSofa.x);
+  expect(free.x).toBeGreaterThan(snappedSofa.x);
+
+  await page.reload();
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  expect((await position()).x).toBe(free.x);
+  expect(errors).toEqual([]);
+});

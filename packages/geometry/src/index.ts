@@ -117,6 +117,13 @@ export function validateGeometry(scene: Scene) {
 }
 export { detectRooms, type Room, type RoomDetection } from "./rooms";
 export {
+  snapPoint,
+  type SnapResult,
+  type SnapTarget,
+  type SnapOptions,
+  type SnapKind,
+} from "./snapping";
+export {
   roomQuantities,
   type RoomQuantities,
   type QuantityDetection,

@@ -13,7 +13,7 @@ import {
 } from "react-konva";
 import type Konva from "konva";
 import type { Scene, Operation, Point } from "../../contracts/src/index";
-import { endpoints, snap } from "../../geometry/src/index";
+import { endpoints, snapPoint, type SnapTarget } from "../../geometry/src/index";
 import { useEditor } from "./store";
 export function PlanCanvas({
   scene,
@@ -31,23 +31,44 @@ export function PlanCanvas({
   const [pan, setPan] = useState({ x: 95, y: 90 });
   const [start, setStart] = useState<Point | null>(null);
   const [cursor, setCursor] = useState<Point | null>(null);
-  const { tool, selected, zoom, grid, select, setZoom } = useEditor();
+  const { tool, selected, zoom, grid, objectSnap, select, setZoom } =
+    useEditor();
+  const [snapped, setSnapped] = useState<SnapTarget[]>([]);
+  /**
+   * Vangtolerantie: twaalf schermpixels omgerekend naar millimeters. Bij elke
+   * zoomstand voelt het vangen daardoor even ver, terwijl de opgeslagen maat
+   * nooit met de schermzoom vermenigvuldigd wordt.
+   */
+  const snapTo = (point: Point, exclude?: string[]) =>
+    snapPoint(scene, point, {
+      toleranceMm: 12 / zoom,
+      grid,
+      exclude,
+      kinds: objectSnap
+        ? undefined
+        : { node: false, wall: false, object: false },
+    });
+  /** Het hele plan met een rand van 60 px in beeld brengen. */
+  const fitToProject = (width: number, height: number) => {
+    if (width <= 0 || height <= 0) return;
+    const minX = Math.min(0, ...scene.nodes.map((n) => n.x)),
+      minY = Math.min(0, ...scene.nodes.map((n) => n.y)),
+      maxX = Math.max(6200, ...scene.nodes.map((n) => n.x)),
+      maxY = Math.max(4800, ...scene.nodes.map((n) => n.y));
+    const fit = Math.min(
+      (width - 120) / (maxX - minX),
+      (height - 120) / (maxY - minY),
+    );
+    setZoom(fit);
+    setPan({ x: 60 - minX * fit, y: 60 - minY * fit });
+  };
   useEffect(() => {
     const ro = new ResizeObserver(([entry]) => {
       if (entry) {
         const { width, height } = entry.contentRect;
         setSize({ width, height });
         if (!fitted.current && width > 0 && height > 0) {
-          const minX = Math.min(0, ...scene.nodes.map((n) => n.x)),
-            minY = Math.min(0, ...scene.nodes.map((n) => n.y)),
-            maxX = Math.max(6200, ...scene.nodes.map((n) => n.x)),
-            maxY = Math.max(4800, ...scene.nodes.map((n) => n.y));
-          const fit = Math.min(
-            (width - 120) / (maxX - minX),
-            (height - 120) / (maxY - minY),
-          );
-          setZoom(fit);
-          setPan({ x: 60 - minX * fit, y: 60 - minY * fit });
+          fitToProject(width, height);
           fitted.current = true;
         }
       }
@@ -61,12 +82,9 @@ export function PlanCanvas({
   const world = () => {
     const p = stage.current?.getPointerPosition();
     if (!p) return null;
-    const x = (p.x - pan.x) / zoom,
-      y = (p.y - pan.y) / zoom;
-    return {
-      x: grid ? snap(x) : Math.round(x),
-      y: grid ? snap(y) : Math.round(y),
-    };
+    const result = snapTo({ x: (p.x - pan.x) / zoom, y: (p.y - pan.y) / zoom });
+    setSnapped(result.targets);
+    return { x: result.x, y: result.y };
   };
   const wallClick = (wallId: string) => {
     if (disabled) return;
@@ -142,6 +160,14 @@ export function PlanCanvas({
     setZoom(next);
   };
   const gridSpacing = (100 * zoom >= 8 ? 100 : 500) * zoom;
+  // Een muurpunt of muur legt een concreet punt vast; dat verdient een markering.
+  const anchor = snapped.find((t) => t.kind === "node" || t.kind === "wall");
+  const snapMarker =
+    anchor && cursor && tool === "wall"
+      ? cursor
+      : anchor && anchor.kind === "node"
+        ? scene.nodes.find((n) => n.id === anchor.id)
+        : null;
   return (
     <div
       ref={el}
@@ -283,10 +309,18 @@ export function PlanCanvas({
               onClick={() => select(i.id)}
               onTap={() => select(i.id)}
               onDragStart={() => select(i.id)}
+              onDragMove={(e) => {
+                setSnapped(
+                  snapTo({ x: e.target.x(), y: e.target.y() }, [i.id]).targets,
+                );
+              }}
               onDragEnd={(e) => {
-                const x = grid ? snap(e.target.x()) : Math.round(e.target.x()),
-                  y = grid ? snap(e.target.y()) : Math.round(e.target.y());
+                const { x, y } = snapTo(
+                  { x: e.target.x(), y: e.target.y() },
+                  [i.id],
+                );
                 e.target.position({ x, y });
+                setSnapped([]);
                 onCommand([
                   {
                     type: "TransformItem",
@@ -417,6 +451,34 @@ export function PlanCanvas({
               opacity={0.5}
             />
           )}
+          {/* Vangfeedback: hulplijnen bij uitlijnen, een markering op het vangpunt. */}
+          {snapped.map((target, index) =>
+            target.guide ? (
+              <Line
+                key={"guide" + index}
+                listening={false}
+                points={[
+                  target.guide.from.x,
+                  target.guide.from.y,
+                  target.guide.to.x,
+                  target.guide.to.y,
+                ]}
+                stroke="#a36432"
+                strokeWidth={1 / zoom}
+                dash={[8 / zoom, 6 / zoom]}
+              />
+            ) : null,
+          )}
+          {snapMarker && (
+            <Circle
+              listening={false}
+              x={snapMarker.x}
+              y={snapMarker.y}
+              radius={5 / zoom}
+              stroke="#a36432"
+              strokeWidth={2 / zoom}
+            />
+          )}
         </Layer>
       </Stage>
       <div className="canvas-note">
@@ -453,16 +515,7 @@ export function PlanCanvas({
         >
           ↑
         </button>
-        <button
-          onClick={() => {
-            const maxX = Math.max(6200, ...scene.nodes.map((n) => n.x)),
-              maxY = Math.max(4800, ...scene.nodes.map((n) => n.y));
-            setZoom(
-              Math.min((size.width - 150) / maxX, (size.height - 150) / maxY),
-            );
-            setPan({ x: 75, y: 75 });
-          }}
-        >
+        <button onClick={() => fitToProject(size.width, size.height)}>
           Passend
         </button>
       </div>

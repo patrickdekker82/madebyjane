@@ -53,6 +53,7 @@ import {
   RotateCw,
   Save,
   Grid2X2,
+  Magnet,
   Copy,
   X,
   Armchair,
@@ -614,8 +615,18 @@ function Editor() {
     },
   });
   const leaseId = useRef<string>(crypto.randomUUID());
-  const { tool, setTool, selected, select, zoom, setZoom, grid, toggleGrid } =
-    useEditor();
+  const {
+    tool,
+    setTool,
+    selected,
+    select,
+    zoom,
+    setZoom,
+    grid,
+    toggleGrid,
+    objectSnap,
+    toggleObjectSnap,
+  } = useEditor();
   useEffect(() => {
     if (query.data) {
       setScene(query.data);
@@ -1208,6 +1219,14 @@ function Editor() {
           <button className={grid ? "active" : ""} onClick={toggleGrid}>
             <Grid2X2 size={13} />
             {grid ? "Raster snap · 100 mm" : "Vrij plaatsen"}
+          </button>
+          <button
+            className={objectSnap ? "active" : ""}
+            onClick={toggleObjectSnap}
+            title="Vangen aan muurpunten, muren en meubels"
+          >
+            <Magnet size={13} />
+            {objectSnap ? "Vangen aan objecten" : "Vangen uit"}
           </button>
           <span>mm</span>
           <button aria-label="Uitzoomen" onClick={() => setZoom(zoom / 1.2)}>
