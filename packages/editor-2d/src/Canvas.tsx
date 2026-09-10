@@ -16,6 +16,7 @@ import type { Scene, Operation, Point } from "../../contracts/src/index";
 import {
   endpoints,
   snapPoint,
+  itemsInRect,
   dimensionGeometry,
   formatMm,
   type SnapTarget,
@@ -45,9 +46,17 @@ export function PlanCanvas({
     objectSnap,
     select,
     toggleSelected,
+    selectMany,
     setZoom,
   } = useEditor();
   const [snapped, setSnapped] = useState<SnapTarget[]>([]);
+  /** Sleepkader in wereldcoordinaten; alleen actief met het gereedschap Selecteren. */
+  const [band, setBand] = useState<{
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  } | null>(null);
   /**
    * Vangtolerantie: twaalf schermpixels omgerekend naar millimeters. Bij elke
    * zoomstand voelt het vangen daardoor even ver, terwijl de opgeslagen maat
@@ -68,10 +77,19 @@ export function PlanCanvas({
   /** Het hele plan met een rand van 60 px in beeld brengen. */
   const fitToProject = (width: number, height: number) => {
     if (width <= 0 || height <= 0) return;
-    const minX = Math.min(0, ...scene.nodes.map((n) => n.x)),
-      minY = Math.min(0, ...scene.nodes.map((n) => n.y)),
-      maxX = Math.max(6200, ...scene.nodes.map((n) => n.x)),
-      maxY = Math.max(4800, ...scene.nodes.map((n) => n.y));
+    // Maatlijnen liggen naast de geometrie en kunnen er dus buiten steken; ook
+    // die horen in beeld te komen.
+    const points = [
+      ...scene.nodes,
+      ...scene.annotations.flatMap((a) => {
+        const d = dimensionGeometry(a.from, a.to, a.offset);
+        return [a.from, a.to, d.line.from, d.line.to];
+      }),
+    ];
+    const minX = Math.min(0, ...points.map((n) => n.x)),
+      minY = Math.min(0, ...points.map((n) => n.y)),
+      maxX = Math.max(6200, ...points.map((n) => n.x)),
+      maxY = Math.max(4800, ...points.map((n) => n.y));
     const fit = Math.min(
       (width - 120) / (maxX - minX),
       (height - 120) / (maxY - minY),
@@ -96,6 +114,10 @@ export function PlanCanvas({
   useEffect(() => {
     setStart(null);
   }, [tool]);
+  const rawWorld = () => {
+    const p = stage.current?.getPointerPosition();
+    return p ? { x: (p.x - pan.x) / zoom, y: (p.y - pan.y) / zoom } : null;
+  };
   const world = () => {
     const p = stage.current?.getPointerPosition();
     if (!p) return null;
@@ -222,12 +244,29 @@ export function PlanCanvas({
         onMouseMove={() => {
           if ((tool === "wall" || tool === "measure") && start)
             setCursor(world());
+          if (band) {
+            const p = rawWorld();
+            if (p) setBand({ ...band, x2: p.x, y2: p.y });
+          }
+        }}
+        onMouseUp={() => {
+          if (!band) return;
+          const dragged =
+            Math.abs(band.x2 - band.x1) > 5 / zoom ||
+            Math.abs(band.y2 - band.y1) > 5 / zoom;
+          // Een klik zonder sleep blijft gewoon de selectie opheffen.
+          if (dragged) selectMany(itemsInRect(visible, band));
+          else select(null);
+          setBand(null);
         }}
         onMouseDown={(e) => {
           // Meten en muren tekenen moeten juist op bestaande muren en punten
           // kunnen beginnen; anders is aansluiten op wat er staat onmogelijk.
-          if (tool === "measure" || tool === "wall" || e.target === stage.current)
-            click();
+          if (tool === "measure" || tool === "wall") return click();
+          if (e.target !== stage.current) return;
+          if (tool !== "select") return click();
+          const p = rawWorld();
+          if (p) setBand({ x1: p.x, y1: p.y, x2: p.x, y2: p.y });
         }}
         onTouchStart={(e) => {
           if (e.target === stage.current) click();
@@ -594,6 +633,19 @@ export function PlanCanvas({
                 dash={[8 / zoom, 6 / zoom]}
               />
             ) : null,
+          )}
+          {band && (
+            <Rect
+              listening={false}
+              x={Math.min(band.x1, band.x2)}
+              y={Math.min(band.y1, band.y2)}
+              width={Math.abs(band.x2 - band.x1)}
+              height={Math.abs(band.y2 - band.y1)}
+              fill="#a3643222"
+              stroke="#a36432"
+              strokeWidth={1 / zoom}
+              dash={[8 / zoom, 6 / zoom]}
+            />
           )}
           {snapMarker && (
             <Circle

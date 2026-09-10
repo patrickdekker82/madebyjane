@@ -1374,3 +1374,104 @@ test("meten en maatlijn vastleggen → sneltoetsen → maat op het planblad", as
   expect(await planSheet()).toContain("6.200 mm");
   expect(errors).toEqual([]);
 });
+
+test("sleepkader selecteert meerdere meubels → maatlijn verplaatsen en omklappen", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
+  await page.getByLabel("Projectnaam").fill("Kaderstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  const canvas = page.locator(".canvas-wrap canvas").first();
+  const box = (await canvas.boundingBox())!;
+  const fit = Math.min((box.width - 120) / 6200, (box.height - 120) / 4800);
+  const at = (x: number, y: number) => ({
+    x: box.x + 60 + x * fit,
+    y: box.y + 60 + y * fit,
+  });
+  const drag = async (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2, { steps: 4 });
+    await page.mouse.move(to.x, to.y, { steps: 4 });
+    await page.mouse.up();
+  };
+
+  // Kader over de linkerhelft: bank en salontafel liggen daar, de eettafel niet.
+  const from = at(200, 1400),
+    to = at(3400, 4400);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2, { steps: 4 });
+  await page.screenshot({ path: "outputs/qa/sleepkader-actief.png" });
+  await page.mouse.move(to.x, to.y, { steps: 4 });
+  await page.mouse.up();
+  await expect(
+    page.getByRole("heading", { name: "2 meubels geselecteerd", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: "outputs/qa/sleepkader.png" });
+
+  // Een klik op leeg vlak zonder slepen heft de selectie weer op.
+  await page.mouse.click(at(5800, 4400).x, at(5800, 4400).y);
+  await expect(
+    page.getByRole("heading", { name: "Elk detail telt.", exact: true }),
+  ).toBeVisible();
+
+  // Maatlijn tekenen langs de bovenmuur en daarna bijstellen.
+  await page.keyboard.press("t");
+  await page.mouse.click(at(0, 0).x, at(0, 0).y);
+  await page.mouse.click(at(6200, 0).x, at(6200, 0).y);
+  await saved();
+  await page.keyboard.press("Escape");
+  // De maatlijn staat in de objectlijst, het toegankelijke alternatief voor
+  // aanklikken op het canvas.
+  await page.getByRole("button", { name: "Maat 1", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "6.200 mm", exact: true }),
+  ).toBeVisible();
+
+  await page.getByLabel("Afstand maatlijn", { exact: true }).fill("900");
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  await page.getByRole("button", { name: "Maat 1", exact: true }).click();
+  await expect(page.getByLabel("Afstand maatlijn", { exact: true })).toHaveValue("900");
+  // De maatlijn ligt nu verder van de muur; daar is hij ook aan te klikken.
+  await page.mouse.click(at(3100, 900).x, at(3100, 900).y);
+  await expect(page.getByLabel("Afstand maatlijn", { exact: true })).toHaveValue("900");
+
+  await page.getByRole("button", { name: "Naar de andere kant", exact: true }).click();
+  await saved();
+  await page.getByRole("button", { name: "Maat 1", exact: true }).click();
+  await expect(page.getByLabel("Afstand maatlijn", { exact: true })).toHaveValue("-900");
+  // Passend brengt ook een maatlijn buiten de muren in beeld.
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  await page.screenshot({ path: "outputs/qa/maatlijn-omgeklapt.png" });
+
+  await page.reload();
+  await page.getByRole("button", { name: "Maat 1", exact: true }).click();
+  await expect(page.getByLabel("Afstand maatlijn", { exact: true })).toHaveValue("-900");
+  expect(errors).toEqual([]);
+});

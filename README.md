@@ -33,6 +33,10 @@ Selecteer meerdere meubels met shift, ctrl of cmd, in de plattegrond of in de ob
 
 Het gereedschap **Maat** meet en legt vast in één handeling: klik het eerste punt, lees de maat mee terwijl je beweegt en klik het tweede punt om de maatlijn te bewaren. Escape breekt af als je alleen wilde meten. Het vangen werkt hier net als bij tekenen, dus meten tussen twee muurpunten geeft exact de muurlengte. De lengte wordt niet opgeslagen maar uit de twee punten berekend; een maatlijn kan dus nooit iets anders beweren dan de tekening. Maatlijnen komen ook op het planblad.
 
+Een bewaarde maatlijn kun je selecteren in de plattegrond of in de objectlijst (**Maat 1**, **Maat 2**, …). Het eigenschappenpaneel toont de gemeten lengte — die is afgeleid en niet los te wijzigen — en laat je de afstand tot de gemeten lijn instellen of de maatlijn naar de andere kant klappen.
+
+Met het gereedschap **Selecteren** trek je op leeg vlak een kader om meerdere meubels tegelijk te pakken; alles wat het kader raakt komt in de selectie. Een klik zonder slepen heft de selectie op.
+
 Sneltoetsen: `v` selecteren, `m` muur, `d` deur, `r` raam, `t` maat. Escape gaat terug naar selecteren, Delete verwijdert de selectie, Ctrl of Cmd met `z` is een stap terug en met shift erbij opnieuw. In invoervelden blijven de toetsen gewoon typen.
 
 ## Lagen

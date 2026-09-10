@@ -76,6 +76,12 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
       case "AddAnnotation":
         s.annotations.push(op.annotation);
         break;
+      case "SetAnnotationOffset": {
+        const annotation = s.annotations.find((a) => a.id === op.id);
+        if (!annotation) throw new Error("Maatlijn niet gevonden.");
+        annotation.offset = op.offset;
+        break;
+      }
       case "SetItemDisplay": {
         const targets = s.items.filter((i) => op.ids.includes(i.id));
         if (targets.length !== op.ids.length)

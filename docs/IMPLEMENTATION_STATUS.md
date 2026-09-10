@@ -319,3 +319,25 @@ Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
 Onderweg gevonden en hersteld: de nieuwe knop **Maat** maakte de gereedschapsbalk breder dan een tablet van 1024 px, waardoor de hele pagina horizontaal ging schuiven. De balk schuift nu zelf zijwaarts. Die ene fout liet ook twee andere browserroutes omvallen met een verloren sessie; na het herstel slaagt de volledige suite weer in 1,5 minuut. Het precieze mechanisme van die gevolgschade is niet uitgezocht — alleen vastgesteld dat het met de herstelde eerste route verdwijnt.
 
 Nog open in fase 2: annotatieteksten en een legenda naast maatlijnen; het verplaatsen of omklappen van een bestaande maatlijn; import van rasteronderlegger en PDF-pagina met kalibratie via twee punten; rubberband-selectie; groeperen; opt-in lokaal herstel via IndexedDB; laagpresets per tekenblad; muurjoins. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — sleepkader en bewerkbare maatlijnen
+
+### Sleepkader
+
+Met het gereedschap Selecteren trek je op leeg vlak een kader; alles wat het kader raakt komt in de selectie. `itemsInRect` in `packages/geometry/src/arrange.ts` werkt op de asgerichte omhullende, dus een gedraaid meubel wordt geraakt op wat je op het plan ziet. Aanraken is genoeg — een object hoeft niet helemaal binnen het kader te liggen — en het kader mag in elke richting getrokken worden. Verborgen objecten doen niet mee. Een klik zonder sleep (minder dan vijf schermpixels) heft de selectie op, zoals eerst. Het kader vangt bewust niet aan raster of objecten; het is een aanwijsactie, geen maat.
+
+### Maatlijnen bijstellen
+
+Een geselecteerde maatlijn krijgt een eigen eigenschappenpaneel met de gemeten lengte, een veld voor de afstand tot de gemeten lijn en een knop **Naar de andere kant**. De lengte staat er alleen ter informatie: die is afgeleid en niet los te bewerken. De nieuwe opdracht `SetAnnotationOffset` verzet alleen de verschuiving.
+
+Twee dingen die daarbij opvielen en zijn hersteld:
+- Maatlijnen stonden niet in de objectlijst, terwijl die lijst juist het toegankelijke alternatief voor aanwijzen op het canvas hoort te zijn. Ze staan er nu als **Maat 1**, **Maat 2** enzovoort, en tellen mee in het objectaantal.
+- **Passend** keek alleen naar muurpunten. Een maatlijn die buiten de muren ligt — na omklappen bijvoorbeeld — viel daardoor buiten beeld en was niet meer aan te klikken. De berekening neemt nu ook de maatlijnen mee.
+
+Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+- **113 tests / 18 bestanden geslaagd, 18,6 s** (was 111). Twee nieuwe kadertests, inclusief precies op de rand raken, een kader dat van rechtsonder naar linksboven loopt en een gedraaid meubel.
+- **13 browserroutes geslaagd, 1,1 min.** De nieuwe route trekt een kader over de linkerhelft en krijgt twee van de vier meubels, controleert dat een klik zonder sleep de selectie opheft, tekent een maatlijn, verzet die naar 900 mm, klapt hem om naar -900 mm en vindt dat na herladen terug.
+- TypeScript strict en productiebuild geslaagd (7,1 s).
+- Screenshots `outputs/qa/sleepkader-actief.png`, `outputs/qa/sleepkader.png` en `outputs/qa/maatlijn-omgeklapt.png` geïnspecteerd. De eerste is bewust middenin de sleep gemaakt: zonder die opname zou de test slagen ook als het kader helemaal niet getekend werd, want de selectie komt uit de staat en niet uit de weergave.
+
+Nog open in fase 2: annotatieteksten en een legenda; import van rasteronderlegger en PDF-pagina met kalibratie via twee punten; groeperen; opt-in lokaal herstel via IndexedDB; laagpresets per tekenblad; muurjoins. Fase 2 is niet afgerond.

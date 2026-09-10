@@ -125,6 +125,7 @@ export {
 export {
   alignItems,
   distributeItems,
+  itemsInRect,
   bounds,
   halfExtent,
   type Placed,

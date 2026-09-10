@@ -64,6 +64,7 @@ import {
 import { api, login, logout, authRequest, ApiError } from "./api";
 import { Arrange } from "./Arrange";
 import { LayerPanel } from "./Layers";
+import { DimensionProperties } from "./DimensionProperties";
 import { PlanCanvas } from "../../../packages/editor-2d/src/Canvas";
 import { useEditor, type Tool } from "../../../packages/editor-2d/src/store";
 import {
@@ -913,6 +914,9 @@ function Editor() {
       </div>
     );
   const single = selected.length === 1 ? selected[0]! : null;
+  const dimension = single
+    ? scene.annotations.find((a) => a.id === single)
+    : undefined;
   const item = single ? scene.items.find((i) => i.id === single) : undefined;
   const selectedItems = scene.items.filter((i) => selected.includes(i.id));
   const disabled = busy || !!pending.current || !lease || !canWrite(org.role);
@@ -1148,7 +1152,10 @@ function Editor() {
           <div className="objects-heading">
             <span className="eyebrow">OBJECTEN</span>
             <span>
-              {scene.walls.length + scene.items.length + scene.openings.length}
+              {scene.walls.length +
+                scene.items.length +
+                scene.openings.length +
+                scene.annotations.length}
             </span>
           </div>
           <div className="object-list">
@@ -1188,6 +1195,16 @@ function Editor() {
                 {o.kind === "door" ? "Deur" : "Raam"} {i + 1}
               </button>
             ))}
+            {scene.annotations.map((a, i) => (
+              <button
+                key={a.id}
+                className={selected.includes(a.id) ? "selected" : ""}
+                onClick={() => select(a.id)}
+              >
+                <Ruler size={14} />
+                Maat {i + 1}
+              </button>
+            ))}
           </div>
         </aside>
         <section className="drawing">
@@ -1222,6 +1239,13 @@ function Editor() {
                 item.y
               }
               item={item}
+              disabled={disabled}
+              onCommand={command}
+            />
+          ) : dimension ? (
+            <DimensionProperties
+              key={dimension.id + ":" + scene.revision}
+              annotation={dimension}
               disabled={disabled}
               onCommand={command}
             />

@@ -245,6 +245,13 @@ export const operationSchema = z.discriminatedUnion("type", [
     .strict(),
   z
     .object({
+      type: z.literal("SetAnnotationOffset"),
+      id,
+      offset: z.number().int().min(-10000).max(10000),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal("TransformItem"),
       id,
       x: mm,
