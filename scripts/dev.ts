@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { resolve } from "node:path";
 import { localDatabase } from "./local-db";
 import { createServer } from "../apps/api/src/server";
 import {
@@ -15,7 +16,17 @@ const { app } = createServer({
   secret: db.secret,
 });
 await app.listen({ port: 4311, host: "127.0.0.1" });
-const web = spawn("pnpm", ["dev:web"], { stdio: "inherit" });
+const web = spawn(
+  process.execPath,
+  [
+    resolve("node_modules/vite/bin/vite.js"),
+    "--config",
+    resolve("apps/web/vite.config.ts"),
+    "--host",
+    "127.0.0.1",
+  ],
+  { stdio: "inherit" },
+);
 let stopping = false;
 async function stop() {
   if (stopping) return;

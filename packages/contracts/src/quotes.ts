@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { id } from "./index";
-const date = z
+export const quoteDate = z
   .string()
   .regex(/^20\d{2}-\d{2}-\d{2}$/)
   .refine((v) => {
@@ -22,18 +22,26 @@ export const quoteLineSchema = z
     taxCategory: z.string().trim().min(1).max(60),
     taxRate: percent,
     source: z.object({ entryId: id, versionId: id }).strict().nullable(),
+    designSource: z
+      .object({ variantId: id, revisionId: id, itemId: id })
+      .strict()
+      .optional(),
+    priceRef: z.object({ id }).strict().optional(),
+    overlapReason: z.string().trim().max(1000).optional(),
     priceNote: z.string().trim().min(1).max(300),
   })
   .strict();
 export const quoteDefinitionSchema = z
   .object({
     customer: z.string().trim().min(1).max(2000),
+    seller: z.string().trim().max(2000).optional(),
     title: z.string().trim().min(1).max(200),
-    date,
-    validUntil: date,
+    date: quoteDate,
+    validUntil: quoteDate,
     currency: z.literal("EUR"),
     terms: z.string().trim().max(10000),
     lines: z.array(quoteLineSchema).max(200),
+    attachments: z.array(id).max(12).optional(),
   })
   .strict()
   .superRefine((v, ctx) => {
@@ -53,7 +61,21 @@ export const quoteDefinitionSchema = z
         message: "Een materiaalkeuze mag maar eenmaal voorkomen.",
       });
     const rates = new Map<string, string>();
+    const designKeys = v.lines.flatMap((l) =>
+      l.designSource
+        ? [l.designSource.variantId + ":" + l.designSource.itemId]
+        : [],
+    );
+    if (new Set(designKeys).size !== designKeys.length)
+      ctx.addIssue({
+        code: "custom",
+        message: "Een ontwerpobject mag maar eenmaal voorkomen.",
+      });
+    if (new Set(v.attachments ?? []).size !== (v.attachments ?? []).length)
+      ctx.addIssue({ code: "custom", message: "Dubbele bijlage." });
     for (const l of v.lines) {
+      if (l.source && l.designSource)
+        ctx.addIssue({ code: "custom", message: "Kies één bron per post." });
       if (
         rates.has(l.taxCategory) &&
         Number(rates.get(l.taxCategory)) !== Number(l.taxRate)
@@ -85,6 +107,83 @@ export type QuoteRecord = {
   definition: QuoteDefinition;
   totals: QuoteTotals;
   created_at: string;
+  status?: QuoteStatus;
+  event_version?: number;
+  content_hash?: string;
+  frozen?: { attachments: AttachmentSnapshot[] };
+};
+export const quoteStatuses = {
+  draft: "Concept",
+  final: "Definitief",
+  sent: "Verzonden (handmatig geregistreerd)",
+  accepted: "Geaccepteerd (handmatig geregistreerd)",
+  rejected: "Afgewezen",
+  expired: "Verlopen",
+  replaced: "Vervangen",
+} as const;
+export type QuoteStatus = keyof typeof quoteStatuses;
+export const statusInput = z
+  .object({
+    requestId: id,
+    baseEventVersion: z.number().int().min(0),
+    status: z.enum(["sent", "accepted", "rejected", "expired"]),
+    occurredOn: quoteDate,
+    actor: z.string().trim().min(1).max(200),
+    evidence: z.string().trim().min(1).max(2000),
+  })
+  .strict();
+export const priceInput = z
+  .object({
+    id,
+    entryId: id,
+    baseVersion: z.number().int().min(0),
+    sourceType: z.enum(["material", "library"]),
+    sourceId: id,
+    unitPrice: z.string().regex(/^(?:0|[1-9]\d{0,6})(?:\.\d{1,4})?$/),
+    unit: z.string().trim().min(1).max(30),
+    taxCategory: z.string().trim().min(1).max(60),
+    taxRate: percent,
+    date: quoteDate,
+    note: z.string().trim().min(1).max(300),
+  })
+  .strict();
+export type CatalogPrice = z.infer<typeof priceInput> & { version: number };
+export const attachmentInput = z.discriminatedUnion("kind", [
+  z
+    .object({
+      id,
+      kind: z.literal("plan"),
+      title: z.string().trim().min(1).max(160),
+      revisionId: id,
+      scale: z.union([z.literal(20), z.literal(50), z.literal(100)]),
+    })
+    .strict(),
+  z
+    .object({
+      id,
+      kind: z.literal("materials"),
+      title: z.string().trim().min(1).max(160),
+      versionIds: z.array(id).min(1).max(100),
+    })
+    .strict(),
+  z
+    .object({
+      id,
+      kind: z.literal("text"),
+      title: z.string().trim().min(1).max(160),
+      text: z.string().trim().min(1).max(10000),
+    })
+    .strict(),
+]);
+export type AttachmentSnapshot = {
+  id: string;
+  title: string;
+  kind: "plan" | "materials" | "text";
+  html: string;
+  hash: string;
+  revisionId?: string;
+  variantId?: string;
+  materialVersions?: { entryId: string; versionId: string }[];
 };
 export type QuoteTotals = {
   lines: { id: string; net: string }[];
@@ -92,4 +191,7 @@ export type QuoteTotals = {
   net: string;
   tax: string;
   total: string;
+};
+export type QuoteSummary = Omit<QuoteRecord, "definition" | "frozen"> & {
+  definition: Pick<QuoteDefinition, "title">;
 };

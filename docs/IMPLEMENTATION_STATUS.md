@@ -1,5 +1,21 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 10 september 2026 — afronding offerteworkflow fase 6
+
+Deze aanvulling is leidend voor fase 6; de oudere rapportages hieronder blijven als historische testregistraties staan. De wijzigingen zijn samengevoegd met main cb03021, inclusief de materiaalberekeningen en nieuwe editor-/browsertests. Het eerste offertedeel uit PR #2 staat al in main; de afronding krijgt een afzonderlijke pull request.
+
+Beschikbaar: decimale rekenkern en jaar-/organisatienummering, ontwerp- en materiaalbronnen, bronverschillen, aparte commerciële catalogusprijsversies, dubbele-broncontrole, vaste bedrijfs-/klantgegevens, voorwaarden, tekst-/materiaal-/planbijlagen, PDF-download, vervolgconcepten, versiegeschiedenis, expliciete statusovergangen en intrekbare PDF-deellinks. Migration 0011 voegt immutable prijzen, bijlagen, gebeurtenissen en PDF-bytes toe; FORCE RLS en servercontrole beperken interne toegang tot owner/admin/finance. Deellinks zijn beperkt tot één exacte PDF, gehasht opgeslagen, maximaal 30 dagen via API (7 in UI), intrekbaar en zonder verdere projecttoegang.
+
+Finalisatie bewaart inhoudshash en snapshots. De eerste PDF wordt opgeslagen met templateversie en PDF-hash; volgende downloads gebruiken dezelfde bytes. Een nieuwe definitieve versie krijgt een nieuw nummer en een expliciete vervangen-gebeurtenis bij de vorige versie. Een statusregistratie bevat actor, gebeurtenisdatum, registratie-tijdstip, onderbouwing en inhoudshash. PDF/download/deellink maken verzendt geen e-mail en simuleert geen klantacceptatie.
+
+Bronconsistentie: dezelfde ontwerprevisie per variant; materiaalbladen en posten gebruiken dezelfde materiaalversie. Berekende materiaalhoeveelheden worden ook aan de ontwerprevisies getoetst. Cataloguswijzigingen kunnen een definitieve offerte niet aanpassen. Indicatieve prijzen bij materiaalkeuzes blijven afzonderlijk van de commerciële catalogusprijs; de gebruiker kiest die expliciet. Inkoop/marge worden niet opgeslagen of uitgeleverd.
+
+Verificatie vóór samenvoegen met de nieuwste main: 11 offertests geslaagd met echte PostgreSQL en Chrome; alle 6 browserroutes geslaagd (1,3 min), inclusief PDF, delen/intrekken, statusregistratie en het ongewijzigd openen van oudere versies. De PDF-proef met 40 posten heeft 7 visueel gecontroleerde pagina's, totaal 3508,09 EUR, alle posten precies eenmaal en een 5-meterreferentie die bij 1:50 100 mm meet. De volledige suite na samenvoegen en Linux-CI worden hieronder aangevuld wanneer voltooid. Een bestaande Windows-symlinktest vereist rechten die op deze machine ontbreken; deze test blijft actief voor Linux-CI.
+
+Na samenvoegen met main: TypeScript strict geslaagd; productiebuild geslaagd (14,61 s); alle 10 browserroutes geslaagd (1,3 min). De volledige Vitest-run telde 96 geslaagde tests, één nieuwe fixturefout en de bestaande Windows-symlinkbeperking. Na correctie van het veld keywords zijn alle 8 offerte-integratietests opnieuw geslaagd (15,74 s), inclusief de nieuwe gecombineerde broncontrole. Linux-CI moet de volledige 98-test-suite bevestigen. De Windows-browsertest stopt PostgreSQL nu vóór Playwright de procesboom beëindigt; de vorige force-stop kon een IO-worker achterlaten. De echte API-PDF (3 pagina's) is aanvullend visueel gecontroleerd.
+
+Grenzen buiten deze fase: volledige fase-5-presentatiebouwer/PPTX/beeldimport, productie-exportqueue en opslagadapter, installatie/back-up/herstel en fase-9-hardening. De huidige bijlagen zijn vaste tekst-, materiaal- en planblokken; willekeurige geüploade PDF's en renderbeelden zijn geen ondersteunde bijlagebron. Maximaal 200 posten, 12 bijlagen, 500 versies per offerte, 20 MB per PDF en één actieve render per serverproces. Geen productie-uitrol.
+
 ## Aanvulling 8 september 2026 — fase 6, offerteconcepten en finalisatie
 
 Toegevoegd: offerteformulier met klant-/adresgegevens, datum/geldigheid, voorwaarden, maximaal 200 posten, handmatige prijzen en materiaalkeuzebronnen. EUR-bedragen gebruiken decimal.js met geïsoleerde precisie 40: hoeveelheid × eenheidsprijs × (1 − korting/100), netto per regel op centen ROUND_HALF_UP, daarna belasting over de som per categorie op centen. Negatieve eenheidsprijzen zijn correcties, hoeveelheden zijn niet-negatief. Belastingtarieven zijn per categorie instelbaar. Lege concepten zijn toegestaan, lege finalisatie niet.

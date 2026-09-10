@@ -86,6 +86,10 @@
     {
       "name": "0010_quotes.sql",
       "sha256": "327ae8124ca71f132891f46f2718d64051d50f132453b287b68b6491e2907adf"
+    },
+    {
+      "name": "0011_quote_workflow.sql",
+      "sha256": "0bd30383b7a570a26f7af69730159feebc8159a2267533fcbca21f8037fdc103"
     }
   ],
   "containers": {

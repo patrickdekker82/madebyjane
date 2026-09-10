@@ -956,8 +956,8 @@ function Editor() {
           </button>
         </div>
         <span className="tools-spacer" />
-        <Materials organizationId={org.id} projectId={scene.projectId} variantId={variantId} canEdit={canWrite(org.role)} />
-        {["owner", "admin", "finance"].includes(org.role) && <Quotes organizationId={org.id} projectId={scene.projectId} />}
+          <Materials organizationId={org.id} projectId={scene.projectId} variantId={variantId} canEdit={canWrite(org.role)} />
+          {["owner", "admin", "finance"].includes(org.role) && <Quotes organizationId={org.id} organizationName={org.name} projectId={scene.projectId} />}
         <Variants
           organizationId={org.id}
           variantId={variantId}
@@ -1504,3 +1504,4 @@ createRoot(document.getElementById("root")!).render(
     <RouterProvider router={router} />
   </QueryClientProvider>,
 );
+

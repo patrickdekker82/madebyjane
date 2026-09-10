@@ -915,6 +915,27 @@ test("offerteconcept, decimalen, finalisatie en vaste prijzen na herladen", asyn
     page.getByRole("heading", { name: "Totaal: 54,44 €" }),
   ).toBeVisible();
   await page
+    .getByRole("button", {
+      name: "Prijsbronnen en presentatiebijlagen",
+      exact: true,
+    })
+    .click();
+  await page
+    .getByLabel("Bijlagetitel", { exact: true })
+    .fill("Presentatie woonkamer");
+  await page
+    .getByLabel("Presentatietekst", { exact: true })
+    .fill("Rustige natuurlijke materialen voor de woonkamer.");
+  await page
+    .getByRole("button", {
+      name: "Tekstblok bewaren en bijvoegen",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByLabel("Presentatie woonkamer · text", { exact: true }),
+  ).toBeChecked();
+  await page
     .getByRole("button", { name: "Concept bewaren", exact: true })
     .click();
   await expect(
@@ -949,6 +970,68 @@ test("offerteconcept, decimalen, finalisatie en vaste prijzen na herladen", asyn
   await expect(
     page.getByLabel("Eenheidsprijs EUR post 1", { exact: true }),
   ).toHaveValue("19.995");
+  const downloaded = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "Offerte-PDF downloaden", exact: true })
+    .click();
+  const pdf = await downloaded;
+  await pdf.saveAs("outputs/qa/offerte-browser.pdf");
+  await page
+    .getByRole("button", { name: "Deellink maken", exact: true })
+    .click();
+  const link = await page.getByLabel("Deellink voor deze offerte").inputValue();
+  expect((await page.request.get(link)).status()).toBe(200);
+  await page
+    .getByRole("button", { name: "Link intrekken", exact: true })
+    .click();
+  await expect(page.getByText("Ingetrokken", { exact: true })).toBeVisible();
+  expect((await page.request.get(link)).status()).toBe(404);
+  await page
+    .getByRole("button", {
+      name: "Verzending of klantreactie registreren",
+      exact: true,
+    })
+    .click();
+  await page.getByLabel("Afzender of reagerende klant").fill("Testontwerper");
+  await page
+    .getByLabel("Onderbouwing / bron")
+    .fill("Fictieve e-mail voor browsertest");
+  await page
+    .getByRole("button", { name: "Registratie bewaren", exact: true })
+    .click();
+  await expect(
+    page.getByText("Verzonden (handmatig geregistreerd)", { exact: true }),
+  ).toBeVisible();
+  page.once("dialog", (d) => d.accept());
+  await page
+    .getByRole("button", { name: "Vervolgconcept maken", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Concept zonder offertenummer · versie 3",
+    }),
+  ).toBeVisible();
+  await page.getByLabel("Eenheidsprijs EUR post 1", { exact: true }).fill("30");
+  await page
+    .getByRole("button", { name: "Concept bewaren", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Concept zonder offertenummer · versie 4",
+    }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Versies bekijken", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: /2026-\d+ · versie 2 · Verzonden/ })
+    .click();
+  await expect(
+    page.getByLabel("Eenheidsprijs EUR post 1", { exact: true }),
+  ).toHaveValue("19.995");
+  await expect(
+    page.getByLabel("Eenheidsprijs EUR post 1", { exact: true }),
+  ).toBeDisabled();
 });
 
 test("vangen op het raster en op een ander meubel → passend in beeld → vangen uitschakelen", async ({

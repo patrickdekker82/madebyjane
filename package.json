@@ -19,7 +19,8 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "setup": "tsx scripts/setup.ts",
     "check": "pnpm build && pnpm test",
-    "probe:pdf": "tsx scripts/pdf-probe.ts"
+    "probe:pdf": "tsx scripts/pdf-probe.ts",
+    "probe:quote": "tsx scripts/quote-pdf-probe.ts"
   },
   "dependencies": {
     "@fastify/rate-limit": "11.2.0",

@@ -1,11 +1,17 @@
 import { spawn } from "node:child_process";
+import { resolve } from "node:path";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { randomBytes, randomUUID } from "node:crypto";
 import { localDatabase } from "./local-db";
 import { createAuth } from "../packages/auth/src/index";
 import { createServer } from "../apps/api/src/server";
 await mkdir("work", { recursive: true });
-const db = await localDatabase(await mkdtemp("work/e2e-db-"), 55434);
+const databaseDirectory = await mkdtemp("work/e2e-db-");
+const db = await localDatabase(databaseDirectory, 55434);
+await writeFile(
+  "work/e2e-database.json",
+  JSON.stringify({ directory: resolve(databaseDirectory, "data") }),
+);
 const baseURL = "http://127.0.0.1:4320",
   setup = createAuth(db.admin, baseURL, db.secret, true);
 const password = randomBytes(24).toString("hex"),
@@ -34,10 +40,24 @@ const { app } = createServer({
   secret: db.secret,
 });
 await app.listen({ port: 4321, host: "127.0.0.1" });
-const web = spawn("pnpm", ["dev:web"], {
-  stdio: "inherit",
-  env: { ...process.env, WEB_PORT: "4320", API_PROXY: "http://127.0.0.1:4321" },
-});
+const web = spawn(
+  process.execPath,
+  [
+    resolve("node_modules/vite/bin/vite.js"),
+    "--config",
+    resolve("apps/web/vite.config.ts"),
+    "--host",
+    "127.0.0.1",
+  ],
+  {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      WEB_PORT: "4320",
+      API_PROXY: "http://127.0.0.1:4321",
+    },
+  },
+);
 let stopping = false;
 async function stop() {
   if (stopping) return;
