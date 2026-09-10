@@ -31,8 +31,16 @@ export function PlanCanvas({
   const [pan, setPan] = useState({ x: 95, y: 90 });
   const [start, setStart] = useState<Point | null>(null);
   const [cursor, setCursor] = useState<Point | null>(null);
-  const { tool, selected, zoom, grid, objectSnap, select, setZoom } =
-    useEditor();
+  const {
+    tool,
+    selected,
+    zoom,
+    grid,
+    objectSnap,
+    select,
+    toggleSelected,
+    setZoom,
+  } = useEditor();
   const [snapped, setSnapped] = useState<SnapTarget[]>([]);
   /**
    * Vangtolerantie: twaalf schermpixels omgerekend naar millimeters. Bij elke
@@ -232,7 +240,7 @@ export function PlanCanvas({
               <Group key={w.id}>
                 <Line
                   points={[a.x, a.y, b.x, b.y]}
-                  stroke={selected === w.id ? "#b47b45" : "#465044"}
+                  stroke={selected.includes(w.id) ? "#b47b45" : "#465044"}
                   strokeWidth={w.thickness}
                   hitStrokeWidth={Math.max(20 / zoom, w.thickness)}
                   onClick={() => wallClick(w.id)}
@@ -306,9 +314,15 @@ export function PlanCanvas({
               y={i.y}
               rotation={i.rotation}
               draggable={!disabled && tool === "select"}
-              onClick={() => select(i.id)}
+              onClick={(e) =>
+                e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey
+                  ? toggleSelected(i.id)
+                  : select(i.id)
+              }
               onTap={() => select(i.id)}
-              onDragStart={() => select(i.id)}
+              onDragStart={() => {
+                if (!useEditor.getState().selected.includes(i.id)) select(i.id);
+              }}
               onDragMove={(e) => {
                 setSnapped(
                   snapTo({ x: e.target.x(), y: e.target.y() }, [i.id]).targets,
@@ -343,7 +357,7 @@ export function PlanCanvas({
                     width={i.width}
                     height={i.depth}
                     fill="rgba(0,0,0,0)"
-                    stroke={selected === i.id ? "#a36432" : undefined}
+                    stroke={selected.includes(i.id) ? "#a36432" : undefined}
                     strokeWidth={2 / zoom}
                   />
                   {symbolPrimitives(i.symbol, i.width, i.depth).map(
@@ -391,8 +405,8 @@ export function PlanCanvas({
                   height={i.depth}
                   cornerRadius={i.kind === "table" ? 100 : 60}
                   fill={i.color}
-                  stroke={selected === i.id ? "#a36432" : "#756f61"}
-                  strokeWidth={selected === i.id ? 3 / zoom : 1 / zoom}
+                  stroke={selected.includes(i.id) ? "#a36432" : "#756f61"}
+                  strokeWidth={selected.includes(i.id) ? 3 / zoom : 1 / zoom}
                 />
               )}
               {!i.symbol && i.kind === "sofa" && (
@@ -432,7 +446,7 @@ export function PlanCanvas({
                 fontSize={Math.min(115, 11 / zoom)}
                 fill="#393c33"
               />
-              {selected === i.id && (
+              {selected.includes(i.id) && (
                 <Circle
                   x={i.width / 2}
                   y={i.depth / 2}

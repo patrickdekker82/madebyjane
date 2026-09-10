@@ -23,6 +23,12 @@ Selecteer een muur, deur of raam in de objectlijst om de maatvelden te openen. A
 
 `work/local-db` bevat ontwikkeldata en lokaal gegenereerde secrets. Verwijder deze map niet als je projecten wilt behouden. Stop `pnpm dev` met Ctrl+C; opnieuw starten hergebruikt de database. Bewaar deze directory buiten gedeelde of automatisch opgeschoonde opslag. Het huidige setup-script is alleen voor deze lokale ontwikkelomgeving.
 
+## Precies plaatsen
+
+De onderbalk heeft twee schakelaars. **Raster snap** rondt af op 100 mm. **Vangen aan objecten** laat een punt aansluiten op een bestaand muurpunt, op een muurhartlijn of uitlijnen op een ander meubel; tijdens het slepen zie je gestreepte hulplijnen. De vangafstand is twaalf schermpixels, omgerekend naar millimeters, dus bij elke zoomstand even ver. Een muurpunt wint van een muur, een muur van een object en een object van het raster.
+
+Selecteer meerdere meubels met shift, ctrl of cmd, in de plattegrond of in de objectlijst. Het eigenschappenpaneel toont dan zes uitlijningen en twee verdelingen. Uitlijnen gebruikt de omhullende van elk meubel inclusief draaiing; verdelen maakt de tussenruimten gelijk en laat de buitenste meubels staan. De hele actie is één stap terug.
+
 ## Versies bewaren en terugzetten
 
 Klik **Revisie bewaren** om het opgeslagen ontwerp vast te leggen. Open **Versiegeschiedenis**, kies een bewaarde revisie en bevestig **Deze versie herstellen**. De huidige versie wordt automatisch bewaard als **Voor herstel**; je kunt die later ook terugzetten. Herstel maakt een nieuwe revisie en vereist bewerktoegang. De lijst toont de laatste 100 bewaarde versies.

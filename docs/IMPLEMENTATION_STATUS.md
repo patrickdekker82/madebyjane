@@ -251,3 +251,25 @@ Open voor de rest van fase 4: textuurafbeeldingen bij een materiaal, prijsgeschi
 1. Benoemde, persistente ruimtes zodat een hoeveelheidsbron een muurwijziging overleeft, met een veilige herkoppeling wanneer de contour verandert.
 2. Daarna de gordijnberekening met eigen invoervelden en een geschiedenis-UI per materiaalkeuze.
 3. Fase 5 (presentaties) blijft daarna aan de beurt; de openstaande fase-1-onderdelen (productie-Compose, back-up/herstel) blijven ongewijzigd open.
+
+## Aanvulling 10 september 2026 — fase 4 en 6 samengevoegd, fase 2 uitgebreid
+
+De offertemodule stond op een tak vanaf `main` en de hoeveelheden- en alternatievenmodule op een andere; beide kenden elkaars werk niet. Ze zijn samengevoegd op één tak. Twee conflicten opgelost: het ontwerpscherm toont nu zowel Materiaalkeuzes met `variantId` als de offerteknop voor owner/admin/finance, en beide sets browserroutes blijven staan. `scripts/local-db.ts` kwam automatisch samen: de Windows-tmpdir en het weglaten van Unix-socketflags blijven naast het draaien onder de postgres-systeemgebruiker als root en de pool-error-listener. Daarmee is ook de openstaande vraag uit de fase 6-notitie beantwoord: de volledige browsersuite slaagt met een hergebruikte eigenaarsessie.
+
+### Vangen aan raster, muurpunten, muren en meubels
+
+De editor kende alleen rasterafronding op 100 mm. `packages/geometry/src/snapping.ts` is een pure functie met een vaste volgorde van voorkeur: muurpunt, muur, object, raster. Muurpunt en muur leggen beide assen vast; object en raster werken per as, zodat de x van een meubel kan komen en de y van het raster. De tolerantie komt binnen in wereldmillimeters — de editor rekent twaalf schermpixels om met de zoomfactor — zodat vangen bij elke zoomstand even ver aanvoelt zonder dat een fysieke maat ooit met de schermzoom vermenigvuldigd wordt. Uitkomsten zijn hele millimeters. Een muur vangt alleen binnen zijn eigen segment; daarbuiten hoort het punt bij het muurpunt. Het gesleepte meubel vangt niet aan zichzelf. Tijdens het slepen tonen gestreepte hulplijnen waarop uitgelijnd wordt. De onderbalk heeft een schakelaar **Vangen aan objecten**, los van het raster.
+
+Daarbij opgelost: de canvasknop **Passend** had een eigen fit-berekening die negatieve coördinaten negeerde, waardoor een plan links of boven de oorsprong buiten beeld bleef. Beide plekken gebruiken nu dezelfde berekening.
+
+### Meervoudige selectie, uitlijnen en gelijk verdelen
+
+`selected` is van één ID naar een lijst gegaan. Shift-, ctrl- of cmd-klikken in de plattegrond of de objectlijst voegt toe of haalt weg. Bij twee of meer meubels verschijnt een paneel met zes uitlijningen en twee verdelingen. `packages/geometry/src/arrange.ts` rekent met de asgerichte omhullende van een gedraaid meubel, dus een bank die 30 graden staat lijnt uit op wat je op het plan ziet. Verdelen maakt de tussenruimten tussen de omhullenden gelijk en laat het eerste en laatste meubel staan; passen ze niet, dan worden de tussenruimten negatief en overlappen ze zichtbaar. Alle verplaatsingen gaan als één batch naar de server en zijn dus één stap terug.
+
+Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+- **94 tests / 15 bestanden geslaagd, 23,1 s** (was 75 na de merge). Nieuw: elf vangtests en acht uitlijn-/verdeeltests, met 300 respectievelijk 200 gegenereerde gevallen die bewijzen dat de uitkomst altijd hele millimeters is.
+- **10 browserroutes geslaagd, 1,2 min.** Twee nieuwe. De vangroute kalibreert zichzelf: zij meet eerst de schaal met een sleep van 120 px en drukt daarna alles in schermpixels uit, zodat zij niet op de fit-formule van de editor leunt. Rasterslepen levert hele honderdtallen, uitlijnen op een ander meubel levert exact hetzelfde hart, en met vangen uit blijft het meubel staan waar het losgelaten wordt. De uitlijnroute controleert gelijke linkerranden, een ongemoeide y-as, één stap terug voor drie meubels tegelijk en gelijke tussenruimten na verdelen.
+- TypeScript strict en productiebuild geslaagd (9,7 s). Bekende chunkgroottewaarschuwing blijft open.
+- Screenshots `outputs/qa/vangen.png`, `outputs/qa/vanghulplijn.png` en `outputs/qa/uitlijnen.png` daadwerkelijk geïnspecteerd. Twee correcties na inspectie: een sleep van 2 px startte nooit omdat Konva pas vanaf 3 px sleept — de test drukt de afstanden nu in pixels uit; en de zes uitlijnknoppen braken af als 5+1, nu een raster van drie kolommen.
+
+Nog open in fase 2: maatlijnen, annotaties, legenda en meetgereedschap; vergrendelen, laagvolgorde en zichtbaarheid; laagpresets voor inrichting, afwerking, elektra en verlichting; import van rasteronderlegger en PDF-pagina met kalibratie via twee punten; rubberband-selectie op het canvas; groeperen; opt-in lokaal herstel via IndexedDB; toetsenbordsnelkoppelingen. Muurjoins blijven ook open. Fase 2 is daarmee niet afgerond.

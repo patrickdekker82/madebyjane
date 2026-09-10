@@ -1081,3 +1081,121 @@ test("vangen op het raster en op een ander meubel → passend in beeld → vange
   expect((await position()).x).toBe(free.x);
   expect(errors).toEqual([]);
 });
+
+test("meerdere meubels selecteren → uitlijnen → gelijk verdelen → één stap terug", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
+  await page.getByLabel("Projectnaam").fill("Uitlijnstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+
+  const positionOf = async (name: string) => {
+    await page.getByRole("button", { name, exact: true }).click();
+    return {
+      x: Number(await page.getByLabel("Positie X", { exact: true }).inputValue()),
+      y: Number(await page.getByLabel("Positie Y", { exact: true }).inputValue()),
+    };
+  };
+  // De demoruimte heeft vier meubels op verschillende posities.
+  const before = {
+    sofa: await positionOf("Bank · linnen naturel"),
+    table: await positionOf("Salontafel · eiken"),
+    dining: await positionOf("Eettafel · rond"),
+  };
+  expect(new Set([before.sofa.x, before.table.x, before.dining.x]).size).toBe(3);
+
+  // Shift-klikken in de objectlijst selecteert meerdere meubels.
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Salontafel · eiken", exact: true })
+    .click({ modifiers: ["Shift"] });
+  await page
+    .getByRole("button", { name: "Eettafel · rond", exact: true })
+    .click({ modifiers: ["Shift"] });
+  await expect(
+    page.getByRole("heading", { name: "3 meubels geselecteerd", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: "outputs/qa/uitlijnen.png" });
+
+  await page.getByRole("button", { name: "Links uitlijnen", exact: true }).click();
+  await saved();
+  const aligned = {
+    sofa: await positionOf("Bank · linnen naturel"),
+    table: await positionOf("Salontafel · eiken"),
+    dining: await positionOf("Eettafel · rond"),
+  };
+  // Linkerranden gelijk: hart min halve breedte is voor alle drie hetzelfde.
+  const left = (p: { x: number }, width: number) => p.x - width / 2;
+  expect(left(aligned.sofa, 2400)).toBe(left(aligned.table, 1200));
+  expect(left(aligned.sofa, 2400)).toBe(left(aligned.dining, 1200));
+  // De y-as blijft ongemoeid.
+  expect(aligned.sofa.y).toBe(before.sofa.y);
+  expect(aligned.dining.y).toBe(before.dining.y);
+
+  // Eén stap terug zet alle drie de meubels tegelijk terug.
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  await page.getByRole("button", { name: "Ongedaan maken", exact: true }).click();
+  await saved();
+  expect(await positionOf("Bank · linnen naturel")).toEqual(before.sofa);
+  expect(await positionOf("Salontafel · eiken")).toEqual(before.table);
+  expect(await positionOf("Eettafel · rond")).toEqual(before.dining);
+
+  // Verticaal gelijk verdelen: de buitenste blijven staan, de tussenruimten worden gelijk.
+  await page.getByRole("button", { name: "Bank · linnen naturel", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Salontafel · eiken", exact: true })
+    .click({ modifiers: ["Shift"] });
+  await page
+    .getByRole("button", { name: "Eettafel · rond", exact: true })
+    .click({ modifiers: ["Shift"] });
+  await page
+    .getByRole("button", { name: "Verticaal gelijk verdelen", exact: true })
+    .click();
+  await saved();
+  const spread = {
+    sofa: { ...(await positionOf("Bank · linnen naturel")), depth: 950 },
+    table: { ...(await positionOf("Salontafel · eiken")), depth: 650 },
+    dining: { ...(await positionOf("Eettafel · rond")), depth: 1200 },
+  };
+  const order = [spread.dining, spread.table, spread.sofa].sort(
+    (a, b) => a.y - b.y,
+  );
+  const gapOne = order[1]!.y - order[1]!.depth / 2 - (order[0]!.y + order[0]!.depth / 2);
+  const gapTwo = order[2]!.y - order[2]!.depth / 2 - (order[1]!.y + order[1]!.depth / 2);
+  expect(Math.abs(gapOne - gapTwo)).toBeLessThanOrEqual(1);
+  // De buitenste twee staan nog op hun oude plek.
+  expect(order[0]!.y - order[0]!.depth / 2).toBe(
+    Math.min(
+      before.sofa.y - 475,
+      before.table.y - 325,
+      before.dining.y - 600,
+    ),
+  );
+
+  await page.reload();
+  expect((await positionOf("Salontafel · eiken")).y).toBe(spread.table.y);
+  expect(errors).toEqual([]);
+});

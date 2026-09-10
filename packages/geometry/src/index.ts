@@ -117,6 +117,15 @@ export function validateGeometry(scene: Scene) {
 }
 export { detectRooms, type Room, type RoomDetection } from "./rooms";
 export {
+  alignItems,
+  distributeItems,
+  bounds,
+  halfExtent,
+  type Placed,
+  type Placement,
+  type Alignment,
+} from "./arrange";
+export {
   snapPoint,
   type SnapResult,
   type SnapTarget,
