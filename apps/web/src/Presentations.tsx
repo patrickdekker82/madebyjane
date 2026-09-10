@@ -10,8 +10,11 @@ import {
   Download,
   Share2,
   Upload,
+  Eye,
+  Plus,
 } from "lucide-react";
 import {
+  moodboardImageLimit,
   planScaleSchema,
   presentationTemplates,
   type Presentation,
@@ -19,6 +22,7 @@ import {
   type PresentationTemplate,
 } from "../../../packages/contracts/src/presentations";
 import { api, ApiError } from "./api";
+import { StoredImage, uploadImage, type StoredImageInfo } from "./Images";
 
 type Summary = {
   id: string;
@@ -77,8 +81,24 @@ export function Presentations({
     [shares, setShares] = useState<Share[]>([]),
     [changed, setChanged] = useState<{ was: number; now: number }[]>([]),
     [link, setLink] = useState(""),
+    [library, setLibrary] = useState<StoredImageInfo[]>([]),
+    [preview, setPreview] = useState<{ version: number; html: string } | null>(
+      null,
+    ),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+
+  /** De beeldbank, voor de moodboardblokken. */
+  const loadLibrary = async () => {
+    try {
+      setLibrary(
+        (await api<{ items: StoredImageInfo[] }>("/images", organizationId))
+          .items,
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
 
   const load = async () => {
     setError("");
@@ -119,6 +139,7 @@ export function Presentations({
         ).changed,
       );
       setShares([]);
+      await loadLibrary();
     } catch (e) {
       setError((e as Error).message);
     }
@@ -447,6 +468,20 @@ export function Presentations({
                           </label>
                         </div>
                       )}
+                      {block.type === "moodboard" && (
+                        <MoodboardEditor
+                          index={index}
+                          organizationId={organizationId}
+                          images={block.images}
+                          library={library}
+                          onUploaded={loadLibrary}
+                          onChange={(images) =>
+                            update(block.id, {
+                              images,
+                            } as Partial<PresentationBlock>)
+                          }
+                        />
+                      )}
                     </li>
                   ))}
                 </ol>
@@ -485,6 +520,28 @@ export function Presentations({
                           {v.content_hash.slice(0, 12)}
                         </small>
                       </span>
+                      <button
+                        onClick={async () => {
+                          setError("");
+                          const r = await fetch(
+                            `/api/v1/presentations/${row.id}/versions/${v.version}/view`,
+                            {
+                              headers: { "x-organization-id": organizationId },
+                            },
+                          );
+                          if (!r.ok) {
+                            setError((await r.json()).message);
+                            return;
+                          }
+                          setPreview({
+                            version: v.version,
+                            html: await r.text(),
+                          });
+                        }}
+                      >
+                        <Eye size={13} />
+                        Bekijken
+                      </button>
                       <button
                         onClick={async () => {
                           const r = await fetch(
@@ -585,8 +642,10 @@ export function Presentations({
                               organizationId,
                               { id: crypto.randomUUID(), days: 30 },
                             );
+                            // De link opent de presentatie in de browser; de
+                            // maatvaste PDF staat als knop in die pagina.
                             setLink(
-                              `${location.origin}/api/v1/presentation-shares/${organizationId}/${s.token}`,
+                              `${location.origin}/api/v1/presentation-shares/${organizationId}/${s.token}/view`,
                             );
                             setShares(
                               (
@@ -660,7 +719,224 @@ export function Presentations({
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+      {/*
+       * De presentatie zoals de klant hem in de browser ziet. De pagina komt
+       * uit dezelfde bron als de PDF en draait in een afgeschermd venster
+       * zonder scripts; er staat bij dat alleen de PDF maatvast is.
+       */}
+      <Dialog.Root open={!!preview} onOpenChange={() => setPreview(null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="overlay" />
+          <Dialog.Content className="dialog presentation-viewer">
+            <Dialog.Title>
+              Presentatie bekijken
+              {preview ? ` · versie ${preview.version}` : ""}
+            </Dialog.Title>
+            <Dialog.Description>
+              Dit is de weergave achter een deellink. De tekening is hier op het
+              scherm geschaald; alleen de PDF is maatvast.
+            </Dialog.Description>
+            <Dialog.Close className="dialog-close" aria-label="Sluiten">
+              <X size={18} />
+            </Dialog.Close>
+            {preview && (
+              <iframe
+                className="viewer-frame"
+                title="Presentatie"
+                sandbox=""
+                srcDoc={preview.html}
+              />
+            )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </>
+  );
+}
+
+/**
+ * Een moodboard vullen.
+ *
+ * De beelden komen uit de beeldbank van de werkruimte, dezelfde opslag als de
+ * onderleggers. Je kunt er iets nieuws in zetten of iets kiezen dat er al
+ * staat; het onderschrift hoort bij het blok, niet bij de afbeelding, zodat
+ * hetzelfde beeld in twee presentaties anders benoemd kan worden.
+ */
+function MoodboardEditor({
+  index,
+  organizationId,
+  images,
+  library,
+  onUploaded,
+  onChange,
+}: {
+  index: number;
+  organizationId: string;
+  images: { assetId: string; caption: string }[];
+  library: StoredImageInfo[];
+  onUploaded: () => Promise<void>;
+  onChange: (images: { assetId: string; caption: string }[]) => void;
+}) {
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const file = useRef<HTMLInputElement>(null);
+  const full = images.length >= moodboardImageLimit;
+  const unused = library.filter(
+    (item) => !images.some((chosen) => chosen.assetId === item.id),
+  );
+  const add = (assetId: string) =>
+    onChange([...images, { assetId, caption: "" }]);
+  return (
+    <div className="moodboard-editor">
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      <ul>
+        {images.map((image, position) => (
+          <li key={image.assetId + position}>
+            <StoredImage
+              assetId={image.assetId}
+              organizationId={organizationId}
+              alt={image.caption || "Moodboardafbeelding"}
+            />
+            <input
+              aria-label={`Onderschrift afbeelding ${position + 1} blok ${index + 1}`}
+              placeholder="Onderschrift"
+              defaultValue={image.caption}
+              onBlur={(e) =>
+                onChange(
+                  images.map((other, at) =>
+                    at === position
+                      ? { ...other, caption: e.target.value.trim() }
+                      : other,
+                  ),
+                )
+              }
+            />
+            <div className="moodboard-buttons">
+              <button
+                aria-label={`Afbeelding ${position + 1} naar voren blok ${index + 1}`}
+                disabled={position === 0}
+                onClick={() => {
+                  const next = [...images];
+                  [next[position - 1], next[position]] = [
+                    next[position]!,
+                    next[position - 1]!,
+                  ];
+                  onChange(next);
+                }}
+              >
+                <ChevronUp size={13} />
+              </button>
+              <button
+                aria-label={`Afbeelding ${position + 1} naar achteren blok ${index + 1}`}
+                disabled={position === images.length - 1}
+                onClick={() => {
+                  const next = [...images];
+                  [next[position], next[position + 1]] = [
+                    next[position + 1]!,
+                    next[position]!,
+                  ];
+                  onChange(next);
+                }}
+              >
+                <ChevronDown size={13} />
+              </button>
+              <button
+                aria-label={`Afbeelding ${position + 1} verwijderen blok ${index + 1}`}
+                onClick={() =>
+                  onChange(images.filter((_, at) => at !== position))
+                }
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          </li>
+        ))}
+        {!images.length && (
+          <li className="empty">
+            Nog geen beelden. Een leeg moodboard blijft in de presentatie ook
+            leeg.
+          </li>
+        )}
+      </ul>
+      {full ? (
+        <p className="small">
+          Er passen {moodboardImageLimit} beelden op een moodboard. Verwijder er
+          eerst een.
+        </p>
+      ) : (
+        <div className="moodboard-add">
+          <button
+            disabled={busy}
+            onClick={() => file.current?.click()}
+            aria-label={`Afbeelding uploaden blok ${index + 1}`}
+          >
+            <Upload size={13} />
+            {busy ? "Bezig…" : "Uploaden"}
+          </button>
+          <input
+            ref={file}
+            type="file"
+            hidden
+            aria-label={`Moodboardafbeelding kiezen blok ${index + 1}`}
+            accept="image/png,image/jpeg"
+            onChange={async (event) => {
+              const chosen = event.target.files?.[0];
+              if (!chosen) return;
+              setBusy(true);
+              setError("");
+              try {
+                const uploaded = await uploadImage(chosen, organizationId);
+                add(uploaded.id);
+                await onUploaded();
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+                if (file.current) file.current.value = "";
+              }
+            }}
+          />
+          <button
+            onClick={() => setPicking(!picking)}
+            aria-label={`Uit beeldbank kiezen blok ${index + 1}`}
+          >
+            <Plus size={13} />
+            Uit beeldbank
+          </button>
+        </div>
+      )}
+      {picking && !full && (
+        <div className="image-picker">
+          {unused.map((item) => (
+            <button
+              key={item.id}
+              title={`${item.widthPx} × ${item.heightPx} px`}
+              onClick={() => {
+                add(item.id);
+                setPicking(false);
+              }}
+            >
+              <StoredImage
+                assetId={item.id}
+                organizationId={organizationId}
+                alt={`Afbeelding van ${new Date(item.createdAt).toLocaleDateString("nl-NL")}`}
+              />
+            </button>
+          ))}
+          {!unused.length && (
+            <p className="small">
+              De beeldbank is leeg of alles staat er al op. Upload een PNG of
+              JPEG van maximaal 16 MiB.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

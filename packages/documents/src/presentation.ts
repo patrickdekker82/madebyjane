@@ -94,6 +94,47 @@ function planRules(document: Presentation) {
     .join(" ");
 }
 
+/**
+ * Extra's voor de schermweergave. Alleen de webviewer geeft deze mee; de PDF
+ * wordt zonder gemaakt, zodat het papier precies blijft zoals het was.
+ */
+export type ViewerOptions = {
+  /** Waar de maatvaste PDF staat. Zonder link komt er geen knop. */
+  pdfHref?: string;
+  /** Regel naast de titel, bijvoorbeeld welke versie dit is. */
+  subtitle?: string;
+};
+
+/**
+ * De schermstijl staat volledig in `@media screen` en raakt het papier dus
+ * niet. Op het scherm wordt een planblad naar de vensterbreedte geschaald; het
+ * is daar bewust géén maat meer, en de balk zegt dat er ook bij.
+ */
+const screenCss = `@media screen{
+ body{background:#4a4c48;padding:0 0 10mm}
+ .cover,.block,.colophon,.sheet{background:#fff;margin:6mm auto;box-shadow:0 0.5mm 2mm rgba(0,0,0,0.35);max-width:100%}
+ .cover,.block,.colophon{width:210mm;padding:18mm 16mm 20mm}
+ .sheet{width:max-content}
+ svg{max-width:100%;height:auto}
+ .viewer-bar{position:sticky;top:0;z-index:1;display:flex;flex-wrap:wrap;gap:3mm;align-items:baseline;justify-content:space-between;background:#23261f;color:#f4f2ec;padding:4mm 6mm;font:11pt ${fonts.sans}}
+ .viewer-bar strong{font-weight:600}
+ .viewer-bar .viewer-note{font-size:9pt;opacity:0.8;max-width:110mm}
+ .viewer-bar a{color:#f4f2ec;border:0.4mm solid #f4f2ec;border-radius:1mm;padding:1.5mm 4mm;text-decoration:none;font-size:9.5pt}
+}
+@media screen and (max-width:240mm){
+ .cover,.block,.colophon{width:auto;padding:8mm}
+}
+@media print{.viewer-bar{display:none}}`;
+
+const viewerBar = (document: Presentation, viewer: ViewerOptions) =>
+  `<header class="viewer-bar"><div><strong>${e(document.title)}</strong>${
+    viewer.subtitle ? ` · ${e(viewer.subtitle)}` : ""
+  }</div><div class="viewer-note">Schermweergave. Alleen de PDF is maatvast; print die op 100%.</div>${
+    viewer.pdfHref
+      ? `<a href="${e(viewer.pdfHref)}" download>PDF downloaden</a>`
+      : ""
+  }</header>`;
+
 const table = (headers: string[], rows: string[][]) =>
   `<table><thead><tr>${headers
     .map((h) => `<th>${e(h)}</th>`)
@@ -188,6 +229,7 @@ function renderResolved(block: ResolvedBlock): string {
 export function presentationHtml(
   document: Presentation,
   content: PresentationContent,
+  viewer?: ViewerOptions,
 ) {
   const look = looks[document.template];
   const byBlock = new Map(content.blocks.map((b) => [b.blockId, b]));
@@ -207,7 +249,7 @@ export function presentationHtml(
         if (resolvedBlock.problem)
           return `<section class="block"><h2>${e(block.heading)}</h2><p class="empty">${e(resolvedBlock.problem)}</p></section>`;
         // Alleen de paginastijl en de tekening; geen maat op het blok eromheen.
-        return `<section class="${pageName(block.paper, block.orientation)}">${renderResolved(resolvedBlock)}</section>`;
+        return `<section class="sheet ${pageName(block.paper, block.orientation)}">${renderResolved(resolvedBlock)}</section>`;
       }
       if (!resolvedBlock)
         return `<section class="block"><h2>${e(block.heading)}</h2><p class="empty">Voor dit blok is nog niets vastgelegd.</p></section>`;
@@ -264,5 +306,6 @@ export function presentationHtml(
  .colophon td{font-size:8pt}
  .logo{max-height:22mm;margin-bottom:10mm}
  ${planRules(document)}
- </style></head><body>${body}${colophon}</body></html>`;
+ ${viewer ? screenCss : ""}
+ </style></head><body>${viewer ? viewerBar(document, viewer) : ""}${body}${colophon}</body></html>`;
 }

@@ -65,6 +65,9 @@ export const brandingSchema = z
   .strict();
 export type Branding = z.infer<typeof brandingSchema>;
 
+/** Zoveel beelden passen er op een moodboard; het paneel houdt dezelfde grens aan. */
+export const moodboardImageLimit = 12;
+
 const block = <T extends string, S extends z.ZodRawShape>(type: T, shape: S) =>
   z.object({ id, type: z.literal(type), ...shape }).strict();
 
@@ -91,7 +94,7 @@ export const presentationBlockSchema = z.discriminatedUnion("type", [
       .array(
         z.object({ assetId: id, caption: z.string().trim().max(160) }).strict(),
       )
-      .max(12),
+      .max(moodboardImageLimit),
   }),
   block("materials", {
     heading: z.string().trim().max(120),

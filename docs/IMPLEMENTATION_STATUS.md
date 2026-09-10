@@ -779,3 +779,44 @@ De werker draait in hetzelfde proces als de API. Dat is genoeg voor twee gebruik
 ### Nog open in fase 5
 
 Een **webviewer** die de presentatie in de browser toont in plaats van een PDF te downloaden, het **moodboard vullen** vanuit de app, en **pg-boss** als echte queue met gescheiden concurrency. Uitgebreide PPTX-QA schuift naar fase 9.
+
+## Aanvulling 10 september 2026 — fase 5, vierde deel: webviewer en moodboard
+
+### De presentatie lezen in plaats van downloaden
+
+Een deellink leverde tot nu toe een PDF-bestand af. Dat is voor een klant een omweg: eerst downloaden, dan een lezer openen. Dezelfde link opent nu de presentatie **in de browser**, met de maatvaste PDF als knop in de balk erboven.
+
+De viewer is geen tweede opmaak. `presentationHtml` krijgt er één optie bij; die zet een schermstijl in `@media screen` en een balk vóór het document. De PDF wordt zonder die optie gemaakt, dus het papier verandert er niet van. Een test controleert dat letterlijk: de body van de PDF-uitvoer komt onveranderd terug in de viewer, en de PDF-uitvoer bevat geen schermstijl en geen knoppen.
+
+**Op het scherm is de tekening geen maat meer.** Een planblad van 420 mm past niet in een venster van 1030 pixels, dus de SVG wordt naar de breedte geschaald. Dat mag niet stilzwijgend gebeuren bij een tekening waar iemand maten uit zou kunnen halen: de balk zegt "Schermweergave. Alleen de PDF is maatvast; print die op 100%." Dezelfde zin die ook op de PowerPoint-dia met het planblad staat.
+
+De pagina laadt niets van buiten. De eigen `Content-Security-Policy` stond al in het document; dezelfde regel gaat nu ook als kopregel mee, samen met `nosniff`, zodat een browser die de meta negeert er evenmin iets bij haalt. In de app draait dezelfde pagina in een afgeschermd venster (`sandbox`) zonder scripts.
+
+De controle op de link is niet veranderd en wordt niet omzeild: `publicView` doet dezelfde query als `publicPdf`, met dezelfde tenant-instelling, dus de rijbeveiliging van de database geldt onverkort. Een ingetrokken of verlopen link geeft 404, en de link van de ene werkruimte werkt niet in de andere — beide staan als test.
+
+### Het moodboard vullen
+
+Het moodboardblok bestond al in het documentmodel, maar er was geen manier om er beelden in te krijgen. Nu wel: uploaden vanuit het presentatiepaneel, of kiezen uit de **beeldbank** van de werkruimte. Onderleggers en moodboardbeelden staan in dezelfde opslag — wat je onder een tekening kunt leggen, kun je ook op een moodboard zetten — en `GET /api/v1/images` geeft die lijst zonder de bytes; die worden per afbeelding opgehaald.
+
+Per beeld een onderschrift, en volgorde en verwijderen met knoppen. Het onderschrift hoort bij het blok en niet bij de afbeelding, zodat hetzelfde beeld in twee presentaties anders benoemd kan worden. De grens van twaalf beelden staat op één plek in het schema en het paneel gebruikt diezelfde constante.
+
+De uploadcode stond dubbel; onderlegger en moodboard delen nu één functie.
+
+### Twee dingen die alleen bij kijken opvielen
+
+- **`.viewer` was al bezet.** Het 3D-venster gebruikt die klassenaam met `position: relative`, dus het voorbeeldvenster kwam niet gecentreerd in beeld maar 933 pixels naar beneden, half buiten het scherm. Gemeten met `getComputedStyle` in de browser, niet geraden. De dialoog heet nu `presentation-viewer`.
+- **`.block-list li` selecteerde te veel.** Het moodboard heeft zelf een lijst, dus de blokkenlijst pakte de beelden erbij — zowel in de opmaak als in de browsertest. Beide kijken nu alleen naar directe kinderen.
+
+Verder bleek de browsertest afhankelijk van wat er toevallig al in de beeldbank stond: alleen gedraaid was die leeg, in de volledige suite niet. De route uploadt nu een beeld, haalt het van het moodboard af en kiest het daarna opnieuw uit de bank — dat werkt in beide gevallen en toetst bovendien precies wat het moet toetsen.
+
+### Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+- **230 tests / 27 bestanden geslaagd, 43,8 s** (was 225). Vijf nieuwe: de viewer die hetzelfde document toont als de PDF, de PDF die geen schermstijl krijgt, de viewer die niets van buiten laadt, de beeldbank die een moodboard vult met een beeld dat daarna in de pagina staat, en een deellink die in de browser opent en na intrekken 404 geeft — ook voor een andere werkruimte.
+- **20 browserroutes geslaagd, 2,7 min.** De presentatieroute is uitgebreid: een echte PNG uploaden, weghalen, opnieuw uit de beeldbank kiezen, de viewer openen en daarin het planblad nameten (het past binnen het venster en is niet tot een postzegel gekrompen), en de deellink die nu naar de viewer wijst terwijl de PDF eraan vast blijft zitten.
+- `pnpm probe:presentation` met beide controlescripts: 8 pagina's met een schaalreferentie van exact 100 mm, en 9 dia's van 10 × 5,625 inch met 3 bewerkbare tabellen en alleen Georgia. De offerteproef en `verify-quote-pdf.py` ook opnieuw gedraaid: 7 pagina's, 40 unieke posten, exact totaal, schaallijn 100 mm.
+- TypeScript strict en productiebuild geslaagd (11,4 s). Bekende chunkgroottewaarschuwing blijft open.
+- Schermafbeeldingen `outputs/qa/presentatie-webviewer.png` en `presentatie-webviewer-plan.png` daadwerkelijk bekeken: donkere balk met titel, versie en de melding over maatvastheid, witte bladen op een grijze ondergrond, de moodboardafbeelding op zijn plek en het planblad passend in beeld.
+
+### Nog open in fase 5
+
+**pg-boss** als echte wachtrij met gescheiden concurrency voor zware en lichte taken; de werker draait nog in het API-proces. Uitgebreide PPTX-QA op echte klantdata schuift naar fase 9. Verder is het 3D-camerablok afhankelijk van fase 7.

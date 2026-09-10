@@ -318,3 +318,46 @@ test("het diaformaat is 16:9 en verandert niet stilletjes", () => {
   expect(slide).toEqual({ width: 10, height: 5.625 });
   expect(slide.width / slide.height).toBeCloseTo(16 / 9, 6);
 });
+
+test("de webviewer toont hetzelfde document als de PDF", () => {
+  const doc = document("technical");
+  const content = resolveContent(doc, input);
+  const paper = presentationHtml(doc, content);
+  const viewer = presentationHtml(doc, content, {
+    pdfHref: "/api/v1/presentation-shares/x/y",
+    subtitle: "Versie 4",
+  });
+  // De inhoud is letterlijk dezelfde; de viewer zet er alleen een balk voor.
+  const body = paper.slice(
+    paper.indexOf("<body>") + 6,
+    paper.indexOf("</body>"),
+  );
+  expect(body.length).toBeGreaterThan(1000);
+  expect(viewer).toContain(body);
+  expect(viewer).toContain("Versie 4");
+  expect(viewer).toContain('href="/api/v1/presentation-shares/x/y"');
+  // Het scherm is geen papier, en dat staat er ook bij.
+  expect(viewer).toContain("Alleen de PDF is maatvast");
+  expect(viewer).toContain("@media screen{");
+  expect(viewer).toContain("@media print{.viewer-bar{display:none}}");
+});
+
+test("de PDF-uitvoer krijgt geen schermstijl of knoppen", () => {
+  const doc = document();
+  const html = presentationHtml(doc, resolveContent(doc, input));
+  expect(html).not.toContain("@media screen");
+  expect(html).not.toContain("viewer-bar");
+  expect(html).not.toContain("PDF downloaden");
+});
+
+test("de viewer laadt niets van buiten", () => {
+  const doc = document();
+  const viewer = presentationHtml(doc, resolveContent(doc, input), {
+    pdfHref: "/pdf",
+  });
+  expect(viewer).toContain(
+    "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
+  );
+  expect(viewer).not.toContain("<script");
+  expect(viewer).not.toMatch(/src="https?:/);
+});

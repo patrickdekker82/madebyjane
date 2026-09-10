@@ -2797,21 +2797,75 @@ test("presentatie samenstellen → publiceren → PDF → deellink intrekken", a
   await dialog.getByLabel("Kop blok 2", { exact: true }).blur();
   await expect(dialog.getByText("Nog niets gepubliceerd.")).toBeVisible();
 
+  // Het moodboard vullen met een echte afbeelding uit de beeldbank.
+  const { makePng: png } = await import("../helpers/image");
+  await dialog
+    .getByLabel("Moodboardafbeelding kiezen blok 3", { exact: true })
+    .setInputFiles({
+      name: "sfeer.png",
+      mimeType: "image/png",
+      buffer: png(600, 400),
+    });
+  const chosen = dialog.locator(".moodboard-editor > ul img");
+  await expect(chosen.first()).toBeVisible();
+  // Weghalen laat de afbeelding in de beeldbank staan; ze is daarna opnieuw te
+  // kiezen zonder opnieuw te uploaden. De nieuwste staat vooraan.
+  await dialog
+    .getByRole("button", {
+      name: "Afbeelding 1 verwijderen blok 3",
+      exact: true,
+    })
+    .click();
+  await expect(chosen).toHaveCount(0);
+  await dialog
+    .getByRole("button", { name: "Uit beeldbank kiezen blok 3", exact: true })
+    .click();
+  await dialog.locator(".image-picker button").first().click();
+  await expect(chosen).toHaveCount(1);
+  await dialog
+    .getByLabel("Onderschrift afbeelding 1 blok 3", { exact: true })
+    .fill("Rustige tinten");
+  await dialog.getByLabel("Kop blok 3", { exact: true }).blur();
+
   // Blokken herschikken: het tweede blok omlaag.
   const secondBefore = await dialog
-    .locator(".block-list li")
+    .locator(".block-list > li")
     .nth(1)
     .locator("strong")
     .innerText();
   await dialog.getByRole("button", { name: "Blok 2 omlaag" }).click();
   await expect(
-    dialog.locator(".block-list li").nth(2).locator("strong"),
+    dialog.locator(".block-list > li").nth(2).locator("strong"),
   ).toHaveText(secondBefore);
 
   // Publiceren legt een versie vast.
   await dialog.getByRole("button", { name: "Publiceren", exact: true }).click();
   await expect(dialog.getByText("Versie 1", { exact: false })).toBeVisible();
   await page.screenshot({ path: "outputs/qa/presentaties.png" });
+
+  // De webviewer toont dezelfde versie in de browser. Het venster draait
+  // afgeschermd, dus wat er staat komt uit het document zelf.
+  await dialog.getByRole("button", { name: "Bekijken", exact: true }).click();
+  const viewer = page.frameLocator(".viewer-frame");
+  await expect(viewer.locator("h1")).toHaveText("Uitgebreid interieurplan");
+  await expect(viewer.locator("figcaption")).toHaveText("Rustige tinten");
+  await expect(viewer.locator("section.sheet svg")).toBeVisible();
+  await expect(viewer.locator(".viewer-bar")).toContainText(
+    "Alleen de PDF is maatvast",
+  );
+  await page.screenshot({ path: "outputs/qa/presentatie-webviewer.png" });
+  // Het planblad past op het scherm in plaats van buiten beeld te lopen.
+  await viewer.locator("section.sheet svg").scrollIntoViewIfNeeded();
+  const sheet = await viewer.locator("section.sheet svg").boundingBox();
+  const frame = await page.locator(".viewer-frame").boundingBox();
+  expect(sheet!.width).toBeLessThanOrEqual(frame!.width);
+  expect(sheet!.width).toBeGreaterThan(frame!.width * 0.5);
+  await page.screenshot({ path: "outputs/qa/presentatie-webviewer-plan.png" });
+  await page
+    .getByRole("dialog")
+    .filter({ hasText: "Presentatie bekijken" })
+    .getByRole("button", { name: "Sluiten", exact: true })
+    .click();
 
   const download = page.waitForEvent("download");
   await dialog.getByRole("button", { name: "PDF", exact: true }).click();
@@ -2823,7 +2877,14 @@ test("presentatie samenstellen → publiceren → PDF → deellink intrekken", a
   const link = await dialog
     .getByLabel("Deellink presentatie", { exact: true })
     .inputValue();
-  expect((await page.request.get(link)).status()).toBe(200);
+  expect(link).toContain("/view");
+  const shared = await page.request.get(link);
+  expect(shared.status()).toBe(200);
+  expect(await shared.text()).toContain("Rustige tinten");
+  // De maatvaste PDF hangt aan diezelfde link.
+  expect((await page.request.get(link.replace(/\/view$/, ""))).status()).toBe(
+    200,
+  );
   await dialog
     .getByRole("button", { name: "Link intrekken", exact: true })
     .click();

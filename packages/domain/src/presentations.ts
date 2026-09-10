@@ -534,6 +534,41 @@ export class PresentationService {
    * Er komt altijd precies een gepubliceerde versie uit; het ontwerp mag daarna
    * veranderen zonder dat de klant iets anders te zien krijgt.
    */
+  /**
+   * Dezelfde link, maar dan om in de browser te lezen. De controle is
+   * identiek aan die van de PDF: een ingetrokken of verlopen link geeft niets,
+   * en er komt altijd precies de gepubliceerde versie uit waar de link naar
+   * wijst. Het scherm toont de tekening geschaald; de PDF blijft de maatvaste
+   * uitgave.
+   */
+  publicView(organization: string, token: string) {
+    return inTenant(this.pool, organization, async (c) => {
+      const row = (
+        await c.query(
+          `SELECT v.definition,v.content,v.version
+             FROM presentation_shares s
+             JOIN presentation_versions v
+               ON v.organization_id=s.organization_id
+              AND v.presentation_id=s.presentation_id
+              AND v.version=s.version
+            WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now()`,
+          [digest(token)],
+        )
+      ).rows[0];
+      if (!row)
+        throw new DomainError(
+          "NOT_FOUND",
+          "Deze link is niet beschikbaar of verlopen.",
+          404,
+        );
+      return row as {
+        definition: Presentation;
+        content: PresentationContent;
+        version: number;
+      };
+    });
+  }
+
   publicPdf(organization: string, token: string) {
     return inTenant(this.pool, organization, async (c) => {
       const row = (

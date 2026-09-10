@@ -561,7 +561,7 @@ form {
   max-height: 40vh;
   overflow-y: auto;
 }
-.block-list li {
+.block-list > li {
   border-top: 1px solid var(--line);
   padding: 8px 0;
 }
@@ -579,6 +579,92 @@ form {
   border: 0;
   background: none;
   padding: 3px 4px;
+}
+.moodboard-editor ul {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 6px;
+  display: grid;
+  gap: 6px;
+}
+.moodboard-editor li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+}
+.moodboard-editor li.empty {
+  color: #a1a897;
+  font-style: italic;
+  font-size: 11px;
+}
+.moodboard-editor li input {
+  flex: 1;
+}
+.moodboard-editor img,
+.moodboard-editor .image-loading,
+.moodboard-editor .image-missing {
+  width: 56px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #eceee8;
+  display: block;
+  flex: none;
+}
+.moodboard-editor .image-missing {
+  font-size: 8px;
+  color: #8a9280;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+.moodboard-buttons {
+  display: flex;
+  gap: 2px;
+}
+.moodboard-buttons button {
+  border: 0;
+  background: none;
+  padding: 3px 4px;
+}
+.moodboard-add {
+  display: flex;
+  gap: 6px;
+}
+.image-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.image-picker button {
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: none;
+  line-height: 0;
+}
+.image-picker img,
+.image-picker .image-loading,
+.image-picker .image-missing {
+  width: 72px;
+  height: 54px;
+  object-fit: cover;
+  display: block;
+  background: #eceee8;
+}
+.dialog.presentation-viewer {
+  width: min(1100px, 96vw);
+}
+.viewer-frame {
+  width: 100%;
+  height: 70vh;
+  border: 1px solid var(--line);
+  background: #4a4c48;
 }
 .notice {
   background: #eef2e7;

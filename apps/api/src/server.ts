@@ -6,7 +6,7 @@ import { ModelAssetService } from "../../../packages/domain/src/model-assets";
 import { UnderlayAssetService } from "../../../packages/domain/src/underlay-assets";
 import { libraryQuerySchema } from "../../../packages/contracts/src/index";
 import { LibraryService } from "../../../packages/domain/src/library";
-import Fastify from "fastify";
+import Fastify, { type FastifyReply } from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
 import { fromNodeHeaders } from "better-auth/node";
@@ -26,6 +26,7 @@ import {
 } from "../../../packages/contracts/src/index";
 import { planSvg } from "../../../packages/documents/src/plan";
 import { PresentationService } from "../../../packages/domain/src/presentations";
+import { presentationHtml } from "../../../packages/documents/src/presentation";
 import { ExportJobs } from "../../../packages/domain/src/export-jobs";
 import { drainExports } from "../../../packages/domain/src/export-worker";
 export function createServer(config: {
@@ -256,6 +257,13 @@ export function createServer(config: {
         );
       return underlays.upload(await context(req.headers), assetId, req.body);
     },
+  );
+  /*
+   * De beeldbank. Onderleggers en moodboardbeelden komen uit dezelfde opslag,
+   * dus dit is één lijst met alles wat er in de werkruimte staat.
+   */
+  app.get("/api/v1/images", async (req) =>
+    underlays.list(await context(req.headers)),
   );
   app.get("/api/v1/underlay-assets/:id", async (req, reply) => {
     const assetId = z.object({ id }).parse(req.params).id;
@@ -554,6 +562,36 @@ export function createServer(config: {
         .send(r.pptx);
     },
   );
+  /**
+   * Presentatie-HTML uitleveren. Het document laadt niets van buiten: de eigen
+   * regel staat al in de pagina en dezelfde regel gaat als kopregel mee, zodat
+   * een browser die de meta negeert er ook niets bij haalt.
+   */
+  const sendHtml = (reply: FastifyReply, body: string) =>
+    reply
+      .type("text/html; charset=utf-8")
+      .header(
+        "Content-Security-Policy",
+        "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'",
+      )
+      .send(body);
+  app.get(
+    "/api/v1/presentations/:presentationId/versions/:version/view",
+    async (req, reply) => {
+      const p = presentationVersionParams(req.params);
+      const v = await presentations.version(
+        await context(req.headers),
+        p.presentationId,
+        p.version,
+      );
+      return sendHtml(
+        reply,
+        presentationHtml(v.definition, v.content, {
+          subtitle: `Versie ${p.version}`,
+        }),
+      );
+    },
+  );
   app.get(
     "/api/v1/presentations/:presentationId/versions/:version/shares",
     async (req) =>
@@ -596,6 +634,31 @@ export function createServer(config: {
         .type("application/pdf")
         .header("Content-Disposition", 'attachment; filename="presentatie.pdf"')
         .send(r.pdf);
+    },
+  );
+  /**
+   * Dezelfde deellink, maar dan om te lezen in plaats van te downloaden. De
+   * klant krijgt de presentatie in de browser te zien met een knop naar de
+   * maatvaste PDF ernaast.
+   */
+  app.get(
+    "/api/v1/presentation-shares/:organization/:token/view",
+    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const p = z
+        .object({
+          organization: id,
+          token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+        })
+        .parse(req.params);
+      const v = await presentations.publicView(p.organization, p.token);
+      return sendHtml(
+        reply,
+        presentationHtml(v.definition, v.content, {
+          subtitle: `Versie ${v.version}`,
+          pdfHref: `/api/v1/presentation-shares/${p.organization}/${p.token}`,
+        }),
+      );
     },
   );
   app.post("/api/v1/quote-shares/:id/revoke", async (req) =>

@@ -4,6 +4,7 @@ import { mkdir, mkdtemp } from "node:fs/promises";
 import { localDatabase } from "../scripts/local-db";
 import { createAuth } from "../packages/auth/src/index";
 import { createServer } from "../apps/api/src/server";
+import { makePng } from "./helpers/image";
 let db: Awaited<ReturnType<typeof localDatabase>>,
   server: ReturnType<typeof createServer>;
 const org = randomUUID(),
@@ -344,4 +345,117 @@ test("exporteren kan alleen van een gepubliceerde versie", async () => {
   );
   expect(missing.statusCode).toBe(404);
   expect(missing.json().message).toContain("Publiceer eerst");
+});
+
+test("de beeldbank vult een moodboard en dat beeld staat in de presentatie", async () => {
+  const input = make("extended");
+  const created = await call(
+    "POST",
+    `/api/v1/projects/${project}/presentations`,
+    input,
+  );
+  expect(created.statusCode, created.body).toBe(200);
+
+  // Een echte afbeelding uploaden; die komt in dezelfde opslag als de
+  // onderleggers en verschijnt dus in de beeldbank.
+  const assetId = randomUUID();
+  const uploaded = await server.app.inject({
+    method: "POST",
+    url: `/api/v1/underlay-assets/${assetId}`,
+    headers: {
+      origin,
+      cookie: cookies.owner,
+      "x-organization-id": org,
+      "content-type": "application/octet-stream",
+    },
+    payload: makePng(40, 30),
+  });
+  expect(uploaded.statusCode, uploaded.body).toBe(200);
+  const bank = await call("GET", "/api/v1/images");
+  expect(bank.statusCode, bank.body).toBe(200);
+  expect(bank.json().items.some((i: { id: string }) => i.id === assetId)).toBe(
+    true,
+  );
+  // De bytes zelf staan er niet in; die worden per afbeelding opgehaald.
+  expect(bank.body).not.toContain("bytes");
+
+  const definition = created.json().definition;
+  definition.blocks = definition.blocks.map((b: { type: string }) =>
+    b.type === "moodboard"
+      ? { ...b, images: [{ assetId, caption: "Rustige tinten" }] }
+      : b,
+  );
+  expect(
+    definition.blocks.filter((b: { type: string }) => b.type === "moodboard"),
+  ).toHaveLength(1);
+  expect(
+    (await call("PUT", `/api/v1/presentations/${input.id}`, definition))
+      .statusCode,
+  ).toBe(200);
+  await call("POST", `/api/v1/presentations/${input.id}/versions`, {
+    requestId: randomUUID(),
+  });
+  const view = await call(
+    "GET",
+    `/api/v1/presentations/${input.id}/versions/1/view`,
+  );
+  expect(view.statusCode, view.body.slice(0, 200)).toBe(200);
+  expect(view.headers["content-type"]).toContain("text/html");
+  expect(view.body).toContain("Rustige tinten");
+  // Het beeld zit in de pagina zelf, dus de klant hoeft nergens in te loggen.
+  expect(view.body).toContain('<img src="data:image/png;base64,');
+});
+
+test("een deellink opent de presentatie in de browser", async () => {
+  const input = make("extended");
+  await call("POST", `/api/v1/projects/${project}/presentations`, input);
+  await call("POST", `/api/v1/presentations/${input.id}/versions`, {
+    requestId: randomUUID(),
+  });
+  const shareId = randomUUID();
+  const share = await call(
+    "POST",
+    `/api/v1/presentations/${input.id}/versions/1/shares`,
+    { id: shareId, days: 7 },
+  );
+  expect(share.statusCode, share.body).toBe(200);
+  const token = share.json().token as string;
+  const open = await server.app.inject({
+    method: "GET",
+    url: `/api/v1/presentation-shares/${org}/${token}/view`,
+  });
+  expect(open.statusCode, open.body.slice(0, 200)).toBe(200);
+  expect(open.body).toContain("<!doctype html>");
+  expect(open.body).toContain(input.title);
+  expect(open.body).toContain("Versie 1");
+  // De maatvaste PDF staat als knop in de pagina.
+  expect(open.body).toContain(
+    `href="/api/v1/presentation-shares/${org}/${token}"`,
+  );
+  expect(open.body).toContain("Alleen de PDF is maatvast");
+  // De pagina mag niets van buiten laden en niet als iets anders gelezen worden.
+  expect(open.headers["content-security-policy"]).toContain(
+    "default-src 'none'",
+  );
+  expect(open.headers["x-content-type-options"]).toBe("nosniff");
+
+  // Een ingetrokken link toont niets meer, ook niet in de browser.
+  await call("POST", `/api/v1/presentation-shares/${shareId}/revoke`);
+  expect(
+    (
+      await server.app.inject({
+        method: "GET",
+        url: `/api/v1/presentation-shares/${org}/${token}/view`,
+      })
+    ).statusCode,
+  ).toBe(404);
+  // En de link van de ene werkruimte werkt niet in de andere.
+  expect(
+    (
+      await server.app.inject({
+        method: "GET",
+        url: `/api/v1/presentation-shares/${other}/${token}/view`,
+      })
+    ).statusCode,
+  ).toBe(404);
 });
