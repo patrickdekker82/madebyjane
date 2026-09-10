@@ -314,8 +314,9 @@ Een rij per bronalinea/bullet; samengestelde eisen zijn pas gereed wanneer alle 
 | PDF, vaste bijlagen, delen/intrekken | documents/quote.ts, quote-pdf.ts, domain/quote-delivery.ts | Echte PDF in API- en browsertest; 7 pagina's visueel gecontroleerd; schaal 100 mm |
 | Vervolgversies en expliciete statussen | domain/quotes.ts, web/QuoteActions.tsx | API-/browsertests: oude versie blijft intact; download/delen creëert geen verzendstatus |
 
-De tabel beschrijft de offerte-MVP. Volledige presentatiebouw, productiequeue, inkoop/marge en gekwalificeerde elektronische handtekeningen zijn niet ingebouwd. Actuele volledige suite- en CI-resultaten staan bovenaan IMPLEMENTATION_STATUS.md.
+De tabel beschrijft de offerte-MVP. Volledige presentatiebouw, productiequeue en gekwalificeerde elektronische handtekeningen zijn niet ingebouwd. Actuele volledige suite- en CI-resultaten staan bovenaan IMPLEMENTATION_STATUS.md.
 
 | Aanvulling fase 6 | Implementatie | Bewijs |
 | --- | --- | --- |
 | Intrekking van offertelinks auditen | QuoteDelivery.revoke: transactie met eenmalige auditregel | quote-integration.test.ts: concurrent intrekken + retry leveren één regel met juiste actor; andere tenant 404 en viewer 403 |
+| Inkoop en marge afschermen | contracts/quotes, quote-calculation en web/Quotes; offerte-API alleen voor owner/admin/finance; klant-PDF gebruikt uitsluitend verkoopvelden | quotes.test.ts: decimalen, ontbrekende inkoop en HTML-lekcontrole; quote-integration.test.ts: serverberekening en rollen; zelfstandige offerte-browsertest |

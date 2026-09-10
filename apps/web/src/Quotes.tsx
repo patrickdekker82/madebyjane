@@ -161,11 +161,18 @@ export function Quotes({
         i === index
           ? {
               ...l,
-              [key]: ["quantity", "unitPrice", "discount", "taxRate"].includes(
-                key,
-              )
-                ? text.replace(",", ".")
-                : text,
+              [key]:
+                key === "purchaseUnitPrice" && !text.trim()
+                  ? undefined
+                  : [
+                        "quantity",
+                        "unitPrice",
+                        "purchaseUnitPrice",
+                        "discount",
+                        "taxRate",
+                      ].includes(key)
+                    ? text.replace(",", ".")
+                    : text,
             }
           : l,
       ),
@@ -337,6 +344,8 @@ export function Quotes({
                           ["quantity", "Hoeveelheid"],
                           ["unit", "Eenheid"],
                           ["unitPrice", "Eenheidsprijs EUR"],
+                          ["purchaseUnitPrice", "Inkoopprijs per eenheid EUR"],
+                          ["purchaseNote", "Inkoopbron / datum"],
                           ["discount", "Korting %"],
                           ["taxCategory", "Belastingcategorie"],
                           ["taxRate", "Tarief %"],
@@ -357,7 +366,14 @@ export function Quotes({
                         </label>
                       ))}
                     </div>
-                    {totals && <p>Netto: {money(totals.lines[i]!.net)}</p>}
+                    {totals && (
+                      <p>
+                        Netto verkoop: {money(totals.lines[i]!.net)} · Inkoop:{" "}
+                        {totals.commercial!.lines[i]!.cost === null
+                          ? "nog niet ingevuld"
+                          : money(totals.commercial!.lines[i]!.cost!)}
+                      </p>
+                    )}
                     <button
                       onClick={() =>
                         setValue({
@@ -446,6 +462,28 @@ export function Quotes({
                     Netto per post op centen afgerond, daarna belasting per
                     categorie. Halve centen van nul af.
                   </p>
+                </section>
+              )}
+              {totals?.commercial && (
+                <section aria-label="Interne calculatie">
+                  <h3>Interne calculatie</h3>
+                  <p className="small">
+                    Deze inkoopgegevens en marge komen niet in de klant-PDF.
+                  </p>
+                  <p>Bekende inkoop: {money(totals.commercial.knownCost)}</p>
+                  {totals.commercial.margin === null ? (
+                    <p>
+                      Marge nog niet berekend: vul voor alle posten een
+                      inkoopprijs en inkoopbron in, ook wanneer de inkoop nul
+                      is.
+                    </p>
+                  ) : (
+                    <p>
+                      Marge excl. belasting: {money(totals.commercial.margin)} ·{" "}
+                      {totals.commercial.marginPercent?.replace(".", ",")}% van
+                      netto verkoop
+                    </p>
+                  )}
                 </section>
               )}
               <QuoteResources

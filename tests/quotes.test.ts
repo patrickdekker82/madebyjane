@@ -1,8 +1,13 @@
 import { expect, test } from "vitest";
 import { randomUUID } from "node:crypto";
 import { calculateQuote } from "../packages/domain/src/quote-calculation";
-import { quoteDefinitionSchema } from "../packages/contracts/src/quotes";
-const line = () => ({
+import {
+  quoteDefinitionSchema,
+  type QuoteDefinition,
+  type QuoteLine,
+} from "../packages/contracts/src/quotes";
+import { quoteHtml } from "../packages/documents/src/quote";
+const line = (): QuoteLine => ({
   id: randomUUID(),
   description: "Vloer",
   unit: "m²",
@@ -14,7 +19,7 @@ const line = () => ({
   source: null,
   priceNote: "Leverancier 8 september",
 });
-const definition = () => ({
+const definition = (): QuoteDefinition => ({
   customer: "Fictieve klant",
   title: "Offerte",
   date: "2026-09-08",
@@ -105,6 +110,60 @@ test("dubbele bronnen en verschillende tarieven onder dezelfde categorie afgewez
     quoteDefinitionSchema.safeParse({
       ...definition(),
       lines: [line(), { ...line(), taxRate: "9" }],
+    }).success,
+  ).toBe(false);
+});
+
+test("inkoop en marge blijven intern en worden pas volledig berekend met alle bronnen", () => {
+  const first = {
+      ...line(),
+      purchaseUnitPrice: "12.3456",
+      purchaseNote: "Leverancier 8 september",
+    },
+    correction = {
+      ...line(),
+      quantity: "1",
+      unitPrice: "-5",
+      discount: "0",
+      purchaseUnitPrice: "0",
+      purchaseNote: "Geen inkoop bij correctie",
+    },
+    complete = { ...definition(), lines: [first, correction] },
+    totals = calculateQuote(complete);
+  expect(totals.commercial).toEqual({
+    lines: [
+      { id: first.id, cost: "30.86" },
+      { id: correction.id, cost: "0.00" },
+    ],
+    knownCost: "30.86",
+    margin: "9.13",
+    marginPercent: "22.83",
+    missingLineIds: [],
+  });
+  const html = quoteHtml({
+    id: randomUUID(),
+    version: 1,
+    number: "2026-00001",
+    definition: complete,
+    totals,
+    created_at: new Date().toISOString(),
+  });
+  expect(html).not.toContain("12.3456");
+  expect(html).not.toContain("Leverancier 8 september");
+  expect(html).not.toContain("Inkoop");
+
+  const missing = line();
+  expect(
+    calculateQuote({ ...definition(), lines: [first, missing] }).commercial,
+  ).toMatchObject({
+    margin: null,
+    marginPercent: null,
+    missingLineIds: [missing.id],
+  });
+  expect(
+    quoteDefinitionSchema.safeParse({
+      ...definition(),
+      lines: [{ ...line(), purchaseUnitPrice: "12" }],
     }).success,
   ).toBe(false);
 });
