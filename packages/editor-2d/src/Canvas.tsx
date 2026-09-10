@@ -13,7 +13,13 @@ import {
 } from "react-konva";
 import type Konva from "konva";
 import type { Scene, Operation, Point } from "../../contracts/src/index";
-import { endpoints, snapPoint, type SnapTarget } from "../../geometry/src/index";
+import {
+  endpoints,
+  snapPoint,
+  dimensionGeometry,
+  formatMm,
+  type SnapTarget,
+} from "../../geometry/src/index";
 import { useEditor } from "./store";
 export function PlanCanvas({
   scene,
@@ -122,7 +128,7 @@ export function PlanCanvas({
           },
         },
       ]);
-    } else select(wallId);
+    } else if (tool === "select") select(wallId);
   };
   const click = () => {
     if (disabled || !stage.current) return;
@@ -150,6 +156,29 @@ export function PlanCanvas({
             endId: b.id,
             thickness: 180,
             height: 2700,
+          },
+        },
+      ]);
+      setStart(null);
+    } else if (tool === "measure") {
+      const p = world();
+      if (!p) return;
+      if (!start) {
+        setStart(p);
+        return;
+      }
+      if (p.x === start.x && p.y === start.y) return;
+      onCommand([
+        {
+          type: "AddAnnotation",
+          annotation: {
+            type: "dimension",
+            id: crypto.randomUUID(),
+            from: start,
+            to: p,
+            // Vaste tekenafstand naast de gemeten lijn, aan de linkerzijde van
+            // de tekenrichting. De hulplijnen verbinden hem met de meetpunten.
+            offset: 400,
           },
         },
       ]);
@@ -191,10 +220,14 @@ export function PlanCanvas({
         height={size.height}
         onWheel={wheel}
         onMouseMove={() => {
-          if (tool === "wall" && start) setCursor(world());
+          if ((tool === "wall" || tool === "measure") && start)
+            setCursor(world());
         }}
         onMouseDown={(e) => {
-          if (e.target === stage.current) click();
+          // Meten en muren tekenen moeten juist op bestaande muren en punten
+          // kunnen beginnen; anders is aansluiten op wat er staat onmogelijk.
+          if (tool === "measure" || tool === "wall" || e.target === stage.current)
+            click();
         }}
         onTouchStart={(e) => {
           if (e.target === stage.current) click();
@@ -317,11 +350,12 @@ export function PlanCanvas({
               y={i.y}
               rotation={i.rotation}
               draggable={!disabled && tool === "select" && !i.locked}
-              onClick={(e) =>
-                e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey
-                  ? toggleSelected(i.id)
-                  : select(i.id)
-              }
+              onClick={(e) => {
+                if (tool !== "select") return;
+                if (e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey)
+                  toggleSelected(i.id);
+                else select(i.id);
+              }}
               onTap={() => select(i.id)}
               onDragStart={() => {
                 if (!useEditor.getState().selected.includes(i.id)) select(i.id);
@@ -459,7 +493,7 @@ export function PlanCanvas({
               )}
             </Group>
           ))}
-          {start && cursor && (
+          {tool === "wall" && start && cursor && (
             <Line
               listening={false}
               points={[start.x, start.y, cursor.x, cursor.y]}
@@ -467,6 +501,81 @@ export function PlanCanvas({
               strokeWidth={180}
               opacity={0.5}
             />
+          )}
+          {scene.annotations.map((annotation) => {
+            const d = dimensionGeometry(
+              annotation.from,
+              annotation.to,
+              annotation.offset,
+            );
+            const chosen = selected.includes(annotation.id);
+            return (
+              <Group key={annotation.id} onClick={() => select(annotation.id)}>
+                {d.extensions.map((extension, index) => (
+                  <Line
+                    key={index}
+                    listening={false}
+                    points={[
+                      extension.from.x,
+                      extension.from.y,
+                      extension.to.x,
+                      extension.to.y,
+                    ]}
+                    stroke="#8a8f83"
+                    strokeWidth={1 / zoom}
+                  />
+                ))}
+                <Line
+                  points={[
+                    d.line.from.x,
+                    d.line.from.y,
+                    d.line.to.x,
+                    d.line.to.y,
+                  ]}
+                  stroke={chosen ? "#a36432" : "#4c5148"}
+                  strokeWidth={(chosen ? 2 : 1) / zoom}
+                  hitStrokeWidth={20 / zoom}
+                />
+                <Text
+                  listening={false}
+                  x={d.label.x}
+                  y={d.label.y}
+                  offsetY={14 / zoom}
+                  rotation={d.label.angle}
+                  text={formatMm(d.lengthMm)}
+                  fontSize={12 / zoom}
+                  align="center"
+                  width={2000}
+                  offsetX={1000}
+                  fill="#4c5148"
+                />
+              </Group>
+            );
+          })}
+          {tool === "measure" && start && cursor && (
+            <>
+              <Line
+                listening={false}
+                points={[start.x, start.y, cursor.x, cursor.y]}
+                stroke="#a36432"
+                strokeWidth={1 / zoom}
+                dash={[10 / zoom, 6 / zoom]}
+              />
+              <Text
+                listening={false}
+                x={(start.x + cursor.x) / 2}
+                y={(start.y + cursor.y) / 2}
+                offsetY={14 / zoom}
+                text={formatMm(
+                  Math.round(Math.hypot(cursor.x - start.x, cursor.y - start.y)),
+                )}
+                fontSize={12 / zoom}
+                align="center"
+                width={2000}
+                offsetX={1000}
+                fill="#a36432"
+              />
+            </>
           )}
           {/* Vangfeedback: hulplijnen bij uitlijnen, een markering op het vangpunt. */}
           {snapped.map((target, index) =>

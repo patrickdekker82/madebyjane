@@ -73,6 +73,9 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
       case "PlaceItem":
         s.items.push(op.item);
         break;
+      case "AddAnnotation":
+        s.annotations.push(op.annotation);
+        break;
       case "SetItemDisplay": {
         const targets = s.items.filter((i) => op.ids.includes(i.id));
         if (targets.length !== op.ids.length)
@@ -121,6 +124,7 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
             "Dit meubel is vergrendeld. Ontgrendel het eerst om het te verwijderen.",
           );
         s.items = s.items.filter((i) => !op.ids.includes(i.id));
+        s.annotations = s.annotations.filter((a) => !op.ids.includes(a.id));
         s.walls = s.walls.filter((w) => !op.ids.includes(w.id));
         s.openings = s.openings.filter(
           (o) =>
@@ -138,8 +142,13 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
   s.revision++;
   return validateScene(s);
 }
-export const contentOf = ({ nodes, walls, openings, items }: Scene) =>
-  structuredClone({ nodes, walls, openings, items });
+export const contentOf = ({
+  nodes,
+  walls,
+  openings,
+  items,
+  annotations,
+}: Scene) => structuredClone({ nodes, walls, openings, items, annotations });
 export type Role = "owner" | "admin" | "designer" | "finance" | "viewer";
 export function canWrite(role: Role) {
   return ["owner", "admin", "designer"].includes(role);

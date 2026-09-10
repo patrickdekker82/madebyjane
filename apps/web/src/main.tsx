@@ -54,6 +54,7 @@ import {
   Save,
   Grid2X2,
   Magnet,
+  Ruler,
   EyeOff,
   Lock,
   Copy,
@@ -64,7 +65,7 @@ import { api, login, logout, authRequest, ApiError } from "./api";
 import { Arrange } from "./Arrange";
 import { LayerPanel } from "./Layers";
 import { PlanCanvas } from "../../../packages/editor-2d/src/Canvas";
-import { useEditor } from "../../../packages/editor-2d/src/store";
+import { useEditor, type Tool } from "../../../packages/editor-2d/src/store";
 import {
   applyOperations,
   contentOf,
@@ -800,6 +801,50 @@ function Editor() {
     }
     command([{ type: "RestoreContent", content: contentOf(target) }], false);
   };
+  /**
+   * Toetsenbordbediening. Werkt alleen buiten invoervelden, zodat typen in een
+   * maatveld nooit per ongeluk van gereedschap wisselt of iets verwijdert.
+   */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.isContentEditable ||
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "")
+      )
+        return;
+      const meta = event.metaKey || event.ctrlKey;
+      if (meta && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        history(event.shiftKey ? "redo" : "undo");
+        return;
+      }
+      if (meta) return;
+      if (event.key === "Escape") {
+        select(null);
+        setTool("select");
+        return;
+      }
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (!selected.length || disabled) return;
+        event.preventDefault();
+        command([{ type: "DeleteSelection", ids: selected }]);
+        select(null);
+        return;
+      }
+      const shortcuts: Record<string, Tool> = {
+        v: "select",
+        m: "wall",
+        d: "door",
+        r: "window",
+        t: "measure",
+      };
+      const next = shortcuts[event.key.toLowerCase()];
+      if (next && !disabled) setTool(next);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   const add = (kind: Item["kind"]) => {
     const defaults = {
       sofa: {
@@ -929,6 +974,7 @@ function Editor() {
               { id: "wall", icon: BrickWall, label: "Muur" },
               { id: "door", icon: DoorOpen, label: "Deur" },
               { id: "window", icon: AppWindow, label: "Raam" },
+              { id: "measure", icon: Ruler, label: "Maat" },
             ] as const
           ).map((t) => (
             <button

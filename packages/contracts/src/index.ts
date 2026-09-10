@@ -134,6 +134,35 @@ export const itemSchema = z
     kind: z.enum(["sofa", "table", "cabinet", "light"]),
   })
   .strict();
+/**
+ * Annotaties op het tekenblad. De gemeten lengte wordt niet opgeslagen: die is
+ * afgeleid uit de twee punten, zodat een maatlijn nooit iets anders kan beweren
+ * dan de geometrie zegt. `offset` is de loodrechte verschuiving van de maatlijn
+ * ten opzichte van de gemeten lijn, zodat hij naast het object komt te liggen.
+ */
+export const annotationSchema = z
+  .discriminatedUnion("type", [
+    z
+      .object({
+        type: z.literal("dimension"),
+        id,
+        from: z.object({ x: mm, y: mm }).strict(),
+        to: z.object({ x: mm, y: mm }).strict(),
+        offset: z.number().int().min(-10000).max(10000),
+      })
+      .strict(),
+  ])
+  .superRefine((annotation, ctx) => {
+    if (
+      annotation.from.x === annotation.to.x &&
+      annotation.from.y === annotation.to.y
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "Een maatlijn heeft twee verschillende punten nodig.",
+      });
+  });
+export type Annotation = z.infer<typeof annotationSchema>;
 export const sceneSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -146,6 +175,7 @@ export const sceneSchema = z
     walls: z.array(wallSchema).max(1000),
     openings: z.array(openingSchema).max(500),
     items: z.array(itemSchema).max(2000),
+    annotations: z.array(annotationSchema).max(500).default([]),
   })
   .strict();
 export type Scene = z.infer<typeof sceneSchema>;
@@ -211,6 +241,9 @@ export const operationSchema = z.discriminatedUnion("type", [
     .strict(),
   z.object({ type: z.literal("PlaceItem"), item: itemSchema }).strict(),
   z
+    .object({ type: z.literal("AddAnnotation"), annotation: annotationSchema })
+    .strict(),
+  z
     .object({
       type: z.literal("TransformItem"),
       id,
@@ -236,6 +269,7 @@ export const operationSchema = z.discriminatedUnion("type", [
         walls: true,
         openings: true,
         items: true,
+        annotations: true,
       }),
     })
     .strict(),

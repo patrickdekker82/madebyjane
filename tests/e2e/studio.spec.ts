@@ -1288,3 +1288,89 @@ test("lagen: verbergen, vergrendelen, van laag wisselen en volgorde", async ({
   expect((await order())[0]).toBe(names[0]);
   expect(errors).toEqual([]);
 });
+
+test("meten en maatlijn vastleggen → sneltoetsen → maat op het planblad", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
+  await page.getByLabel("Projectnaam").fill("Maatstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  /** Het planblad via de downloadknop; dat is de route die de gebruiker ook neemt. */
+  let sheet = 0;
+  const planSheet = async () => {
+    const download = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Planblad SVG", exact: true }).click();
+    const file = `outputs/maatblad-${sheet++}.svg`;
+    await (await download).saveAs(file);
+    return readFile(file, "utf8");
+  };
+
+  // Sneltoets t kiest het maatgereedschap.
+  await page.locator(".canvas-wrap").hover();
+  await page.keyboard.press("t");
+  await expect(page.getByRole("button", { name: "Maat", exact: true })).toHaveClass(
+    /active/,
+  );
+
+  // Twee muurpunten aanklikken: vangen levert exact de muurlengte van 6.200 mm.
+  const canvas = page.locator(".canvas-wrap canvas").first();
+  const box = (await canvas.boundingBox())!;
+  const fit = Math.min((box.width - 120) / 6200, (box.height - 120) / 4800);
+  const at = (x: number, y: number) => ({
+    x: box.x + 60 + x * fit,
+    y: box.y + 60 + y * fit,
+  });
+  const first = at(0, 0);
+  await page.mouse.click(first.x, first.y);
+  const second = at(6200, 0);
+  await page.mouse.move(second.x, second.y);
+  await page.screenshot({ path: "outputs/qa/meten.png" });
+  await page.mouse.click(second.x, second.y);
+  await saved();
+
+  // De maat komt uit de geometrie, niet uit de muisposities.
+  await page.screenshot({ path: "outputs/qa/maatlijn.png" });
+  expect(await planSheet()).toContain("6.200 mm");
+
+  // Escape brengt terug naar selecteren; Delete verwijdert de maatlijn.
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("button", { name: "Selecteren", exact: true }),
+  ).toHaveClass(/active/);
+  // De maatlijn ligt 400 mm naast de gemeten lijn; daar klik je hem aan.
+  await page.mouse.click(at(3100, 400).x, at(3100, 400).y);
+  await page.keyboard.press("Delete");
+  await saved();
+  expect(await planSheet()).not.toContain("6.200 mm");
+
+  // Ctrl+Z zet de verwijdering terug.
+  await page.keyboard.press("Control+z");
+  await saved();
+  await page.reload();
+  expect(await planSheet()).toContain("6.200 mm");
+  expect(errors).toEqual([]);
+});

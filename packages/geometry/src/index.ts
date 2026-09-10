@@ -91,6 +91,7 @@ export function validateGeometry(scene: Scene) {
     ...scene.walls,
     ...scene.openings,
     ...scene.items,
+    ...scene.annotations,
   ].map((x) => x.id);
   if (new Set(all).size !== all.length) throw new Error("Dubbele object-ID.");
   for (const wall of scene.walls) {
@@ -116,6 +117,11 @@ export function validateGeometry(scene: Scene) {
       throw new Error("Opening heeft geen muur.");
 }
 export { detectRooms, type Room, type RoomDetection } from "./rooms";
+export {
+  dimensionGeometry,
+  formatMm,
+  type DimensionGeometry,
+} from "./dimension";
 export {
   alignItems,
   distributeItems,

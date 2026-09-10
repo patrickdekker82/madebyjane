@@ -582,6 +582,13 @@ form {
   gap: 18px;
   border-bottom: 1px solid var(--line);
   background: #fff;
+  /* Op een tablet passen niet alle gereedschappen en acties naast elkaar. Laat
+     de balk dan zijwaarts schuiven in plaats van de hele pagina te verbreden. */
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.tools > * {
+  flex-shrink: 0;
 }
 .tools button {
   border: 0;
@@ -880,6 +887,18 @@ form {
 }
 .layer-actions {
   margin-bottom: 6px;
+}
+/* Een keuzelijst rekt zich standaard naar zijn langste optie; op een tablet
+   duwt "Technische presentatie" het paneel dan breder dan het scherm. */
+.layer-actions select {
+  width: 100%;
+  max-width: 100%;
+}
+.layers li > span:first-child {
+  min-width: 0;
+}
+.layers li em {
+  flex-shrink: 0;
 }
 .arrange {
   border-top: 1px solid var(--line);

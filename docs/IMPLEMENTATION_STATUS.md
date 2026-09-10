@@ -293,3 +293,29 @@ Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
 - Screenshot `outputs/qa/lagen.png` geïnspecteerd: de laaglijst toont Inrichting 3 en Verlichting 1, het oog van Verlichting is doorgestreept en de salontafel is inderdaad uit het plan verdwenen. De testverwachting moest eerst aangescherpt: "Verlichting" kwam zowel in de laaglijst als in de keuzelijst voor.
 
 Nog open in fase 2: maatlijnen, annotaties, legenda en meetgereedschap; import van rasteronderlegger en PDF-pagina met kalibratie via twee punten; rubberband-selectie op het canvas; groeperen; opt-in lokaal herstel via IndexedDB; toetsenbordsnelkoppelingen; muurjoins. Laagpresets bestaan nu als indeling, maar er is nog geen presetknop die een set lagen in één keer toont of verbergt voor een tekenblad. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — meten, maatlijnen en sneltoetsen
+
+### Maatlijnen als eigen objecten
+
+De scene krijgt `annotations`, een lijst met een standaardwaarde van een lege array, zodat bestaande scenes geldig blijven zonder scene-migratie. Voorlopig is er één soort annotatie: een maatlijn met twee punten en een loodrechte verschuiving. **De lengte wordt niet opgeslagen** — die komt uit `packages/geometry/src/dimension.ts` en is dus altijd wat de geometrie zegt; een maatlijn kan nooit iets anders beweren. Een bewaarde maatlijn ligt 400 mm naast de gemeten lijn, aan de linkerzijde van de tekenrichting, met hulplijnen naar de meetpunten. Het label draait mee maar staat nooit op zijn kop.
+
+Het gereedschap **Maat** meet en legt vast in één handeling: na de eerste klik loopt een gestreepte lijn mee met een live afleesbare maat, de tweede klik bewaart de maatlijn. Wil je alleen meten, dan breek je af met Escape. Het vangen werkt hier net zo goed als bij het tekenen, dus meten tussen twee muurpunten geeft exact de muurlengte.
+
+Maatlijnen staan ook op het geëxporteerde planblad; lijndikte en tekstgrootte volgen de schaal en de bladomvang houdt rekening met de verschoven lijn.
+
+Daarbij opgelost: het canvas gaf een klik alleen door wanneer die op leeg vlak viel. Beginnen op een bestaand muurpunt was daardoor onmogelijk — precies wat je wil doen bij meten en bij het aansluiten van een nieuwe muur. Meten en muren tekenen krijgen de klik nu altijd; selecteren blijft aan het gereedschap Selecteren voorbehouden.
+
+### Toetsenbordbediening
+
+`v` selecteren, `m` muur, `d` deur, `r` raam, `t` maat. Escape gaat terug naar selecteren en heft de selectie op, Delete of Backspace verwijdert de selectie, Ctrl/Cmd+Z is een stap terug en met Shift erbij opnieuw. De afhandeling slaat invoervelden over, zodat typen in een maatveld nooit van gereedschap wisselt of iets verwijdert.
+
+Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+- **111 tests / 18 bestanden geslaagd, 25,1 s** (was 104). Zeven nieuwe maatlijntests, waaronder 300 gegenereerde gevallen die aantonen dat het label nooit op zijn kop staat en de lengte altijd heel is.
+- **12 browserroutes geslaagd, 1,5 min.** De nieuwe route kiest het maatgereedschap met een sneltoets, meet tussen twee muurpunten, controleert dat het geëxporteerde planblad **6.200 mm** bevat — de muurlengte uit de geometrie, niet uit de muispositie — verwijdert de maatlijn met Delete en zet dat terug met Ctrl+Z.
+- TypeScript strict en productiebuild geslaagd (9,5 s).
+- Screenshots `outputs/qa/meten.png` en `outputs/qa/maatlijn.png` geïnspecteerd, plus `outputs/qa/maatblad.png`: het geëxporteerde blad zelf is naar afbeelding gerenderd en bekeken, met hulplijnen en label op de juiste plek. De eerste versie legde de maatlijn precies op de muur; daarom nu de vaste verschuiving van 400 mm.
+
+Onderweg gevonden en hersteld: de nieuwe knop **Maat** maakte de gereedschapsbalk breder dan een tablet van 1024 px, waardoor de hele pagina horizontaal ging schuiven. De balk schuift nu zelf zijwaarts. Die ene fout liet ook twee andere browserroutes omvallen met een verloren sessie; na het herstel slaagt de volledige suite weer in 1,5 minuut. Het precieze mechanisme van die gevolgschade is niet uitgezocht — alleen vastgesteld dat het met de herstelde eerste route verdwijnt.
+
+Nog open in fase 2: annotatieteksten en een legenda naast maatlijnen; het verplaatsen of omklappen van een bestaande maatlijn; import van rasteronderlegger en PDF-pagina met kalibratie via twee punten; rubberband-selectie; groeperen; opt-in lokaal herstel via IndexedDB; laagpresets per tekenblad; muurjoins. Fase 2 is niet afgerond.

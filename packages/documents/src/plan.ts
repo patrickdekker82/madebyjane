@@ -1,6 +1,11 @@
 import { symbolSvg } from "../../geometry/src/symbol";
 import type { Scene } from "../../contracts/src/index";
-import { endpoints, wallSegments } from "../../geometry/src/index";
+import {
+  endpoints,
+  wallSegments,
+  dimensionGeometry,
+  formatMm,
+} from "../../geometry/src/index";
 export const escapeXml = (s: string) =>
   s.replace(
     /[<>&"']/g,
@@ -16,6 +21,10 @@ export const escapeXml = (s: string) =>
 export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
   const all = [
     ...scene.nodes,
+    ...scene.annotations.flatMap((a) => {
+      const d = dimensionGeometry(a.from, a.to, a.offset);
+      return [a.from, a.to, d.line.from, d.line.to];
+    }),
     ...scene.items.flatMap((i) => [
       {
         x: i.x - i.width / 2 - i.depth / 2,
@@ -61,5 +70,23 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
         `<g transform="translate(${i.x},${i.y}) rotate(${i.rotation})">${i.symbol ? symbolSvg(i.symbol, i.width, i.depth) : `<rect x="${-i.width / 2}" y="${-i.depth / 2}" width="${i.width}" height="${i.depth}" rx="50" fill="${i.color}" stroke="#4c5148" stroke-width="15"/>`}<text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-size="${2.5 * scale}">${escapeXml(i.name)}</text></g>`,
     )
     .join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="297mm" height="210mm" viewBox="0 0 297 210"><rect width="297" height="210" fill="white"/><g font-family="Arial,sans-serif" transform="translate(10 12) scale(${1 / scale}) translate(${-minX} ${-minY})">${walls}${openings}${items}</g><g font-family="Arial,sans-serif" fill="#343b32"><line x1="10" y1="180" x2="287" y2="180" stroke="#9b9c92" stroke-width="0.3"/><text x="10" y="190" font-size="5">STUDIO / Ontwerpblad</text><text x="10" y="198" font-size="3">Revisie ${scene.revision} · 1:${scale} · A4 liggend · Print op 100%</text><line id="scale-reference-${referenceMm}mm" x1="175" y1="195" x2="${175 + referenceMm / scale}" y2="195" stroke="#343b32" stroke-width="0.5"/><text x="175" y="191" font-size="3">${referenceMm.toLocaleString("nl-NL")} mm</text></g></svg>`;
+  // Maatlijnen horen op het tekenblad; lijndikte en tekstgrootte volgen de schaal
+  // zodat ze op papier leesbaar blijven en niet met de tekening meeschalen.
+  const annotations = scene.annotations
+    .map((annotation) => {
+      const d = dimensionGeometry(
+        annotation.from,
+        annotation.to,
+        annotation.offset,
+      );
+      const helpers = d.extensions
+        .map(
+          (e) =>
+            `<line x1="${e.from.x}" y1="${e.from.y}" x2="${e.to.x}" y2="${e.to.y}" stroke="#8a8f83" stroke-width="${0.2 * scale}"/>`,
+        )
+        .join("");
+      return `<g>${helpers}<line x1="${d.line.from.x}" y1="${d.line.from.y}" x2="${d.line.to.x}" y2="${d.line.to.y}" stroke="#343b32" stroke-width="${0.3 * scale}"/><text x="${d.label.x}" y="${d.label.y}" transform="rotate(${d.label.angle} ${d.label.x} ${d.label.y})" text-anchor="middle" dy="${-1 * scale}" font-size="${2.5 * scale}" fill="#343b32">${escapeXml(formatMm(d.lengthMm))}</text></g>`;
+    })
+    .join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="297mm" height="210mm" viewBox="0 0 297 210"><rect width="297" height="210" fill="white"/><g font-family="Arial,sans-serif" transform="translate(10 12) scale(${1 / scale}) translate(${-minX} ${-minY})">${walls}${openings}${items}${annotations}</g><g font-family="Arial,sans-serif" fill="#343b32"><line x1="10" y1="180" x2="287" y2="180" stroke="#9b9c92" stroke-width="0.3"/><text x="10" y="190" font-size="5">STUDIO / Ontwerpblad</text><text x="10" y="198" font-size="3">Revisie ${scene.revision} · 1:${scale} · A4 liggend · Print op 100%</text><line id="scale-reference-${referenceMm}mm" x1="175" y1="195" x2="${175 + referenceMm / scale}" y2="195" stroke="#343b32" stroke-width="0.5"/><text x="175" y="191" font-size="3">${referenceMm.toLocaleString("nl-NL")} mm</text></g></svg>`;
 }

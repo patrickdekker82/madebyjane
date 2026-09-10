@@ -29,6 +29,12 @@ De onderbalk heeft twee schakelaars. **Raster snap** rondt af op 100 mm. **Vange
 
 Selecteer meerdere meubels met shift, ctrl of cmd, in de plattegrond of in de objectlijst. Het eigenschappenpaneel toont dan zes uitlijningen en twee verdelingen. Uitlijnen gebruikt de omhullende van elk meubel inclusief draaiing; verdelen maakt de tussenruimten gelijk en laat de buitenste meubels staan. De hele actie is één stap terug.
 
+## Meten en maatlijnen
+
+Het gereedschap **Maat** meet en legt vast in één handeling: klik het eerste punt, lees de maat mee terwijl je beweegt en klik het tweede punt om de maatlijn te bewaren. Escape breekt af als je alleen wilde meten. Het vangen werkt hier net als bij tekenen, dus meten tussen twee muurpunten geeft exact de muurlengte. De lengte wordt niet opgeslagen maar uit de twee punten berekend; een maatlijn kan dus nooit iets anders beweren dan de tekening. Maatlijnen komen ook op het planblad.
+
+Sneltoetsen: `v` selecteren, `m` muur, `d` deur, `r` raam, `t` maat. Escape gaat terug naar selecteren, Delete verwijdert de selectie, Ctrl of Cmd met `z` is een stap terug en met shift erbij opnieuw. In invoervelden blijven de toetsen gewoon typen.
+
 ## Lagen
 
 Elk meubel hoort bij een laag: inrichting, afwerking, elektra, verlichting of technische presentatie. Het lagenpaneel links toont per laag hoeveel objecten erin zitten, met een oog om de laag te verbergen en een slot om hem te vergrendelen. Een verborgen object verdwijnt uit het plan en doet niet mee aan het vangen, maar blijft in de objectlijst staan. Een vergrendeld object is niet te verplaatsen of te verwijderen; die controle zit in de server, niet alleen in de interface. Met een selectie kun je de laag wijzigen en objecten naar voren of naar achteren halen.
