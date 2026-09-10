@@ -13,6 +13,11 @@ import {
   resolveContent,
 } from "../packages/domain/src/presentation";
 import { presentationHtml } from "../packages/documents/src/presentation";
+import {
+  limits,
+  pptxWarnings,
+  slide,
+} from "../packages/documents/src/presentation-pptx";
 import { planSvg } from "../packages/documents/src/plan";
 import { applyOperations } from "../packages/domain/src/index";
 import { newFixtureItem } from "../packages/editor-2d/src/fixture-draft";
@@ -262,4 +267,54 @@ test("een presentatie gaat door wanneer een blad niet past, met de reden erbij",
 test("de datum staat in het titelblok", () => {
   expect(planSvg(scene, 50, { date: "2026-09-10" })).toContain("2026-09-10");
   expect(planSvg(scene, 50)).toContain("Print op 100%");
+});
+
+test("de PowerPoint meldt wat er niet op een dia past", () => {
+  const doc = document();
+  const content = resolveContent(doc, input);
+  // Zoals het is levert het alleen een melding over het lege moodboard.
+  expect(pptxWarnings(doc, content).map((w) => w.message)).toEqual([
+    "Voor dit blok is niets vastgelegd; de dia blijft leeg.",
+  ]);
+  const long = {
+    ...doc,
+    blocks: doc.blocks.map((b) =>
+      b.type === "text"
+        ? { ...b, heading: "x".repeat(80), body: "y".repeat(1000) }
+        : b,
+    ),
+  };
+  const messages = pptxWarnings(long, resolveContent(long, input)).map(
+    (w) => w.message,
+  );
+  // De tekst wordt niet stilzwijgend afgekapt; er komt een melding.
+  expect(messages.some((m) => m.includes("kop is te lang"))).toBe(true);
+  expect(messages.some((m) => m.includes("past niet op één dia"))).toBe(true);
+});
+
+test("een lange tabel meldt dat de rest in de PDF staat", () => {
+  const doc = document();
+  const content = resolveContent(doc, input);
+  const many = {
+    ...content,
+    blocks: content.blocks.map((b) =>
+      b.type === "materials"
+        ? {
+            ...b,
+            rows: Array.from({ length: 20 }, () => b.rows[0]!),
+          }
+        : b,
+    ),
+  };
+  const message = pptxWarnings(doc, many).find((w) =>
+    w.message.includes("regels"),
+  )!;
+  expect(message.message).toContain(`er passen er ${limits.tableRows}`);
+  expect(message.message).toContain("De rest staat wel in de PDF");
+});
+
+test("het diaformaat is 16:9 en verandert niet stilletjes", () => {
+  // Tien bij 5,625 inch is wat PowerPoint standaard opent.
+  expect(slide).toEqual({ width: 10, height: 5.625 });
+  expect(slide.width / slide.height).toBeCloseTo(16 / 9, 6);
 });

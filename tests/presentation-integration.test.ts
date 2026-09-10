@@ -270,3 +270,78 @@ test("een presentatie in een onbekend project bestaat niet", async () => {
   );
   expect(version.statusCode).toBe(404);
 });
+
+test("exporttaken zijn idempotent, herstartbaar en leveren echte bestanden", async () => {
+  const input = make("compact");
+  await call("POST", `/api/v1/projects/${project}/presentations`, input);
+  await call("POST", `/api/v1/presentations/${input.id}/versions`, {
+    requestId: randomUUID(),
+  });
+  const path = `/api/v1/presentations/${input.id}/versions/1`;
+
+  // Dezelfde export twee keer vragen levert dezelfde taak op.
+  const first = await call("POST", `${path}/exports`, {
+    id: randomUUID(),
+    format: "pptx",
+  });
+  expect(first.statusCode, first.body).toBe(200);
+  const again = await call("POST", `${path}/exports`, {
+    id: randomUUID(),
+    format: "pptx",
+  });
+  expect(again.json().id).toBe(first.json().id);
+  expect(again.json().input_revision).toMatch(/^[0-9a-f]{64}$/);
+
+  // De werker draait in hetzelfde proces; even wachten tot hij klaar is.
+  let job = first.json();
+  for (let i = 0; i < 60 && job.status !== "done"; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    job = (await call("GET", `/api/v1/export-jobs/${first.json().id}`)).json();
+  }
+  expect(job.status, job.error ?? "").toBe("done");
+  expect(job.result_hash).toMatch(/^[0-9a-f]{64}$/);
+
+  const pptx = await call("GET", `${path}/pptx`);
+  expect(pptx.statusCode, pptx.body.slice(0, 120)).toBe(200);
+  // Een pptx is een zip; die begint met PK.
+  expect(pptx.rawPayload.subarray(0, 2).toString()).toBe("PK");
+  expect(pptx.headers["x-content-sha256"]).toBe(job.result_hash);
+
+  // Nog eens exporteren maakt geen tweede bestand.
+  const third = await call("POST", `${path}/exports`, {
+    id: randomUUID(),
+    format: "pptx",
+  });
+  expect(third.json().status).toBe("done");
+  expect(third.json().result_hash).toBe(job.result_hash);
+  const list = await call("GET", `/api/v1/presentations/${input.id}/exports`);
+  expect(
+    list.json().items.filter((j: { format: string }) => j.format === "pptx"),
+  ).toHaveLength(1);
+});
+
+test("een PowerPoint die nog niet gemaakt is, is niet te downloaden", async () => {
+  const input = make("compact");
+  await call("POST", `/api/v1/projects/${project}/presentations`, input);
+  await call("POST", `/api/v1/presentations/${input.id}/versions`, {
+    requestId: randomUUID(),
+  });
+  const pptx = await call(
+    "GET",
+    `/api/v1/presentations/${input.id}/versions/1/pptx`,
+  );
+  expect(pptx.statusCode).toBe(409);
+  expect(pptx.json().message).toContain("nog niet gemaakt");
+});
+
+test("exporteren kan alleen van een gepubliceerde versie", async () => {
+  const input = make("compact");
+  await call("POST", `/api/v1/projects/${project}/presentations`, input);
+  const missing = await call(
+    "POST",
+    `/api/v1/presentations/${input.id}/versions/1/exports`,
+    { id: randomUUID(), format: "pdf" },
+  );
+  expect(missing.statusCode).toBe(404);
+  expect(missing.json().message).toContain("Publiceer eerst");
+});

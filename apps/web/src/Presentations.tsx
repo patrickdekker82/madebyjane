@@ -512,6 +512,73 @@ export function Presentations({
                         disabled={busy}
                         onClick={async () => {
                           setBusy(true);
+                          setError("");
+                          try {
+                            /*
+                             * De PowerPoint wordt door de exportwerker gemaakt,
+                             * want het planblad moet er eerst als afbeelding uit.
+                             * Zolang hij niet klaar is, is er niets te
+                             * downloaden; er verschijnt dus geen knop die een
+                             * half bestand oplevert.
+                             */
+                            let job = await api<{
+                              id: string;
+                              status: string;
+                              error: string | null;
+                            }>(
+                              `/presentations/${row.id}/versions/${v.version}/exports`,
+                              organizationId,
+                              { id: crypto.randomUUID(), format: "pptx" },
+                            );
+                            for (
+                              let i = 0;
+                              i < 40 && job.status !== "done";
+                              i++
+                            ) {
+                              if (job.status === "failed")
+                                throw new Error(
+                                  job.error ?? "De export is niet gelukt.",
+                                );
+                              await new Promise((r) => setTimeout(r, 750));
+                              job = await api(
+                                `/export-jobs/${job.id}`,
+                                organizationId,
+                              );
+                            }
+                            if (job.status !== "done")
+                              throw new Error(
+                                "De export duurt langer dan verwacht. Probeer het zo opnieuw.",
+                              );
+                            const r = await fetch(
+                              `/api/v1/presentations/${row.id}/versions/${v.version}/pptx`,
+                              {
+                                headers: {
+                                  "x-organization-id": organizationId,
+                                },
+                              },
+                            );
+                            if (!r.ok)
+                              throw new Error((await r.json()).message);
+                            const url = URL.createObjectURL(await r.blob()),
+                              a = document.createElement("a");
+                            a.href = url;
+                            a.download = `presentatie-v${v.version}.pptx`;
+                            a.click();
+                            setTimeout(() => URL.revokeObjectURL(url), 1000);
+                          } catch (e) {
+                            setError((e as Error).message);
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        <Download size={13} />
+                        PowerPoint
+                      </button>
+                      <button
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
                           try {
                             const s = await api<{ token: string; id: string }>(
                               `/presentations/${row.id}/versions/${v.version}/shares`,

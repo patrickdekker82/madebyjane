@@ -402,6 +402,25 @@ export class PresentationService {
     });
   }
 
+  /** De PowerPoint van een versie; die wordt door de exportwerker gemaakt. */
+  deck(ctx: Context, presentationId: string, version: number) {
+    return inTenant(this.pool, ctx.organizationId, async (c) => {
+      const row = (
+        await c.query(
+          "SELECT pptx,pptx_hash FROM presentation_decks WHERE presentation_id=$1 AND version=$2",
+          [presentationId, version],
+        )
+      ).rows[0];
+      if (!row)
+        throw new DomainError(
+          "NOT_EXPORTED",
+          "Deze PowerPoint is nog niet gemaakt. Vraag de export aan en probeer het zo opnieuw.",
+          409,
+        );
+      return row as { pptx: Buffer; pptx_hash: string };
+    });
+  }
+
   async share(
     ctx: Context,
     presentationId: string,

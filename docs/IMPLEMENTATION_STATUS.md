@@ -744,3 +744,38 @@ Verder: het paneel haalt een geopende presentatie opnieuw op bij het openen. And
 ### Nog open in fase 5
 
 De **PPTX-uitvoer** via PptxGenJS en de **exportworker** die idempotent en herstartbaar is met taakstatus, retries en resulthash. De publicatie is nu synchroon: bij het publiceren wordt de PDF pas gemaakt zodra iemand hem opvraagt, en er is geen wachtrij die zware exports van lichte scheidt. Ook open: een webviewer die de presentatie in de browser toont in plaats van een PDF te downloaden, en het moodboard vullen vanuit de app (de beelden komen nu uit de bestaande afbeeldingsopslag, die nog "onderlegger" heet).
+
+## Aanvulling 10 september 2026 — fase 5, derde deel: PowerPoint en de exportwerker
+
+### PowerPoint uit hetzelfde documentmodel
+
+`PptxGenJS` 4.0.1 maakt van dezelfde presentatie een PowerPoint. Teksten en tabellen worden **echte tekstvakken en tabellen**, dus in PowerPoint gewoon te bewerken.
+
+Een planblad kan dat niet: PowerPoint kent geen vectorblad dat op ware schaal blijft. Het gaat daarom als afbeelding mee, en **dat staat op de dia zelf**: "Afbeelding van het planblad 1:50. Alleen de PDF is maatvast; print die op 100%." Een afbeelding van een plattegrond is geen maatvaste tekening en de app doet niet alsof.
+
+Er worden maar twee lettertypen gebruikt, dezelfde als in de PDF, omdat een ontbrekend lettertype de opmaak stilzwijgend verandert op de computer van de klant. De bouwstraat controleert dat: `verify-presentation-pptx.py` keurt het diaformaat (10 × 5,625 inch), het aantal dia's, dat elke dia tekst heeft, dat er echte tabellen in zitten en dat er geen ander lettertype in het bestand staat.
+
+**Wat niet op een dia past, wordt gemeld in plaats van afgekapt.** `pptxWarnings` geeft terug welke kop te lang is, welke tekst niet op één dia past en welke tabel meer regels heeft dan er passen — met de mededeling dat de rest wel in de PDF staat. De grenzen zijn nagemeten op het gekozen diaformaat en bewust aan de veilige kant. Uitgebreide PPTX-QA op echte klantdata schuift door naar fase 9; dat staat als concrete taak genoteerd.
+
+### De exportwerker
+
+Een exporttaak verwijst naar een **gepubliceerde versie en niet naar een bestand**. Dezelfde versie in hetzelfde formaat is altijd dezelfde taak: twee keer vragen levert geen twee exports en geen tweede publicatie op. De taak bewaart de invoerrevisie (de inhoudshash van die versie), het aantal pogingen en de hash van het resultaat.
+
+Herstartbaar: een taak die halverwege afbreekt blijft op `running` staan met zijn starttijd. Loopt hij langer dan vijf minuten, dan gaat hij terug in de wachtrij met een poging erbij. Boven drie pogingen stopt het en blijft de fout staan, zichtbaar in de takenlijst, in plaats van eindeloos opnieuw te proberen. `FOR UPDATE SKIP LOCKED` zorgt dat twee werkers nooit dezelfde taak pakken.
+
+**Een half bestand is nooit te downloaden.** Het bestand en de statuswissel naar `done` gaan in dezelfde transactie. Bestond het bestand al, dan wordt díe hash als resultaat vastgelegd — het resultaat verwijst naar wat er werkelijk ligt, niet naar wat er net gemaakt is. Een PowerPoint die nog niet gemaakt is, geeft 409 met een leesbare melding en geen knop die een leeg bestand oplevert.
+
+De werker draait in hetzelfde proces als de API. Dat is genoeg voor twee gebruikers en houdt de installatie eenvoudig, maar de taken staan wél al in de database met status, pogingen en resultaat, zodat een losse werker ze later zonder wijziging kan oppakken. **pg-boss is nog steeds niet in gebruik**; dat blijft een open punt voor de beheerfase, samen met het scheiden van zware en lichte concurrency.
+
+### Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+- **225 tests / 27 bestanden geslaagd, 43,3 s** (was 219). Zes nieuwe: drie over wat er niet op een dia past en het diaformaat, en drie integratietests over exporttaken — dezelfde taak bij herhaald vragen, een echte PPTX die als zip begint met de hash uit de taak, geen tweede bestand bij nog eens exporteren, een niet-gemaakte PowerPoint die 409 geeft, en exporteren van een ongepubliceerde versie dat wordt geweigerd.
+- **20 browserroutes geslaagd, 2,8 min.**
+- `pnpm probe:presentation` gevolgd door beide controlescripts: 8 pagina's met een schaalreferentie van exact 100 mm, en 9 dia's van 10 × 5,625 inch met 3 bewerkbare tabellen en alleen Georgia als lettertype. Beide staan in de bouwstraat.
+- TypeScript strict en productiebuild geslaagd (11,2 s).
+
+**De eerder gemelde onverklaarde testronde is deels opgehelderd.** De browserroutes vielen één keer om op `EACCES` bij `node_modules/.vite/deps`: de productiebuild draaide hier als root en liet een cachemap achter die de gewone gebruiker waarmee de tests draaien niet mocht opruimen. Dat is een eigenschap van deze werkwijze, niet van de code. Of dat ook de eerdere overgeslagen tests in de unitronde verklaart, weet ik niet; dat is niet vastgesteld.
+
+### Nog open in fase 5
+
+Een **webviewer** die de presentatie in de browser toont in plaats van een PDF te downloaden, het **moodboard vullen** vanuit de app, en **pg-boss** als echte queue met gescheiden concurrency. Uitgebreide PPTX-QA schuift naar fase 9.

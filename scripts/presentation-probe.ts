@@ -1,6 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { presentationHtml } from "../packages/documents/src/presentation";
+import {
+  presentationPptx,
+  pptxWarnings,
+} from "../packages/documents/src/presentation-pptx";
+import { renderSvgPng } from "../packages/documents/src/raster";
 import { renderQuotePdf } from "../packages/documents/src/quote-pdf";
 import {
   defaultPresentation,
@@ -101,6 +106,32 @@ await writeFile(
     2,
   ),
 );
+
+// Dezelfde presentatie als PowerPoint. Planbladen kunnen niet als vector mee,
+// dus die worden hier eenmalig naar afbeelding gezet.
+const sheets: Record<string, Buffer> = {};
+for (const block of content.blocks)
+  if (block.type === "plan" && block.svg)
+    sheets[block.blockId] = await renderSvgPng(
+      block.svg,
+      block.widthMm,
+      block.heightMm,
+    );
+const warnings = pptxWarnings(document, content);
+const pptx = await presentationPptx(document, content, sheets);
+await writeFile("outputs/qa/presentatie-demo.pptx", pptx);
+await writeFile(
+  "work/presentation-pptx-expected.json",
+  JSON.stringify(
+    {
+      slides: document.blocks.length + 1,
+      sheets: Object.keys(sheets).length,
+      warnings,
+    },
+    null,
+    2,
+  ),
+);
 console.log(
-  `Presentatieproef: ${document.blocks.length} blokken, ${pdf.length} bytes, ${Math.round(performance.now() - start)} ms.`,
+  `Presentatieproef: ${document.blocks.length} blokken, ${pdf.length} bytes PDF, ${pptx.length} bytes PPTX, ${warnings.length} waarschuwingen, ${Math.round(performance.now() - start)} ms.`,
 );

@@ -26,6 +26,8 @@ import {
 } from "../../../packages/contracts/src/index";
 import { planSvg } from "../../../packages/documents/src/plan";
 import { PresentationService } from "../../../packages/domain/src/presentations";
+import { ExportJobs } from "../../../packages/domain/src/export-jobs";
+import { drainExports } from "../../../packages/domain/src/export-worker";
 export function createServer(config: {
   runtime: Pool;
   identity: Pool;
@@ -270,6 +272,7 @@ export function createServer(config: {
   const resources = new QuoteResources(config.runtime),
     delivery = new QuoteDelivery(config.runtime, config.secret);
   const presentations = new PresentationService(config.runtime, config.secret);
+  const exports = new ExportJobs(config.runtime);
   const versionParams = (params: unknown) =>
     z
       .object({
@@ -491,6 +494,64 @@ export function createServer(config: {
         )
         .header("X-Content-SHA256", r.pdf_hash)
         .send(r.pdf);
+    },
+  );
+  app.post(
+    "/api/v1/presentations/:presentationId/versions/:version/exports",
+    { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+    async (req) => {
+      const p = presentationVersionParams(req.params);
+      const ctx = await context(req.headers);
+      const format = z
+        .object({ id, format: z.enum(["pdf", "pptx"]) })
+        .strict()
+        .parse(req.body);
+      const job = await exports.request(ctx, {
+        ...format,
+        presentationId: p.presentationId,
+        version: p.version,
+      });
+      /*
+       * De werker draait hier in hetzelfde proces. Dat is genoeg voor twee
+       * gebruikers en houdt de installatie eenvoudig; de taken staan wel al in
+       * de database, dus een aparte werker kan ze later zonder wijziging
+       * oppakken. Het verzoek wacht er niet op.
+       */
+      void drainExports(config.runtime, ctx.organizationId).catch(() => {});
+      return job;
+    },
+  );
+  app.get("/api/v1/presentations/:presentationId/exports", async (req) =>
+    exports.list(
+      await context(req.headers),
+      z.object({ presentationId: id }).parse(req.params).presentationId,
+    ),
+  );
+  app.get("/api/v1/export-jobs/:id", async (req) =>
+    exports.get(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+    ),
+  );
+  app.get(
+    "/api/v1/presentations/:presentationId/versions/:version/pptx",
+    async (req, reply) => {
+      const p = presentationVersionParams(req.params);
+      const r = await presentations.deck(
+        await context(req.headers),
+        p.presentationId,
+        p.version,
+      );
+      return reply
+        .type(
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        )
+        .header(
+          "Content-Disposition",
+          `attachment; filename="presentatie-v${p.version}.pptx"`,
+        )
+        .header("X-Content-SHA256", r.pptx_hash)
+        .send(r.pptx);
     },
   );
   app.get(
