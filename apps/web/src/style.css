@@ -923,6 +923,22 @@ form {
   color: #4c5148;
   display: flex;
 }
+.layer-presets {
+  margin: 4px 0 10px;
+}
+.layer-presets > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.layer-presets button {
+  background: white;
+  border: 1px solid #e7ddd2;
+  color: #4c5148;
+  font-size: 9px;
+  padding: 4px 7px;
+}
 .layer-actions label {
   font-size: 10px;
 }

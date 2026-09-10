@@ -1,5 +1,5 @@
 import { symbolSvg } from "../../geometry/src/symbol";
-import type { Scene } from "../../contracts/src/index";
+import { itemLayers, type Scene } from "../../contracts/src/index";
 import {
   endpoints,
   wallOutlines,
@@ -22,10 +22,11 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
   const all = [
     ...scene.nodes,
     ...scene.annotations.flatMap((a) => {
+      if (a.type === "note") return [{ x: a.x, y: a.y }];
       const d = dimensionGeometry(a.from, a.to, a.offset);
       return [a.from, a.to, d.line.from, d.line.to];
     }),
-    ...scene.items.flatMap((i) => [
+    ...scene.items.filter((i) => !i.hidden).flatMap((i) => [
       {
         x: i.x - i.width / 2 - i.depth / 2,
         y: i.y - i.width / 2 - i.depth / 2,
@@ -75,7 +76,10 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
       return `<g transform="translate(${a.x + Math.cos(angle) * o.offset},${a.y + Math.sin(angle) * o.offset}) rotate(${(angle * 180) / Math.PI})"><line x1="0" y1="0" x2="${o.width}" y2="0" stroke="${o.kind === "window" ? "#64838a" : "#8d775d"}" stroke-width="20"/>${o.kind === "door" ? `<path d="M0 0 L0 ${o.width} A${o.width} ${o.width} 0 0 0 ${o.width} 0" fill="none" stroke="#8d775d" stroke-width="15"/>` : ""}</g>`;
     })
     .join("");
+  // Verborgen objecten horen niet op het blad; anders belooft de legenda iets
+  // anders dan de tekening laat zien.
   const items = scene.items
+    .filter((i) => !i.hidden)
     .map(
       (i) =>
         `<g transform="translate(${i.x},${i.y}) rotate(${i.rotation})">${i.symbol ? symbolSvg(i.symbol, i.width, i.depth) : `<rect x="${-i.width / 2}" y="${-i.depth / 2}" width="${i.width}" height="${i.depth}" rx="50" fill="${i.color}" stroke="#4c5148" stroke-width="15"/>`}<text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-size="${2.5 * scale}">${escapeXml(i.name)}</text></g>`,
@@ -85,6 +89,8 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
   // zodat ze op papier leesbaar blijven en niet met de tekening meeschalen.
   const annotations = scene.annotations
     .map((annotation) => {
+      if (annotation.type === "note")
+        return `<text x="${annotation.x}" y="${annotation.y}" font-size="${2.5 * scale}" fill="#343b32">${escapeXml(annotation.text)}</text>`;
       const d = dimensionGeometry(
         annotation.from,
         annotation.to,
@@ -99,5 +105,26 @@ export function planSvg(scene: Scene, scale: 20 | 50 | 100 = 50) {
       return `<g>${helpers}<line x1="${d.line.from.x}" y1="${d.line.from.y}" x2="${d.line.to.x}" y2="${d.line.to.y}" stroke="#343b32" stroke-width="${0.3 * scale}"/><text x="${d.label.x}" y="${d.label.y}" transform="rotate(${d.label.angle} ${d.label.x} ${d.label.y})" text-anchor="middle" dy="${-1 * scale}" font-size="${2.5 * scale}" fill="#343b32">${escapeXml(formatMm(d.lengthMm))}</text></g>`;
     })
     .join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="297mm" height="210mm" viewBox="0 0 297 210"><rect width="297" height="210" fill="white"/><g font-family="Arial,sans-serif" transform="translate(10 12) scale(${1 / scale}) translate(${-minX} ${-minY})">${walls}${cuts}${openings}${items}${annotations}</g><g font-family="Arial,sans-serif" fill="#343b32"><line x1="10" y1="180" x2="287" y2="180" stroke="#9b9c92" stroke-width="0.3"/><text x="10" y="190" font-size="5">STUDIO / Ontwerpblad</text><text x="10" y="198" font-size="3">Revisie ${scene.revision} · 1:${scale} · A4 liggend · Print op 100%</text><line id="scale-reference-${referenceMm}mm" x1="175" y1="195" x2="${175 + referenceMm / scale}" y2="195" stroke="#343b32" stroke-width="0.5"/><text x="175" y="191" font-size="3">${referenceMm.toLocaleString("nl-NL")} mm</text></g></svg>`;
+  /**
+   * Legenda: welke lagen op dit blad staan en welke bewust verborgen zijn.
+   * Zo is aan het blad zelf te zien dat er iets ontbreekt, in plaats van dat
+   * een lezer een onvolledige tekening voor compleet aanziet.
+   */
+  const byLayer = new Map<string, { shown: number; hidden: number }>();
+  for (const item of scene.items) {
+    const label = itemLayers[item.layer ?? "furniture"];
+    const entry = byLayer.get(label) ?? { shown: 0, hidden: 0 };
+    entry[item.hidden ? "hidden" : "shown"] += 1;
+    byLayer.set(label, entry);
+  }
+  const legendRows = [...byLayer]
+    .filter(([, counts]) => counts.shown || counts.hidden)
+    .sort(([a], [b]) => a.localeCompare(b, "nl-NL"));
+  const legend = legendRows
+    .map(
+      ([label, counts], index) =>
+        `<text x="90" y="${188 + index * 4}" font-size="3">${escapeXml(label)}: ${counts.shown} getoond${counts.hidden ? `, ${counts.hidden} verborgen` : ""}</text>`,
+    )
+    .join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="297mm" height="210mm" viewBox="0 0 297 210"><rect width="297" height="210" fill="white"/><g font-family="Arial,sans-serif" transform="translate(10 12) scale(${1 / scale}) translate(${-minX} ${-minY})">${walls}${cuts}${openings}${items}${annotations}</g><g font-family="Arial,sans-serif" fill="#343b32"><line x1="10" y1="180" x2="287" y2="180" stroke="#9b9c92" stroke-width="0.3"/><text x="10" y="190" font-size="5">STUDIO / Ontwerpblad</text><text x="10" y="198" font-size="3">Revisie ${scene.revision} · 1:${scale} · A4 liggend · Print op 100%</text><line id="scale-reference-${referenceMm}mm" x1="175" y1="195" x2="${175 + referenceMm / scale}" y2="195" stroke="#343b32" stroke-width="0.5"/><text x="175" y="191" font-size="3">${referenceMm.toLocaleString("nl-NL")} mm</text><text x="90" y="184" font-size="3" fill="#697164">LEGENDA</text>${legend}</g></svg>`;
 }

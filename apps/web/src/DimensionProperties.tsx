@@ -84,3 +84,54 @@ export function DimensionProperties({
     </div>
   );
 }
+
+/** Eigenschappen van een tekstnotitie op het plan. */
+export function NoteProperties({
+  annotation,
+  disabled,
+  onCommand,
+}: {
+  annotation: Extract<Annotation, { type: "note" }>;
+  disabled: boolean;
+  onCommand: (operations: Operation[]) => void;
+}) {
+  const [error, setError] = useState("");
+  return (
+    <div className="item-properties">
+      <span className="eyebrow">NOTITIE</span>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          const text = String(
+            new FormData(event.currentTarget).get("text") ?? "",
+          ).trim();
+          if (!text || text.length > 300) {
+            setError("Vul een tekst van 1 tot 300 tekens in.");
+            return;
+          }
+          setError("");
+          onCommand([{ type: "SetAnnotationText", id: annotation.id, text }]);
+        }}
+      >
+        <label>
+          Tekst op het plan
+          <textarea
+            name="text"
+            aria-label="Notitietekst"
+            maxLength={300}
+            defaultValue={annotation.text}
+          />
+        </label>
+        {error && (
+          <p role="alert" className="error">
+            {error}
+          </p>
+        )}
+        <button className="primary" disabled={disabled}>
+          <Check size={15} />
+          Toepassen
+        </button>
+      </form>
+    </div>
+  );
+}

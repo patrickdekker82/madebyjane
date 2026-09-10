@@ -5,6 +5,7 @@ export type Tool =
   | "door"
   | "window"
   | "measure"
+  | "note"
   | "calibrate";
 export const useEditor = create<{
   hasPending: boolean;

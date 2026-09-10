@@ -55,6 +55,7 @@ import {
   Grid2X2,
   Magnet,
   Ruler,
+  StickyNote,
   EyeOff,
   Lock,
   Copy,
@@ -65,7 +66,7 @@ import { api, login, logout, authRequest, ApiError } from "./api";
 import { Arrange } from "./Arrange";
 import { LayerPanel } from "./Layers";
 import { UnderlayPanel } from "./Underlay";
-import { DimensionProperties } from "./DimensionProperties";
+import { DimensionProperties, NoteProperties } from "./DimensionProperties";
 import { PlanCanvas } from "../../../packages/editor-2d/src/Canvas";
 import { useEditor, type Tool } from "../../../packages/editor-2d/src/store";
 import {
@@ -920,9 +921,11 @@ function Editor() {
       </div>
     );
   const single = selected.length === 1 ? selected[0]! : null;
-  const dimension = single
+  const annotation = single
     ? scene.annotations.find((a) => a.id === single)
     : undefined;
+  const dimension = annotation?.type === "dimension" ? annotation : undefined;
+  const note = annotation?.type === "note" ? annotation : undefined;
   const item = single ? scene.items.find((i) => i.id === single) : undefined;
   const selectedItems = scene.items.filter((i) => selected.includes(i.id));
   const disabled = busy || !!pending.current || !lease || !canWrite(org.role);
@@ -985,6 +988,7 @@ function Editor() {
               { id: "door", icon: DoorOpen, label: "Deur" },
               { id: "window", icon: AppWindow, label: "Raam" },
               { id: "measure", icon: Ruler, label: "Maat" },
+              { id: "note", icon: StickyNote, label: "Notitie" },
             ] as const
           ).map((t) => (
             <button
@@ -1209,16 +1213,26 @@ function Editor() {
                 {o.kind === "door" ? "Deur" : "Raam"} {i + 1}
               </button>
             ))}
-            {scene.annotations.map((a, i) => (
-              <button
-                key={a.id}
-                className={selected.includes(a.id) ? "selected" : ""}
-                onClick={() => select(a.id)}
-              >
-                <Ruler size={14} />
-                Maat {i + 1}
-              </button>
-            ))}
+            {scene.annotations.map((a, i) => {
+              // Doornummeren per soort, zodat de eerste notitie ook Notitie 1 heet.
+              const rank = scene.annotations
+                .slice(0, i + 1)
+                .filter((other) => other.type === a.type).length;
+              return (
+                <button
+                  key={a.id}
+                  className={selected.includes(a.id) ? "selected" : ""}
+                  onClick={() => select(a.id)}
+                >
+                  {a.type === "note" ? (
+                    <StickyNote size={14} />
+                  ) : (
+                    <Ruler size={14} />
+                  )}
+                  {a.type === "note" ? "Notitie" : "Maat"} {rank}
+                </button>
+              );
+            })}
           </div>
         </aside>
         <section className="drawing">
@@ -1258,6 +1272,13 @@ function Editor() {
                 item.y
               }
               item={item}
+              disabled={disabled}
+              onCommand={command}
+            />
+          ) : note ? (
+            <NoteProperties
+              key={note.id + ":" + scene.revision}
+              annotation={note}
               disabled={disabled}
               onCommand={command}
             />

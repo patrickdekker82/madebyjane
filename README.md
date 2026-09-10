@@ -45,9 +45,15 @@ Met het gereedschap **Selecteren** trek je op leeg vlak een kader om meerdere me
 
 Sneltoetsen: `v` selecteren, `m` muur, `d` deur, `r` raam, `t` maat. Escape gaat terug naar selecteren, Delete verwijdert de selectie, Ctrl of Cmd met `z` is een stap terug en met shift erbij opnieuw. In invoervelden blijven de toetsen gewoon typen.
 
+## Notities en het tekenblad
+
+Met het gereedschap **Notitie** zet je een tekst op het plan; het gereedschap springt daarna terug naar Selecteren zodat je de tekst meteen kunt aanpassen. Notities komen ook op het geëxporteerde planblad.
+
+Het planblad heeft een legenda die per laag meldt hoeveel objecten getoond en hoeveel verborgen zijn, zodat een onvolledig blad zichzelf verraadt.
+
 ## Lagen
 
-Elk meubel hoort bij een laag: inrichting, afwerking, elektra, verlichting of technische presentatie. Het lagenpaneel links toont per laag hoeveel objecten erin zitten, met een oog om de laag te verbergen en een slot om hem te vergrendelen. Een verborgen object verdwijnt uit het plan en doet niet mee aan het vangen, maar blijft in de objectlijst staan. Een vergrendeld object is niet te verplaatsen of te verwijderen; die controle zit in de server, niet alleen in de interface. Met een selectie kun je de laag wijzigen en objecten naar voren of naar achteren halen.
+Elk meubel hoort bij een laag: inrichting, afwerking, elektra, verlichting of technische presentatie. Het lagenpaneel links toont per laag hoeveel objecten erin zitten, met een oog om de laag te verbergen en een slot om hem te vergrendelen. Een verborgen object verdwijnt uit het plan en doet niet mee aan het vangen, maar blijft in de objectlijst staan. Een vergrendeld object is niet te verplaatsen of te verwijderen; die controle zit in de server, niet alleen in de interface. Met een selectie kun je de laag wijzigen en objecten naar voren of naar achteren halen. De knoppen onder **Blad tonen** zetten in één keer één laag aan en de rest uit — handig voor een elektra- of verlichtingsblad. Dat is één stap terug, en wat je op het scherm ziet komt zo ook op de export.
 
 ## Versies bewaren en terugzetten
 

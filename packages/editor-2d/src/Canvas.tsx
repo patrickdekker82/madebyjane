@@ -99,6 +99,7 @@ export function PlanCanvas({
       ...scene.nodes,
       ...underlayCorners,
       ...scene.annotations.flatMap((a) => {
+        if (a.type === "note") return [{ x: a.x, y: a.y }];
         const d = dimensionGeometry(a.from, a.to, a.offset);
         return [a.from, a.to, d.line.from, d.line.to];
       }),
@@ -254,6 +255,23 @@ export function PlanCanvas({
         },
       ]);
       setStart(null);
+    } else if (tool === "note") {
+      const p = world();
+      if (!p) return;
+      onCommand([
+        {
+          type: "AddAnnotation",
+          annotation: {
+            type: "note",
+            id: crypto.randomUUID(),
+            x: p.x,
+            y: p.y,
+            text: "Notitie",
+          },
+        },
+      ]);
+      // Meteen terug naar selecteren, zodat de tekst direct te bewerken is.
+      useEditor.getState().setTool("select");
     } else if (tool === "calibrate") {
       const underlay = scene.underlay;
       if (!underlay) return;
@@ -331,7 +349,12 @@ export function PlanCanvas({
         onMouseDown={(e) => {
           // Meten en muren tekenen moeten juist op bestaande muren en punten
           // kunnen beginnen; anders is aansluiten op wat er staat onmogelijk.
-          if (tool === "measure" || tool === "wall" || tool === "calibrate")
+          if (
+            tool === "measure" ||
+            tool === "wall" ||
+            tool === "note" ||
+            tool === "calibrate"
+          )
             return click();
           if (e.target !== stage.current) return;
           if (tool !== "select") return click();
@@ -629,12 +652,25 @@ export function PlanCanvas({
             />
           )}
           {scene.annotations.map((annotation) => {
+            const chosen = selected.includes(annotation.id);
+            if (annotation.type === "note")
+              return (
+                <Text
+                  key={annotation.id}
+                  x={annotation.x}
+                  y={annotation.y}
+                  text={annotation.text}
+                  fontSize={13 / zoom}
+                  fill={chosen ? "#a36432" : "#343b32"}
+                  onClick={() => select(annotation.id)}
+                  onTap={() => select(annotation.id)}
+                />
+              );
             const d = dimensionGeometry(
               annotation.from,
               annotation.to,
               annotation.offset,
             );
-            const chosen = selected.includes(annotation.id);
             return (
               <Group key={annotation.id} onClick={() => select(annotation.id)}>
                 {d.extensions.map((extension, index) => (

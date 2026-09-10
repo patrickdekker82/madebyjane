@@ -151,9 +151,19 @@ export const annotationSchema = z
         offset: z.number().int().min(-10000).max(10000),
       })
       .strict(),
+    z
+      .object({
+        type: z.literal("note"),
+        id,
+        x: mm,
+        y: mm,
+        text: z.string().trim().min(1).max(300),
+      })
+      .strict(),
   ])
   .superRefine((annotation, ctx) => {
     if (
+      annotation.type === "dimension" &&
       annotation.from.x === annotation.to.x &&
       annotation.from.y === annotation.to.y
     )
@@ -285,6 +295,13 @@ export const operationSchema = z.discriminatedUnion("type", [
       type: z.literal("SetAnnotationOffset"),
       id,
       offset: z.number().int().min(-10000).max(10000),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SetAnnotationText"),
+      id,
+      text: z.string().trim().min(1).max(300),
     })
     .strict(),
   z

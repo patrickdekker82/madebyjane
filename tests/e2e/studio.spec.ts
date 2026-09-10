@@ -1578,3 +1578,96 @@ test("onderlegger uploaden → inmeten met twee punten → schaal klopt", async 
   await expect(page.getByLabel("Onderlegger kiezen", { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("notitie plaatsen → laagpreset → legenda op het planblad", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Nieuw project", exact: true }).click();
+  await page.getByLabel("Projectnaam").fill("Bladstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  const canvas = page.locator(".canvas-wrap canvas").first();
+  const box = (await canvas.boundingBox())!;
+  const fit = Math.min((box.width - 120) / 6200, (box.height - 120) / 4800);
+  const at = (x: number, y: number) => ({
+    x: box.x + 60 + x * fit,
+    y: box.y + 60 + y * fit,
+  });
+  let sheet = 0;
+  const planSheet = async () => {
+    const download = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Planblad SVG", exact: true }).click();
+    const file = `outputs/bladstudio-${sheet++}.svg`;
+    await (await download).saveAs(file);
+    return readFile(file, "utf8");
+  };
+
+  // Notitie plaatsen en de tekst aanpassen.
+  await page.getByRole("button", { name: "Notitie", exact: true }).click();
+  await page.mouse.click(at(2600, 2600).x, at(2600, 2600).y);
+  await saved();
+  // Het gereedschap springt terug naar Selecteren zodat de tekst meteen te wijzigen is.
+  await expect(
+    page.getByRole("button", { name: "Selecteren", exact: true }),
+  ).toHaveClass(/active/);
+  await page.getByRole("button", { name: "Notitie 1", exact: true }).click();
+  await page
+    .getByLabel("Notitietekst", { exact: true })
+    .fill("Bestaande radiator blijft staan");
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  expect(await planSheet()).toContain("Bestaande radiator blijft staan");
+
+  // Legenda: vier meubels, allemaal getoond.
+  expect(await planSheet()).toContain("Inrichting: 4 getoond");
+
+  // Laagpreset: zet de salontafel op verlichting en toon alleen dat blad.
+  await page.getByRole("button", { name: "Salontafel · eiken", exact: true }).click();
+  await page
+    .getByLabel("Laag van de selectie", { exact: true })
+    .selectOption("lighting");
+  await saved();
+  await page
+    .getByRole("button", { name: "Alleen verlichting tonen", exact: true })
+    .click();
+  await saved();
+  await page.screenshot({ path: "outputs/qa/laagpreset.png" });
+  const lightingSheet = await planSheet();
+  // De legenda meldt wat er verborgen is, zodat niemand het blad voor compleet aanziet.
+  expect(lightingSheet).toContain("Inrichting: 0 getoond, 3 verborgen");
+  expect(lightingSheet).toContain("Verlichting: 1 getoond");
+  // En het blad tekent ze ook werkelijk niet; de legenda mag niets anders beweren.
+  expect(lightingSheet).not.toContain("Bank · linnen naturel");
+  expect(lightingSheet).not.toContain("Dressoir");
+  expect(lightingSheet).toContain("Salontafel · eiken");
+
+  await page.getByRole("button", { name: "Alle lagen tonen", exact: true }).click();
+  await saved();
+  const complete = await planSheet();
+  expect(complete).toContain("Inrichting: 3 getoond");
+  expect(complete).toContain("Bank · linnen naturel");
+  expect(errors).toEqual([]);
+});

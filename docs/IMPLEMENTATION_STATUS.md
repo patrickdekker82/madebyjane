@@ -387,3 +387,26 @@ Twee dingen die het testen opleverde:
 - De gevulde contour verving een lijn met een gegarandeerde trefzone van twintig pixels. Zonder die zone is een dunne muur bij uitzoomen niet meer aan te wijzen. De trefzone is teruggezet en een browserroute controleert nu dat een muur op het canvas aanklikbaar blijft.
 
 Nog open in fase 2: annotatieteksten en een legenda; groeperen; opt-in lokaal herstel via IndexedDB; laagpresets per tekenblad; de onderlegger verslepen; PDF-pagina als onderlegger; EXIF verwijderen. In 3D zijn de muren nog losse blokken zonder versneden hoeken; dat hoort bij fase 7. Fase 2 is niet afgerond.
+
+## Aanvulling 10 september 2026 — notities, laagpresets en legenda
+
+### Tekstnotities
+
+Annotaties zijn een discriminated union geworden: naast een maatlijn bestaat er nu een notitie met een punt en een tekst van maximaal 300 tekens. Het gereedschap **Notitie** plaatst er een en springt meteen terug naar Selecteren, zodat de tekst direct in het eigenschappenpaneel te wijzigen is. Notities staan in de objectlijst, doorgenummerd per soort, en komen op het geëxporteerde planblad.
+
+### Laagpresets
+
+Het lagenpaneel heeft knoppen **Alles** en één per aanwezige laag. Een preset toont die ene laag en verbergt de rest, als één opdracht en dus als één stap terug. Zichtbaarheid hoort bij de objecten zelf, dus een preset is een gewone wijziging die in de export doorwerkt — wat je op het scherm ziet is wat er op het blad komt.
+
+### Legenda
+
+Het tekenblad heeft een legenda die per laag meldt hoeveel objecten getoond en hoeveel verborgen zijn. Zo is aan het blad zelf te zien dat er iets ontbreekt, in plaats van dat een lezer een onvolledige tekening voor compleet aanziet.
+
+**Daarbij een echte fout gevonden.** De legenda meldde "Inrichting: 0 getoond, 3 verborgen" terwijl het blad die drie meubels gewoon tekende: het exportpad filterde verborgen objecten niet. Dat is precies de fout die de legenda hoort te voorkomen. Verborgen objecten tellen nu ook niet meer mee voor de bladomvang. De browsertest controleert sindsdien niet alleen de legendatekst maar ook dat de verborgen namen werkelijk niet in de SVG staan; die tweede controle ontbrak eerst, en daardoor zag alleen de visuele inspectie het.
+
+Verificatie 10 september, Linux x64, Node 22.22.2:
+- **132 tests / 22 bestanden geslaagd, 22,0 s** en **15 browserroutes geslaagd, 1,5 min.** TypeScript strict en productiebuild geslaagd (7,7 s).
+- De nieuwe browserroute plaatst een notitie, wijzigt de tekst, controleert die op het planblad, zet een meubel op de laag Verlichting, past de preset toe en controleert dat legenda en tekening hetzelfde zeggen — beide kanten op.
+- Het geëxporteerde blad is naar afbeelding gerenderd en bekeken, vóór en na de correctie.
+
+Nog open in fase 2: groeperen; opt-in lokaal herstel via IndexedDB; de onderlegger verslepen en draaien; PDF-pagina als onderlegger; EXIF verwijderen. De legenda somt lagen en aantallen op, nog geen symbolen; dat wordt pas zinvol met de elektra- en lichtsymbolen uit fase 4. Fase 2 is niet afgerond.

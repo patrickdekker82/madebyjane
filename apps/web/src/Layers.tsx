@@ -32,6 +32,25 @@ export function LayerPanel({
     .filter(({ members }) => members.length);
   if (!used.length) return null;
   const chosen = items.filter((item) => selected.includes(item.id));
+  /**
+   * Laagpreset voor een tekenblad: toon precies een laag en verberg de rest.
+   * Zichtbaarheid hoort bij de objecten zelf, dus dit is een gewone wijziging
+   * die in de export doorwerkt en met een stap terug ongedaan te maken is.
+   */
+  const preset = (only: ItemLayer | null) => {
+    const operations: Operation[] = [];
+    for (const { layer, members } of used) {
+      const hidden = only !== null && layer !== only;
+      const changing = members.filter((item) => !!item.hidden !== hidden);
+      if (changing.length)
+        operations.push({
+          type: "SetItemDisplay",
+          ids: changing.map((item) => item.id),
+          hidden,
+        });
+    }
+    if (operations.length) onCommand(operations);
+  };
   return (
     <div className="layers">
       <h4>Lagen</h4>
@@ -73,6 +92,26 @@ export function LayerPanel({
           );
         })}
       </ul>
+      {used.length > 1 && (
+        <div className="layer-presets">
+          <span className="small">Blad tonen</span>
+          <div>
+            <button aria-label="Alle lagen tonen" disabled={disabled} onClick={() => preset(null)}>
+              Alles
+            </button>
+            {used.map(({ layer }) => (
+              <button
+                key={layer}
+                aria-label={`Alleen ${itemLayers[layer].toLocaleLowerCase("nl-NL")} tonen`}
+                disabled={disabled}
+                onClick={() => preset(layer)}
+              >
+                {itemLayers[layer]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {!!chosen.length && (
         <div className="layer-actions">
           <label>
