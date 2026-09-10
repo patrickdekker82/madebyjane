@@ -537,3 +537,11 @@ Dat een verkeerde maat in een document dat naar een klant gaat als "geverifieerd
 - Pagina 1 en het planblad van `outputs/qa/offerte-demo.pdf` naar afbeelding gerenderd en bekeken: marges kloppen, het planblad staat compleet op één pagina met tekening, titelblok, legenda en schaalbalk.
 
 **Deze verificatie is niet als root gedraaid.** Chromium weigert te sandboxen als root, dus de testronde is uitgevoerd onder een gewone gebruiker in dezelfde container. Als root falen twee offertetests op het starten van de browser; dat is een eigenschap van deze omgeving, niet van de code. Of de sysctl-instelling op de GitHub-runner het beoogde effect heeft, is hier niet na te bootsen en moet uit de bouwstraat zelf blijken.
+
+## Aanvulling 10 september 2026 — intrekken van offertelinks vastleggen
+
+De actuele GitHub-versie tot en met `ccdd674` is lokaal samengevoegd. Het overlappende lokale offerteconcept-prototype is apart bewaard en niet over de bestaande offerte-MVP gezet.
+
+Het intrekken van een offertelink schrijft nu een `quote.share_revoked`-auditregel met organisatie, gebruiker, link-ID en tijdstip. Intrekking en audit gebeuren in dezelfde databasetransactie. Alleen de eerste intrekking schrijft een regel; gelijktijdige verzoeken en latere retries blijven succesvol zonder dubbele regels. Onbekende links en links uit een andere organisatie blijven 404; viewers blijven uitgesloten.
+
+Verificatie op macOS arm64, Node 22.23.1: **160 tests / 22 bestanden geslaagd (27,35 s)**, inclusief echte offerte-PDF en de uitgebreide integratieproef voor gelijktijdige intrekking, herhalen, actor en tenantisolatie. TypeScript strict en productiebuild geslaagd (2,80 s); bestaande chunkgroottewaarschuwing blijft. De eerste testronde miste het Chromium-pad; de geslaagde ronde gebruikte `PLAYWRIGHT_BROWSERS_PATH="$PWD/work/browsers"` vooraf in de omgeving. Browserroutes zijn voor deze serverwijziging niet opnieuw uitgevoerd. Dit voegt registratie toe; er is nog geen apart auditoverzicht in de gebruikersinterface.

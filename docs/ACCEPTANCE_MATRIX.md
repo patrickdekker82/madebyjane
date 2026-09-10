@@ -309,9 +309,13 @@ Een rij per bronalinea/bullet; samengestelde eisen zijn pas gereed wanneer alle 
 | Eis | Implementatie | Bewijs |
 | --- | --- | --- |
 | Rekenkern, korting, correcties, categorieën en grenzen | quote-calculation.ts, contracts/quotes.ts | tests/quotes.test.ts; 40-posten-PDF-proef |
-| Nummering, prijsfreeze, tenantisolatie en finance | domain/quotes.ts, migrations 0010/0011 | quote-integration.test.ts: transacties, retries, rollen en immutable writes |
+| Nummering, prijsfreeze, tenantisolatie en finance | domain/quotes.ts, migrations 0010/0012 | quote-integration.test.ts: transacties, retries, rollen en immutable writes |
 | Ontwerp-/materiaalbronnen, prijzen en revisieconsistentie | domain/quote-resources.ts | API-tests met vaste plannen, materiaalversies, prijswijziging en dubbeltelling |
 | PDF, vaste bijlagen, delen/intrekken | documents/quote.ts, quote-pdf.ts, domain/quote-delivery.ts | Echte PDF in API- en browsertest; 7 pagina's visueel gecontroleerd; schaal 100 mm |
 | Vervolgversies en expliciete statussen | domain/quotes.ts, web/QuoteActions.tsx | API-/browsertests: oude versie blijft intact; download/delen creëert geen verzendstatus |
 
 De tabel beschrijft de offerte-MVP. Volledige presentatiebouw, productiequeue, inkoop/marge en gekwalificeerde elektronische handtekeningen zijn niet ingebouwd. Actuele volledige suite- en CI-resultaten staan bovenaan IMPLEMENTATION_STATUS.md.
+
+| Aanvulling fase 6 | Implementatie | Bewijs |
+| --- | --- | --- |
+| Intrekking van offertelinks auditen | QuoteDelivery.revoke: transactie met eenmalige auditregel | quote-integration.test.ts: concurrent intrekken + retry leveren één regel met juiste actor; andere tenant 404 en viewer 403 |

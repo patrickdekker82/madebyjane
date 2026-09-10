@@ -175,10 +175,18 @@ export class QuoteDelivery {
     requireFinance(ctx);
     return inTenant(this.pool, ctx.organizationId, async (c) => {
       const r = await c.query(
-        "UPDATE quote_shares SET revoked_at=coalesce(revoked_at,now()) WHERE id=$1 RETURNING id",
+        "UPDATE quote_shares SET revoked_at=now() WHERE id=$1 AND revoked_at IS NULL RETURNING id",
         [grant],
       );
-      if (!r.rowCount)
+      if (r.rowCount) {
+        await c.query(
+          "INSERT INTO audit_events VALUES($1,$2,$3,'quote.share_revoked',$4,now())",
+          [ctx.organizationId, randomUUID(), ctx.userId, grant],
+        );
+      } else if (
+        !(await c.query("SELECT id FROM quote_shares WHERE id=$1", [grant]))
+          .rowCount
+      )
         throw new DomainError("NOT_FOUND", "Link niet gevonden.", 404);
       return { id: grant, revoked: true };
     });

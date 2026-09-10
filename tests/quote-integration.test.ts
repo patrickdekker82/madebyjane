@@ -532,10 +532,23 @@ test("catalogusprijsfreeze, vaste bijlagen, PDF-herhaling en intrekbare exacte v
       )
     ).statusCode,
   ).toBe(403);
-  expect(
-    (await call("POST", `/api/v1/quote-shares/${shareBody.id}/revoke`, {}))
-      .statusCode,
-  ).toBe(200);
+  const revokePath = `/api/v1/quote-shares/${shareBody.id}/revoke`;
+  expect((await call("POST", revokePath, {}, "other", other)).statusCode).toBe(
+    404,
+  );
+  const revoked = await Promise.all([
+    call("POST", revokePath, {}),
+    call("POST", revokePath, {}),
+  ]);
+  expect(revoked.map((r) => r.statusCode)).toEqual([200, 200]);
+  expect((await call("POST", revokePath, {})).statusCode).toBe(200);
+  const revocations = await db.admin.query(
+    `SELECT a.organization_id, u.name FROM audit_events a
+     JOIN identity."user" u ON u.id=a.user_id
+     WHERE a.action='quote.share_revoked' AND a.subject_id=$1`,
+    [shareBody.id],
+  );
+  expect(revocations.rows).toEqual([{ organization_id: org, name: "owner" }]);
   expect(
     (await server.app.inject({ method: "GET", url: publicPath })).statusCode,
   ).toBe(404);
