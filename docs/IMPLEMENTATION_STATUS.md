@@ -1,5 +1,60 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 2: metadata uit onderleggers
+
+Een onderlegger is meestal een telefoonfoto van een bestaande plattegrond. Zo'n
+foto draagt EXIF mee: GPS-coördinaten van het adres van de klant, een
+cameraserienummer, de opnametijd. Tot nu toe werden de bytes opgeslagen zoals ze
+binnenkwamen, dus die gegevens belandden in de opslag van de studio en in elke
+presentatie die naar buiten gaat.
+
+### Zonder decoder, en dus zonder risico op beeldverlies
+
+`packages/image-import/src/metadata.ts` laat hele JPEG-segmenten en hele
+PNG-chunks weg; de pixels worden niet aangeraakt en niet opnieuw gecodeerd. Wat
+blijft staan is precies wat het beeld juist tóónt: JFIF-kop, ICC-profiel,
+Adobe-marker, en bij PNG de chunks voor kleur, gamma en pixeldichtheid. Weg gaan
+EXIF, XMP, IPTC/Photoshop, commentaar en de PNG-tekstchunks. Een bestand zonder
+metadata komt er byte voor byte hetzelfde uit; dat staat als proef vast.
+
+Er is dus géén beeldbibliotheek op de server bij gekomen. De oudere notitie in
+`index.ts` dat dit "opnieuw encoderen en dus een beeldbibliotheek" zou vragen,
+klopte niet en is vervangen.
+
+### De draaiing verhuist van het bestand naar de scène
+
+EXIF-oriëntatie verdwijnt mét de metadata. Zou de app daar niets mee doen, dan
+werd een staande foto voortaan liggend getoond. De oriëntatie wordt daarom
+gelezen vóór het opschonen en komt als `rotation` terug uit de upload; de
+onderlegger wordt met die draaiing in de scène gezet, waar hij zichtbaar is en
+bij te stellen. De hash gaat over het schone bestand, dus dezelfde foto met en
+zonder metadata is dezelfde onderlegger.
+
+Oriëntaties 2, 4, 5 en 7 spiegelen het beeld. Draaien kan de app, spiegelen niet
+zonder de pixels opnieuw te coderen. Zo'n upload wordt daarom geweigerd met een
+uitleg, in plaats van stilzwijgend een spiegelbeeld als ingemeten plattegrond te
+tonen.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+TypeScript strict geslaagd, frontendbuild geslaagd. `image-metadata.test.ts` 6
+tests geslaagd; `underlay-storage.test.ts` 10 geslaagd (3 nieuw: geüploade foto
+zonder locatiegegevens in de opslag én in wat de app uitlevert, dezelfde foto met
+en zonder metadata is dezelfde onderlegger, gespiegelde foto geweigerd);
+`integration.test.ts` 19 geslaagd. Volledige run: 274 geslaagd, 6 gefaald.
+
+### Niet geverifieerd in deze omgeving
+
+Die 6 zijn de bekende Chromium-sandboxfouten in `presentation-integration`,
+`quote-integration` en `project-access`; ze zijn met `git stash` vergeleken en
+identiek zonder deze wijziging. De browserroute voor het uploaden van een
+onderlegger is dus niet opnieuw gedraaid.
+
+### Eerstvolgende stap
+
+Van fase 2 resteren nog: veilig dupliceren naar een variant bij een conflict, en
+een PDF-pagina als onderlegger. Fase 2 is niet afgerond.
+
 ## Aanvulling 11 september 2026 — ook de documenten de database uit
 
 Bij het nalopen van de vorige stap bleek dat ik de **kleinste** assetsoort eerst had verhuisd. De caps naast elkaar: een onderlegger mag 16 MB zijn met 200 MB per werkruimte, maar een offerte-PDF mag 20 MB en er passen er 2000 per werkruimte, en een presentatie-PDF en PowerPoint mogen elk 40 MB. De documenten zijn dus veruit de grootste last in de database.
@@ -30,7 +85,6 @@ Het recht is weer weg, bij de documenten én bij de onderleggers. Verplaatsen is
 ### Eerstvolgende stap
 
 Alle vier de assetsoorten staan nu buiten de database voor nieuwe rijen; bestaande rijen verhuizen met het script. Wat blijft liggen: een opruimpad wanneer een project of presentatie verdwijnt — de objecten blijven dan achter, en dat is een gevolg van deze verhuizing dat nog geen eigenaar heeft. Daarna productie-Compose en operationele back-up/restore, die in deze container niet te bewijzen zijn (geen Docker-daemon; `pg_dump` 16 tegenover server 18.4).
-
 
 ## Aanvulling 11 september 2026 — fase 1: assets de database uit, en een geteste S3-adapter
 
@@ -67,7 +121,6 @@ De S3-adapter is getoetst tegen een **echte HTTP-server die het gebruikte deel v
 ### Eerstvolgende stap
 
 Van fase 1 resteren productie-Compose met geteste installatieprocedure en operationele back-up/restore. Beide zijn in deze container **niet eerlijk te bewijzen**: er is geen Docker-daemon, en `pg_dump` is versie 16 tegenover een server 18.4, wat pg_dump zelf weigert ("server version mismatch"). Ze zijn wel te schrijven, maar dan zonder bewijs. De overige assetsoorten — GLB's, offerte-PDF's en presentatie-exports — kunnen langs hetzelfde pad naar de opslag; onderleggers waren de grootste en de eerste.
-
 
 ## Aanvulling 11 september 2026 — fase 1: accountherstel
 

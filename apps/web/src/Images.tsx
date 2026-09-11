@@ -32,11 +32,15 @@ export async function uploadImage(chosen: File, organizationId: string) {
   const body = await response.json();
   if (!response.ok)
     throw new ApiError(body.code, body.message, response.status);
+  // `rotation` komt uit de EXIF-oriëntatie die bij het opschonen uit het
+  // bestand is gehaald. De draaiing zit dus niet meer in de bytes en moet in
+  // de scène worden gezet, anders staat een staande foto liggend.
   return body as {
     id: string;
     mime: string;
     widthPx: number;
     heightPx: number;
+    rotation: number;
   };
 }
 

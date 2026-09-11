@@ -58,7 +58,7 @@ export function UnderlayPanel({
             heightPx: uploaded.heightPx,
             x: 0,
             y: 0,
-            rotation: 0,
+            rotation: uploaded.rotation,
             opacity: 45,
             calibration: null,
           },

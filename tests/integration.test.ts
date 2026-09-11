@@ -757,7 +757,8 @@ test("onderleggerafbeeldingen: type, maten, herhaling, quota en werkruimtegrens"
 
   const accepted = await upload(assetId, bytes);
   expect(accepted.statusCode, accepted.body).toBe(200);
-  expect(accepted.json()).toEqual({ id: assetId, mime: "image/png", widthPx: 1200, heightPx: 900 });
+  // `rotation` komt uit de EXIF-oriëntatie; dit bestand heeft er geen, dus 0.
+  expect(accepted.json()).toEqual({ id: assetId, mime: "image/png", widthPx: 1200, heightPx: 900, rotation: 0 });
   // Hetzelfde bestand onder dezelfde ID is een herhaling, geen tweede rij.
   expect((await upload(assetId, bytes)).json().widthPx).toBe(1200);
   expect((await db.admin.query("SELECT count(*)::int AS count FROM underlay_assets WHERE organization_id=$1", [orgA])).rows[0].count).toBe(1);

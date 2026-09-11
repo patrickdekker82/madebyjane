@@ -2,7 +2,12 @@ import type { Pool, PoolClient } from "pg";
 import { createHash, randomUUID } from "node:crypto";
 import { inTenant } from "../../db/src/index";
 import type { StorageProvider } from "../../storage/src/index";
-import { readImageHeader } from "../../image-import/src/index";
+import {
+  readImageHeader,
+  stripImageMetadata,
+  orientationRotation,
+  MIRRORED_ORIENTATIONS,
+} from "../../image-import/src/index";
 import { DomainError, canWrite } from "./index";
 import type { Context } from "./projects";
 
@@ -62,6 +67,17 @@ export class UnderlayAssetService {
         "Kies een PNG- of JPEG-afbeelding van maximaal 16 MiB.",
         422,
       );
+    // Metadata gaat eruit vóór er iets wordt vastgelegd. Wat de studio bewaart
+    // is dus altijd het schone bestand; de GPS-coördinaten van het adres van de
+    // klant komen de opslag niet in en dus ook geen export uit.
+    const schoon = stripImageMetadata(bytes);
+    if (MIRRORED_ORIENTATIONS.has(schoon.orientation))
+      throw new DomainError(
+        "INVALID_IMAGE",
+        "Deze afbeelding is gespiegeld opgeslagen. Open hem, zet hem rechtop en bewaar hem opnieuw; een gespiegelde plattegrond levert verkeerde maten op.",
+        422,
+      );
+    bytes = schoon.bytes;
     let header;
     try {
       header = readImageHeader(bytes);
@@ -72,7 +88,12 @@ export class UnderlayAssetService {
         422,
       );
     }
+    // De hash is die van het schone bestand: dezelfde foto twee keer geüpload,
+    // de ene keer met en de andere zonder EXIF, is dezelfde onderlegger.
     const hash = createHash("sha256").update(bytes).digest("hex");
+    // De draaiing zat in de metadata en gaat daarmee weg. Hij verhuist naar de
+    // scène, waar de gebruiker hem ziet staan en kan bijstellen.
+    const rotation = orientationRotation(schoon.orientation);
     return inTenant(this.pool, ctx.organizationId, async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
         ctx.organizationId + ":underlay-upload",
@@ -95,6 +116,7 @@ export class UnderlayAssetService {
           mime: old.mime,
           widthPx: old.width_px,
           heightPx: old.height_px,
+          rotation,
         };
       }
       const quota = (
@@ -150,6 +172,7 @@ export class UnderlayAssetService {
         mime: header.mime,
         widthPx: header.widthPx,
         heightPx: header.heightPx,
+        rotation,
       };
     });
   }

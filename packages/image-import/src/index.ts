@@ -10,9 +10,8 @@
  * scripts en externe verwijzingen kan bevatten en dus niet als onderlegger de
  * pagina in mag.
  *
- * Wat dit niet doet: metadata verwijderen. Een JPEG uit een telefoon kan EXIF
- * met locatiegegevens bevatten en die blijft staan. Dat vraagt om opnieuw
- * encoderen en dus om een beeldbibliotheek; zie de openstaande punten.
+ * Metadata verwijderen gebeurt in `metadata.ts`, ook zonder decoder: hele
+ * segmenten en chunks worden weggelaten, de pixels blijven onaangeraakt.
  */
 export type ImageHeader = {
   mime: "image/png" | "image/jpeg";
@@ -25,7 +24,10 @@ const MAX_SIDE = 20000;
 function readPng(bytes: Buffer): ImageHeader {
   // Handtekening, dan een IHDR-chunk met lengte 13 op een vaste plek.
   if (bytes.length < 24) throw new Error("Het PNG-bestand is onvolledig.");
-  if (bytes.readUInt32BE(8) !== 13 || bytes.toString("latin1", 12, 16) !== "IHDR")
+  if (
+    bytes.readUInt32BE(8) !== 13 ||
+    bytes.toString("latin1", 12, 16) !== "IHDR"
+  )
     throw new Error("Dit PNG-bestand mist een geldige kop.");
   const widthPx = bytes.readUInt32BE(16),
     heightPx = bytes.readUInt32BE(20);
@@ -92,3 +94,10 @@ export function readImageHeader(bytes: Buffer): ImageHeader {
     );
   return header;
 }
+
+export {
+  stripImageMetadata,
+  orientationRotation,
+  MIRRORED_ORIENTATIONS,
+  type StrippedImage,
+} from "./metadata";

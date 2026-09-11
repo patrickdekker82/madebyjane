@@ -6,7 +6,7 @@ import { inTenant } from "../packages/db/src/index";
 import { createAuth } from "../packages/auth/src/index";
 import { createServer } from "../apps/api/src/server";
 import { LocalStorage } from "../packages/storage/src/index";
-import { makePng } from "./helpers/image";
+import { makePng, makeJpegWithExif } from "./helpers/image";
 import { moveUnderlaysToStorage } from "../scripts/move-assets-to-storage";
 
 /**
@@ -246,4 +246,56 @@ test("de app mag een opgeslagen onderlegger niet wijzigen", async () => {
       c.query("UPDATE underlay_assets SET byte_size=1"),
     ),
   ).rejects.toThrow(/permission denied/i);
+});
+
+test("een geüploade foto komt zonder locatiegegevens in de opslag", async () => {
+  const id = randomUUID(),
+    foto = makeJpegWithExif(800, 600, 6);
+  // Het adres van de klant zit werkelijk in het bestand dat wordt aangeboden.
+  expect(foto.includes(Buffer.from("HUIS"))).toBe(true);
+
+  const upload = await call("POST", "/api/v1/underlay-assets/" + id, foto);
+  expect(upload.statusCode, upload.body).toBe(200);
+  // De draaiing zat in de EXIF en komt terug als waarde voor de scène.
+  expect(upload.json().rotation).toBe(90);
+
+  const opgeslagen = Buffer.from(
+    await storage.get({ organizationId: org, assetId: id }),
+  );
+  expect(opgeslagen.includes(Buffer.from("HUIS"))).toBe(false);
+  expect(opgeslagen.length).toBeLessThan(foto.length);
+  // En wat de app uitlevert is datzelfde schone bestand.
+  const served = await call("GET", "/api/v1/underlay-assets/" + id);
+  expect(served.statusCode).toBe(200);
+  expect(served.rawPayload.equals(opgeslagen)).toBe(true);
+  expect(served.rawPayload.includes(Buffer.from("HUIS"))).toBe(false);
+});
+
+test("dezelfde foto met en zonder metadata is dezelfde onderlegger", async () => {
+  // De hash gaat over het schone bestand, dus de tweede upload botst niet.
+  const id = randomUUID(),
+    met = makeJpegWithExif(400, 300),
+    zonder = (
+      await call("POST", "/api/v1/underlay-assets/" + randomUUID(), met)
+    ).json();
+  expect(zonder.widthPx).toBe(400);
+  const eerste = await call("POST", "/api/v1/underlay-assets/" + id, met);
+  expect(eerste.statusCode).toBe(200);
+  const tweede = await call(
+    "POST",
+    "/api/v1/underlay-assets/" + id,
+    makeJpegWithExif(400, 300, 3),
+  );
+  // Andere EXIF, zelfde beeld: geen conflict, want de metadata telt niet mee.
+  expect(tweede.statusCode, tweede.body).toBe(200);
+});
+
+test("een gespiegelde foto wordt geweigerd in plaats van spiegelverkeerd getoond", async () => {
+  const geweigerd = await call(
+    "POST",
+    "/api/v1/underlay-assets/" + randomUUID(),
+    makeJpegWithExif(500, 400, 2),
+  );
+  expect(geweigerd.statusCode).toBe(422);
+  expect(geweigerd.json().message).toMatch(/gespiegeld/);
 });
