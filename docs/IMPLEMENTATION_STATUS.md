@@ -1,5 +1,60 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 7: een standpunt bewaren en als beeld opslaan
+
+Het exitcriterium van fase 7 vraagt dat een opgeslagen camera een bruikbaar
+beeld oplevert. Daarvoor moest een standpunt eerst ergens kunnen wonen.
+
+### Het standpunt hoort bij het ontwerp, niet bij de browser
+
+Camerastandpunten staan in de scène, in millimeters en in de assen van het plan;
+de 3D-weergave deelt zelf door duizend. Ze gaan door dezelfde opdrachtenweg als
+een muur, met dezelfde revisie- en conflictcontrole. Daaruit volgt wat het
+waard is: een standpunt reist mee met varianten en revisies, en een collega die
+het project opent ziet hetzelfde beeld als degene die het bewaarde. Was het in
+de browser blijven zitten, dan was het van één apparaat geweest.
+
+`z` is de hoogte boven de vloer. Een camera die naar zijn eigen positie kijkt
+wordt geweigerd, net als een beeldhoek buiten het bereik van een lens.
+
+### Bewaren onder dezelfde ID werkt bij
+
+Dat is wat iemand bedoelt die de camera verzet en opnieuw bewaart, en het maakt
+een dubbel verzonden opdracht onschadelijk. In het venster gaat dat op naam:
+dezelfde naam is hetzelfde standpunt. Er passen er 24 in een ontwerp — een rem
+op een document dat ongemerkt volloopt, geen uitspraak over wat genoeg is.
+
+### Beeld opslaan tekent eerst, leest daarna
+
+De weergave tekent alleen op verzoek (`frameloop="demand"`). Zonder die
+volgorde lees je het beeld van een willekeurig moment daarvoor uit, of een leeg
+doek. Daarom rendert de knop zelf een beeld vlak voor het uitlezen, en staat
+`preserveDrawingBuffer` aan. Dat laatste kost geheugen en is niet voor niets
+standaard uit; het is de prijs voor een knop die een echt bestand oplevert.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2
+
+TypeScript strict geslaagd, frontendbuild geslaagd. Vijf nieuwe eenheidstests in
+`cameras.test.ts`: de heen-en-terugweg tussen millimeters en de weergave,
+bijwerken in plaats van verdubbelen, het maximum, de geweigerde onmogelijke
+camera, en een scène van vóór dit veld die gewoon leesbaar blijft. Volledige
+suite 299 geslaagd, 6 gefaald — dezelfde zes die Chromium vragen en hier al
+faalden.
+
+### Niet geverifieerd in deze omgeving
+
+**De knoppen zijn door geen browser gedraaid.** Chromium start in deze container
+niet, en er is voor deze stap geen E2E-route bijgekomen. Dat betekent concreet:
+dat een teruggezet standpunt hetzelfde beeld oplevert, en dat "Beeld opslaan"
+een PNG met inhoud geeft in plaats van een leeg doek, is **in code beredeneerd
+en niet gezien**. Voor het exitcriterium van fase 7 telt pas een gezien beeld.
+
+### Wat fase 7 hierna nog mist
+
+Materialen op vlakken, dag- en avondlicht, lichtvisualisatie in 3D, en het
+controleren van transformaties en performance op referentiehardware. De
+weergave toont nu vloeren, muren met echte openingen en eigen modellen.
+
 ## Aanvulling 11 september 2026 — fase 3: anker, schaalmodus, prijsbron en rechten
 
 De vier velden die de itemeditor uit de masterprompt nog miste. Ze hebben één
