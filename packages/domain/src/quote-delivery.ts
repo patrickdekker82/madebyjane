@@ -9,11 +9,18 @@ import { quoteHtml, quoteTemplateVersion } from "../../documents/src/quote";
 import { renderQuotePdf } from "../../documents/src/quote-pdf";
 import { requireFinance, digest, quoteContentHash } from "./quote-resources";
 import { DomainError, requirePermission } from "./index";
+import {
+  documentBytes,
+  storeDocument,
+  discardDocument,
+} from "./document-storage";
+import type { StorageProvider } from "../../storage/src/index";
 import { resolveProjectRole } from "./project-access";
 export class QuoteDelivery {
   constructor(
     private pool: Pool,
     private secret: string,
+    private storage: StorageProvider,
     private render = renderQuotePdf,
   ) {}
   async export(ctx: Context, project: string, quote: string, version: number) {
@@ -36,12 +43,21 @@ export class QuoteDelivery {
       async (c) =>
         (
           await c.query(
-            "SELECT pdf,pdf_hash FROM quote_exports WHERE quote_id=$1 AND quote_version=$2",
+            "SELECT pdf,pdf_hash,stored,asset_id FROM quote_exports WHERE quote_id=$1 AND quote_version=$2",
             [quote, version],
           )
         ).rows[0],
     );
-    if (existing) return existing as { pdf: Buffer; pdf_hash: string };
+    if (existing)
+      return {
+        pdf: await documentBytes(
+          this.storage,
+          ctx.organizationId,
+          existing,
+          existing.pdf,
+        ),
+        pdf_hash: existing.pdf_hash as string,
+      };
     const contentHash = quoteContentHash(q);
     q.content_hash = contentHash;
     const pdf = await this.render(quoteHtml(q));
@@ -52,11 +68,20 @@ export class QuoteDelivery {
       ]);
       const cached = (
         await c.query(
-          "SELECT pdf,pdf_hash FROM quote_exports WHERE quote_id=$1 AND quote_version=$2",
+          "SELECT pdf,pdf_hash,stored,asset_id FROM quote_exports WHERE quote_id=$1 AND quote_version=$2",
           [quote, version],
         )
       ).rows[0];
-      if (cached) return cached as { pdf: Buffer; pdf_hash: string };
+      if (cached)
+        return {
+          pdf: await documentBytes(
+            this.storage,
+            ctx.organizationId,
+            cached,
+            cached.pdf,
+          ),
+          pdf_hash: cached.pdf_hash as string,
+        };
       if (
         (await c.query("SELECT count(*)::int n FROM quote_exports")).rows[0]
           .n >= 2000
@@ -66,24 +91,57 @@ export class QuoteDelivery {
           "Maximaal 2000 bewaarde offerte-PDFs per werkruimte.",
           409,
         );
-      await c.query(
-        "INSERT INTO quote_exports(organization_id,quote_id,quote_version,template_version,content_hash,pdf,pdf_hash) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING",
-        [
-          ctx.organizationId,
-          quote,
-          version,
-          quoteTemplateVersion,
-          contentHash,
-          pdf,
-          pdfHash,
-        ],
+      // Eerst wegschrijven, dan vastleggen; mislukt het vastleggen, dan ruimen
+      // we het object op zodat er geen weesbestand achterblijft.
+      const bewaard = await storeDocument(
+        this.storage,
+        ctx.organizationId,
+        pdf,
       );
-      return (
+      try {
         await c.query(
-          "SELECT pdf,pdf_hash FROM quote_exports WHERE quote_id=$1 AND quote_version=$2",
+          "INSERT INTO quote_exports(organization_id,quote_id,quote_version,template_version,content_hash,pdf,pdf_hash,asset_id,stored,byte_size) VALUES($1,$2,$3,$4,$5,NULL,$6,$7,true,$8) ON CONFLICT DO NOTHING",
+          [
+            ctx.organizationId,
+            quote,
+            version,
+            quoteTemplateVersion,
+            contentHash,
+            pdfHash,
+            bewaard.assetId,
+            bewaard.size,
+          ],
+        );
+      } catch (e) {
+        await discardDocument(
+          this.storage,
+          ctx.organizationId,
+          bewaard.assetId,
+        );
+        throw e;
+      }
+      const row = (
+        await c.query(
+          "SELECT pdf,pdf_hash,stored,asset_id FROM quote_exports WHERE quote_id=$1 AND quote_version=$2",
           [quote, version],
         )
-      ).rows[0] as { pdf: Buffer; pdf_hash: string };
+      ).rows[0];
+      // Bij een gelijktijdige export won de andere rij; lever dan díe bytes.
+      if (row.asset_id !== bewaard.assetId)
+        await discardDocument(
+          this.storage,
+          ctx.organizationId,
+          bewaard.assetId,
+        );
+      return {
+        pdf: await documentBytes(
+          this.storage,
+          ctx.organizationId,
+          row,
+          row.pdf,
+        ),
+        pdf_hash: row.pdf_hash as string,
+      };
     });
   }
   async share(
@@ -211,7 +269,7 @@ export class QuoteDelivery {
     return inTenant(this.pool, organization, async (c) => {
       const r = (
         await c.query(
-          "SELECT e.pdf,e.pdf_hash FROM quote_shares s JOIN quote_exports e ON e.organization_id=s.organization_id AND e.quote_id=s.quote_id AND e.quote_version=s.quote_version WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now()",
+          "SELECT e.pdf,e.pdf_hash,e.stored,e.asset_id FROM quote_shares s JOIN quote_exports e ON e.organization_id=s.organization_id AND e.quote_id=s.quote_id AND e.quote_version=s.quote_version WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now()",
           [digest(token)],
         )
       ).rows[0];
@@ -221,7 +279,10 @@ export class QuoteDelivery {
           "Deze link is niet beschikbaar of verlopen.",
           404,
         );
-      return r as { pdf: Buffer; pdf_hash: string };
+      return {
+        pdf: await documentBytes(this.storage, organization, r, r.pdf),
+        pdf_hash: r.pdf_hash as string,
+      };
     });
   }
 }

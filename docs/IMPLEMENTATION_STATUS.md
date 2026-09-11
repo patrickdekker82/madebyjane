@@ -1,5 +1,287 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 2 in CI bevestigd
+
+De drie aanvullingen hieronder (metadata verwijderen, lokaal werk als variant,
+PDF-pagina als onderlegger) noemden telkens wat in deze container niet te
+bewijzen was. Dat is nu wél gedraaid.
+
+### Wat CI heeft bevestigd, run 34601235022 op commit 35ebd4b
+
+Volledige Vitest-suite **289 geslaagd, 0 gefaald**. Daarmee is hard vastgesteld
+dat de 6 tests die in de ontwikkelcontainer falen puur omgevingsgebonden zijn:
+ze vragen een Chromium-sandbox die daar niet start.
+
+Volledige Playwright-suite **23 geslaagd, 0 gefaald**, waaronder:
+
+- `onderlegger uploaden → inmeten met twee punten → schaal klopt` — deze route
+  bevat sinds deze stap een tweepagina-PDF waarvan pagina 2 wordt gekozen en de
+  maten worden nagerekend. De omzetting van PDF naar PNG werkt dus in een echte
+  browser, niet alleen in de Node-proef met een ander canvas.
+- `lokaal werk dat niet meer past → bewaren als aparte variant` — de nieuwe
+  route, met een eigen project en een echt opgebouwd conflict.
+- `lokaal herstel: mislukt opslaan → herladen → terughalen → conflict →
+afmelden` — ongewijzigd en weer groen.
+
+### Een fout die twee keer dezelfde vorm had
+
+De stap voor bewaren-als-variant stond eerst ín de bestaande herstelroute. Die
+route brak daardoor twee keer: eerst bij de afmeldmelding, daarna bij het
+afmelden zelf. De oorzaak was geen toeval maar de werking zelf — bewaren als
+variant ruimt het klad op, en het afmeldgedeelte heeft juist een klad nodig. Na
+de tweede poging is de stap uit die route gehaald en heeft hij een eigen route
+met een eigen project gekregen. De herstelroute staat weer precies zoals hij
+was.
+
+### Stand van fase 2
+
+De drie openstaande punten zijn gebouwd en getoetst, en de exitcriteria van fase
+2 — demoruimte met exacte maten, herladen behoudt geometrie, dubbel verzonden
+commando werkt eenmaal, verouderde writes geven conflict, maat- en
+oppervlaktetests en editor-E2E slagen — zijn in deze run alle gedekt.
+
+Wat buiten die criteria open blijft staan: `RestoreContent` is nog een interne
+proefcommand en vraagt vóór release expliciete revisie-/undo-semantiek, en er is
+een draaigreep op het canvas voorzien die er niet is. Er is geen
+productiegeschiktheidsclaim. Of fase 2 hiermee als afgerond geldt, is een
+beoordeling die bij de opdrachtgever ligt; deze aanvulling legt alleen vast wat
+er is gedraaid en wat er is gezien.
+
+## Aanvulling 11 september 2026 — fase 2: een PDF-pagina als onderlegger
+
+Een bestaande plattegrond komt vaak als PDF binnen. Tot nu toe werd die
+geweigerd en moest de gebruiker zelf eerst een afbeelding maken.
+
+### De PDF komt de app niet in — alleen de pixels
+
+Een PDF is actieve inhoud: hij kan scripts, formulieren en externe verwijzingen
+bevatten. Hij wordt daarom nooit getoond en nooit bewaard. De gekozen pagina
+wordt **op het apparaat van de gebruiker** tot pixels gerekend met pdf.js; wat
+daarna wordt verstuurd is een gewone PNG, langs dezelfde route en dezelfde
+keuring als elke andere onderlegger. De server heeft dus geen PDF-parser
+gekregen — precies de component waar je er geen wilt hebben.
+
+Het uploadcontract is niet verruimd: de server accepteert nog steeds alleen PNG
+en JPEG, en weigert een PDF nog even hard als eerst.
+
+### Keuzes die in de proef vastliggen
+
+De pagina wordt op 2× de PDF-eenheid gerekend (ongeveer 144 dpi), met de langste
+zijde begrensd op 4000 px: een A0-plan wordt dus kleiner gerekend in plaats van
+geweigerd, en de verhouding blijft kloppen zodat de kalibratie klopt. Waar de
+pagina doorzichtig is wordt wit gevuld; anders zou de onderlegger als zwart vlak
+onder de tekening komen te staan. Bij meer dan één pagina kiest de gebruiker er
+een; bij precies één pagina gaat die meteen door.
+
+pdf.js wordt pas geladen zodra iemand werkelijk een PDF kiest. De hoofdbundel
+groeide daardoor met ongeveer 2 kB; pdf.js zelf staat in eigen chunks (496 kB
+plus een worker van 1,3 MB) die verder niemand ophaalt.
+
+### Twee afhankelijkheden erbij
+
+`pdfjs-dist` 6.3.289 (Apache-2.0) voor de omzetting, en `@napi-rs/canvas` 1.0.9
+(MIT) als ontwikkelafhankelijkheid, zodat dezelfde code in Node te toetsen is.
+Beide staan in `docs/DEPENDENCY_LICENSES.json`; de inventaris telt nu 38 directe
+pakketten.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+TypeScript strict geslaagd, frontendbuild geslaagd. `pdf-underlay.test.ts` 7
+tests geslaagd, met echte, in de proef zelf geschreven PDF's: het aantal
+pagina's, een pagina die een geldige PNG van de juiste maten oplevert (door
+`readImageHeader` gekeurd), de gekozen pagina is werkelijk die pagina, een
+niet-bestaande pagina geeft een uitlegbare melding, een A0-plan blijft binnen de
+grens met kloppende verhouding, lege plekken zijn wit en bedrukte plekken niet,
+en een bestand dat geen PDF is wordt geweigerd. Volledige run: 283 geslaagd, 6
+gefaald.
+
+### Niet geverifieerd in deze omgeving
+
+Die 6 zijn de bekende Chromium-sandboxfouten. De browserroute is uitgebreid met
+een tweepagina-PDF waarvan pagina 2 wordt gekozen en de maten worden nagekeken,
+maar die stap is hier **niet gedraaid**. De Node-proef gebruikt hetzelfde pdf.js
+als de browser, maar een ander canvas (`@napi-rs/canvas` tegenover
+`OffscreenCanvas`); dat de omzetting in een echte browser werkt is hier dus niet
+bewezen, alleen in CI.
+
+### Stand van fase 2
+
+Hiermee zijn de drie openstaande punten van fase 2 gebouwd: metadata verwijderen,
+lokaal werk veiligstellen als variant, en een PDF-pagina als onderlegger. De
+fase-exit vraagt daarnaast een geslaagde editor-E2E; die draait in CI en niet
+hier. Fase 2 wordt daarom niet als afgerond gemarkeerd zolang die run niet groen
+is gezien.
+
+## Aanvulling 11 september 2026 — fase 2: lokaal werk veiligstellen als variant
+
+Staat er op de server een nieuwere versie dan die waarop het lokale klad
+voortbouwt, dan kan dat werk niet meer worden teruggestuurd. Tot nu toe kon de
+gebruiker het dan alleen downloaden of weggooien: het bleef behouden, maar
+buiten de app, als een JSON-bestand dat niemand kan openen.
+
+### Een derde weg bij een conflict
+
+`POST /api/v1/variants/:variantId/rescues` zet het klad naast het bestaande
+ontwerp, als eigen variant. Beide versies blijven zo bestaan en de gebruiker kan
+zelf vergelijken en samenvoegen; niemand overschrijft de ander en er gaat niets
+verloren.
+
+Het document komt hier van de client en wordt niet op gezag aangenomen. Het
+contract (`variantRescueInput`) keurt het als geldige scène, en de server toetst
+dat het bij dezelfde werkruimte en hetzelfde project hoort als de bronvariant.
+Anders dan bij een gewone variantkopie is er géén `baseRevision`-toets: dat het
+afwijkt van de server is juist de reden dat deze route bestaat.
+
+Elk object krijgt een nieuwe ID, zodat de twee varianten niets delen. Die
+kloonstap staat nu als `cloneSceneInto` op één plek en wordt door beide routes
+gebruikt. De actie is herhaalveilig via dezelfde `variant_copies`-registratie als
+de gewone kopie, en levert een auditregel `design.variant_rescued` op.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+TypeScript strict geslaagd, frontendbuild geslaagd. `integration.test.ts` 20
+tests geslaagd, met een nieuwe route die vastlegt: twee keer versturen geeft één
+variant, het lokale werk staat er werkelijk in en niet de serverversie, het is
+een eigen ontwerp op revisie 0 met eigen objecten, het bestaande ontwerp is
+ongewijzigd, dezelfde ID voor ander werk geeft 409, een klad uit een ander
+project of een andere werkruimte 422, een onleesbaar document 400, leesrechten
+403, en er staat precies één auditregel. Volledige run: 276 geslaagd, 6 gefaald.
+
+### Niet geverifieerd in deze omgeving
+
+Die 6 zijn de bekende Chromium-sandboxfouten; CI draaide dezelfde suite wel
+volledig groen (289 tests). Voor de browserkant is er een **eigen** E2E-route met
+een eigen project: bewaren als variant ruimt het klad op, en de bestaande
+herstelroute heeft dat klad nodig voor haar afmeldstap. Die twee in één route
+proppen liet de afmeldstap falen — vandaar de scheiding. De nieuwe route is hier
+niet gedraaid; Chromium start in deze container niet.
+
+### Eerstvolgende stap
+
+Van fase 2 resteert nog een PDF-pagina als onderlegger. Fase 2 is niet afgerond.
+
+## Aanvulling 11 september 2026 — fase 2: metadata uit onderleggers
+
+Een onderlegger is meestal een telefoonfoto van een bestaande plattegrond. Zo'n
+foto draagt EXIF mee: GPS-coördinaten van het adres van de klant, een
+cameraserienummer, de opnametijd. Tot nu toe werden de bytes opgeslagen zoals ze
+binnenkwamen, dus die gegevens belandden in de opslag van de studio en in elke
+presentatie die naar buiten gaat.
+
+### Zonder decoder, en dus zonder risico op beeldverlies
+
+`packages/image-import/src/metadata.ts` laat hele JPEG-segmenten en hele
+PNG-chunks weg; de pixels worden niet aangeraakt en niet opnieuw gecodeerd. Wat
+blijft staan is precies wat het beeld juist tóónt: JFIF-kop, ICC-profiel,
+Adobe-marker, en bij PNG de chunks voor kleur, gamma en pixeldichtheid. Weg gaan
+EXIF, XMP, IPTC/Photoshop, commentaar en de PNG-tekstchunks. Een bestand zonder
+metadata komt er byte voor byte hetzelfde uit; dat staat als proef vast.
+
+Er is dus géén beeldbibliotheek op de server bij gekomen. De oudere notitie in
+`index.ts` dat dit "opnieuw encoderen en dus een beeldbibliotheek" zou vragen,
+klopte niet en is vervangen.
+
+### De draaiing verhuist van het bestand naar de scène
+
+EXIF-oriëntatie verdwijnt mét de metadata. Zou de app daar niets mee doen, dan
+werd een staande foto voortaan liggend getoond. De oriëntatie wordt daarom
+gelezen vóór het opschonen en komt als `rotation` terug uit de upload; de
+onderlegger wordt met die draaiing in de scène gezet, waar hij zichtbaar is en
+bij te stellen. De hash gaat over het schone bestand, dus dezelfde foto met en
+zonder metadata is dezelfde onderlegger.
+
+Oriëntaties 2, 4, 5 en 7 spiegelen het beeld. Draaien kan de app, spiegelen niet
+zonder de pixels opnieuw te coderen. Zo'n upload wordt daarom geweigerd met een
+uitleg, in plaats van stilzwijgend een spiegelbeeld als ingemeten plattegrond te
+tonen.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+TypeScript strict geslaagd, frontendbuild geslaagd. `image-metadata.test.ts` 6
+tests geslaagd; `underlay-storage.test.ts` 10 geslaagd (3 nieuw: geüploade foto
+zonder locatiegegevens in de opslag én in wat de app uitlevert, dezelfde foto met
+en zonder metadata is dezelfde onderlegger, gespiegelde foto geweigerd);
+`integration.test.ts` 19 geslaagd. Volledige run: 274 geslaagd, 6 gefaald.
+
+### Niet geverifieerd in deze omgeving
+
+Die 6 zijn de bekende Chromium-sandboxfouten in `presentation-integration`,
+`quote-integration` en `project-access`; ze zijn met `git stash` vergeleken en
+identiek zonder deze wijziging. De browserroute voor het uploaden van een
+onderlegger is dus niet opnieuw gedraaid.
+
+### Eerstvolgende stap
+
+Van fase 2 resteren nog: veilig dupliceren naar een variant bij een conflict, en
+een PDF-pagina als onderlegger. Fase 2 is niet afgerond.
+
+## Aanvulling 11 september 2026 — ook de documenten de database uit
+
+Bij het nalopen van de vorige stap bleek dat ik de **kleinste** assetsoort eerst had verhuisd. De caps naast elkaar: een onderlegger mag 16 MB zijn met 200 MB per werkruimte, maar een offerte-PDF mag 20 MB en er passen er 2000 per werkruimte, en een presentatie-PDF en PowerPoint mogen elk 40 MB. De documenten zijn dus veruit de grootste last in de database.
+
+Migration 0019 doet voor `quote_exports`, `presentation_exports` en `presentation_decks` hetzelfde als 0018 voor de onderleggers: blobkolom nullable, `stored` en `byte_size` erbij, en een constraint die een rij zonder bytes én zonder opslag weigert. Elke rij krijgt daarnaast een eigen opaque `asset_id`; de opslag kent geen tabelnamen of volgnummers.
+
+`packages/domain/src/document-storage.ts` is de gedeelde laag: `storeDocument` schrijft weg, `documentBytes` leest op — uit de kolom bij oude rijen, uit de opslag bij nieuwe — en `discardDocument` ruimt op als het vastleggen alsnog mislukt. Alle vier de schrijfplekken (offerte-export, presentatie-PDF, PowerPoint via de exportwerker) gebruiken die laag. Wint een gelijktijdige export de race, dan wordt het eigen object opgeruimd in plaats van als wees achter te blijven.
+
+Het verhuisscript dekt nu alle vier de soorten en houdt dezelfde belofte: eerst tonen, pas met `--uitvoeren` verplaatsen, per rij in een eigen transactie, en de kolom gaat pas leeg nadat het object is teruggelezen en byte voor byte gelijk bevonden.
+
+### Het exportpad is nu ook zonder renderer te toetsen
+
+De zes proeven die het documentpad dekken hebben Chromium nodig en vallen in deze container om. Een wijziging aan datzelfde pad zonder bewijs is precies wat de opdracht verbiedt, dus `tests/document-storage.test.ts` toetst de laag eronder rechtstreeks: de gedeelde helper in beide richtingen, een rij die naar de opslag wijst zonder object (een fout, geen leeg bestand), het opruimen, de databaseconstraint per tabel, het verhuizen van alle drie de soorten met byte-voor-byte-vergelijking, en dat elke sleutel een unieke UUID is. Wat daar slaagt zegt niets over het renderen zelf; dat houdt zijn eigen tests in de bouwstraat.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+- TypeScript strict en productiebuild geslaagd (9,35 s).
+- Vitest: **265 van 271 tests geslaagd**; zes nieuwe proeven op het documentpad en twee op de onveranderlijkheid.
+- Playwright: **18 van 22 routes geslaagd** — gelijk aan vóór deze wijziging.
+- De 6 + 4 afwijkingen zijn onveranderd dezelfde Chromium-sandboxfouten van deze container.
+
+### Een te ruim recht, door de bouwstraat gevangen
+
+De eerste opzet gaf de runtime-rol `UPDATE` op de blobkolommen, omdat het verhuisscript dat nodig leek te hebben. Linux-CI liet daarop een bestaande proef vallen die bewaakt dat een vastgelegde offerte-export **onveranderlijk** is voor de app. Dat was terecht: geen enkel applicatiepad wijzigt die kolommen — de app schrijft een export één keer en leest hem daarna alleen.
+
+Het recht is weer weg, bij de documenten én bij de onderleggers. Verplaatsen is een beheerhandeling: het script vraagt nu om `ADMIN_DATABASE_URL` en weigert te draaien op de runtimeverbinding. De eigenschap staat nu ook vastgelegd in proeven die zonder renderer draaien, zodat hij niet opnieuw stilletjes kan verdwijnen: de runtime-rol kan de vier assettabellen niet wijzigen en niet verwijderen.
+
+### Eerstvolgende stap
+
+Alle vier de assetsoorten staan nu buiten de database voor nieuwe rijen; bestaande rijen verhuizen met het script. Wat blijft liggen: een opruimpad wanneer een project of presentatie verdwijnt — de objecten blijven dan achter, en dat is een gevolg van deze verhuizing dat nog geen eigenaar heeft. Daarna productie-Compose en operationele back-up/restore, die in deze container niet te bewijzen zijn (geen Docker-daemon; `pg_dump` 16 tegenover server 18.4).
+
+## Aanvulling 11 september 2026 — fase 1: assets de database uit, en een geteste S3-adapter
+
+Bij het oppakken van het laatste fase-1-punt bleek de `StorageProvider` **dood te liggen**: de interface en de lokale adapter bestonden, maar werden door niets gebruikt behalve hun eigen test. Alle binaire data — GLB-geometrie, onderleggers, offerte-PDF's, presentatie-exports — stond als `bytea` in PostgreSQL. Dat maakt elke toekomstige back-up zo groot als alle klantbeelden bij elkaar.
+
+### Eén contract, twee adapters
+
+`packages/storage/src/s3.ts` implementeert dezelfde `StorageProvider` met SigV4-ondertekening uit `node:crypto`; er komt geen SDK aan te pas voor vier verzoeken, en de sleutel gaat nergens anders heen. Fouten worden op één plek vertaald, zodat de oproeper geen statuscodes kent.
+
+`tests/storage-contract.test.ts` haalt **beide** adapters door dezelfde proeven: bewaren, lezen, meten, streamen, verwijderen, een verzonnen ID, een te groot bestand, een ontbrekend object, overschrijven, en gescheiden sleutelruimte per werkruimte. Verhuizen naar objectopslag is daarmee een configuratiewijziging in plaats van een gedragswijziging.
+
+### Onderleggers gaan als eerste de database uit
+
+Migration 0018 maakt `bytes` nullable, voegt `stored` en `byte_size` toe, en legt vast dat een rij nooit zonder allebei kan bestaan (`underlay_bytes_somewhere`). Nieuwe uploads schrijven eerst naar de opslag en leggen daarna pas de rij vast; lukt dat vastleggen niet, dan wordt het object opgeruimd zodat er geen weesbestand achterblijft. Bestaande rijen houden hun bytes in de kolom en blijven gewoon leesbaar — er is niets stilzwijgend verplaatst.
+
+`scripts/move-assets-to-storage.ts` verplaatst die oude rijen wanneer een beheerder dat wil. Het toont eerst wat het gaat doen en verplaatst pas met `--uitvoeren`; het werkt per rij in een eigen transactie, en leegt de kolom pas nadat het object is teruggelezen en byte voor byte gelijk bevonden.
+
+### Een fout die deze verhuizing blootlegde
+
+`presentations.ts` las de bytes van een moodboardbeeld en een logo met **eigen SQL** rechtstreeks uit `underlay_assets`, buiten de service om. Na de verhuizing leverde dat lege beelden op. Er is nu één gedeelde `readUnderlayBytes`: waar de bytes staan, staat op precies één plek. Dat is de les van dit stuk — de verhuizing brak niets wat via de service liep, alleen wat eromheen greep.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+- TypeScript strict en productiebuild geslaagd (7,88 s); de bestaande chunkwaarschuwing blijft.
+- Vitest: **257 van 263 tests geslaagd**. Nieuw: 8 contractproeven over beide adapters en 6 proeven op de verhuizing (kolom leeg en object aanwezig na upload, oude rij blijft leesbaar, quota telt beide soorten, geen weesobject na een geweigerde upload, de databaseconstraint weigert een rij zonder bytes én zonder opslag, en het verhuisscript toont-verplaatst-herhaalt).
+- Playwright: **18 van 22 routes geslaagd**. De onderleggerroute — uploaden, inmeten, schaal controleren — slaagt, dus de verhuizing werkt ook door de browser heen.
+
+### Niet geverifieerd in deze omgeving
+
+De 6 Vitest- en 4 browserfouten zijn dezelfde die ook vóór deze wijziging omvielen: Chromium kan hier zijn sandbox niet starten, waardoor elke server-side PDF 500 geeft. De bouwstraat staat die sandbox juist toe en draait ze wel.
+
+De S3-adapter is getoetst tegen een **echte HTTP-server die het gebruikte deel van S3 nabootst** en de ondertekening controleert, niet tegen AWS of MinIO. Wat hier slaagt bewijst het contract en het signeren; het bewijst niet dat een echte bucket zich identiek gedraagt. Een proef tegen een echte S3-dienst staat open.
+
+### Eerstvolgende stap
+
+Van fase 1 resteren productie-Compose met geteste installatieprocedure en operationele back-up/restore. Beide zijn in deze container **niet eerlijk te bewijzen**: er is geen Docker-daemon, en `pg_dump` is versie 16 tegenover een server 18.4, wat pg_dump zelf weigert ("server version mismatch"). Ze zijn wel te schrijven, maar dan zonder bewijs. De overige assetsoorten — GLB's, offerte-PDF's en presentatie-exports — kunnen langs hetzelfde pad naar de opslag; onderleggers waren de grootste en de eerste.
+
 ## Aanvulling 11 september 2026 — fase 1: accountherstel
 
 Sluit het open punt "account recovery" uit fase 1. De opdracht vraagt dit _met libraryvoorzieningen_; token, vervaltijd, eenmalig gebruik, wachtwoordhashing en het intrekken van sessies komen daarom uit Better Auth. De app voegt alleen toe wie het mag doen, de registratie, en het ongeldig maken van oudere links.

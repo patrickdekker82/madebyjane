@@ -14,6 +14,13 @@ import type { QuoteRecord } from "../../contracts/src/quotes";
 import { presentationHtml } from "../../documents/src/presentation";
 import { renderQuotePdf } from "../../documents/src/quote-pdf";
 import { DomainError, canWrite } from "./index";
+import { readUnderlayBytes } from "./underlay-assets";
+import {
+  documentBytes,
+  storeDocument,
+  discardDocument,
+} from "./document-storage";
+import type { StorageProvider } from "../../storage/src/index";
 import type { Context } from "./projects";
 import {
   defaultPresentation,
@@ -41,6 +48,7 @@ export class PresentationService {
   constructor(
     private pool: Pool,
     private secret: string,
+    private storage: StorageProvider,
     private render = renderQuotePdf,
   ) {}
 
@@ -182,6 +190,7 @@ export class PresentationService {
    */
   private async gather(
     c: PoolClient,
+    organizationId: string,
     projectId: string,
     definition: Presentation,
   ): Promise<ResolveInput> {
@@ -201,15 +210,15 @@ export class PresentationService {
       if (block.type === "moodboard")
         for (const image of block.images)
           if (!images[image.assetId]) {
-            const row = (
-              await c.query(
-                "SELECT bytes,mime FROM underlay_assets WHERE id=$1",
-                [image.assetId],
-              )
-            ).rows[0];
-            if (row)
+            const found = await readUnderlayBytes(
+              c,
+              this.storage,
+              organizationId,
+              image.assetId,
+            );
+            if (found)
               images[image.assetId] =
-                `data:${row.mime};base64,${(row.bytes as Buffer).toString("base64")}`;
+                `data:${found.mime};base64,${found.bytes.toString("base64")}`;
           }
       if (block.type === "price" && !quotes[block.quoteId]) {
         // De nieuwste versie van die offerte; een concept heeft geen nummer.
@@ -224,13 +233,14 @@ export class PresentationService {
     }
     let logo: string | null = null;
     if (definition.branding.logoAssetId) {
-      const row = (
-        await c.query("SELECT bytes,mime FROM underlay_assets WHERE id=$1", [
-          definition.branding.logoAssetId,
-        ])
-      ).rows[0];
-      if (row)
-        logo = `data:${row.mime};base64,${(row.bytes as Buffer).toString("base64")}`;
+      const found = await readUnderlayBytes(
+        c,
+        this.storage,
+        organizationId,
+        definition.branding.logoAssetId,
+      );
+      if (found)
+        logo = `data:${found.mime};base64,${found.bytes.toString("base64")}`;
     }
     const materials = (
       await c.query(
@@ -269,7 +279,7 @@ export class PresentationService {
       const definition = presentationSchema.parse(row.definition);
       const content = resolveContent(
         definition,
-        await this.gather(c, row.project_id, definition),
+        await this.gather(c, ctx.organizationId, row.project_id, definition),
       );
       const contentHash = presentationHash(definition, content);
       const inputHash = digest({ presentationId, ...value });
@@ -369,12 +379,21 @@ export class PresentationService {
       async (c) =>
         (
           await c.query(
-            "SELECT pdf,pdf_hash FROM presentation_exports WHERE presentation_id=$1 AND version=$2",
+            "SELECT pdf,pdf_hash,stored,asset_id FROM presentation_exports WHERE presentation_id=$1 AND version=$2",
             [presentationId, version],
           )
         ).rows[0],
     );
-    if (stored) return stored as { pdf: Buffer; pdf_hash: string };
+    if (stored)
+      return {
+        pdf: await documentBytes(
+          this.storage,
+          ctx.organizationId,
+          stored,
+          stored.pdf,
+        ),
+        pdf_hash: stored.pdf_hash as string,
+      };
     const v = await this.version(ctx, presentationId, version);
     const pdf = await this.render(presentationHtml(v.definition, v.content));
     const pdfHash = createHash("sha256").update(pdf).digest("hex");
@@ -382,23 +401,53 @@ export class PresentationService {
       await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
         ctx.organizationId + ":presentations",
       ]);
-      await c.query(
-        "INSERT INTO presentation_exports(organization_id,presentation_id,version,content_hash,pdf,pdf_hash) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING",
-        [
-          ctx.organizationId,
-          presentationId,
-          version,
-          v.content_hash,
-          pdf,
-          pdfHash,
-        ],
+      const bewaard = await storeDocument(
+        this.storage,
+        ctx.organizationId,
+        pdf,
       );
-      return (
+      try {
         await c.query(
-          "SELECT pdf,pdf_hash FROM presentation_exports WHERE presentation_id=$1 AND version=$2",
+          "INSERT INTO presentation_exports(organization_id,presentation_id,version,content_hash,pdf,pdf_hash,asset_id,stored,byte_size) VALUES($1,$2,$3,$4,NULL,$5,$6,true,$7) ON CONFLICT DO NOTHING",
+          [
+            ctx.organizationId,
+            presentationId,
+            version,
+            v.content_hash,
+            pdfHash,
+            bewaard.assetId,
+            bewaard.size,
+          ],
+        );
+      } catch (e) {
+        await discardDocument(
+          this.storage,
+          ctx.organizationId,
+          bewaard.assetId,
+        );
+        throw e;
+      }
+      const row = (
+        await c.query(
+          "SELECT pdf,pdf_hash,stored,asset_id FROM presentation_exports WHERE presentation_id=$1 AND version=$2",
           [presentationId, version],
         )
-      ).rows[0] as { pdf: Buffer; pdf_hash: string };
+      ).rows[0];
+      if (row.asset_id !== bewaard.assetId)
+        await discardDocument(
+          this.storage,
+          ctx.organizationId,
+          bewaard.assetId,
+        );
+      return {
+        pdf: await documentBytes(
+          this.storage,
+          ctx.organizationId,
+          row,
+          row.pdf,
+        ),
+        pdf_hash: row.pdf_hash as string,
+      };
     });
   }
 
@@ -407,7 +456,7 @@ export class PresentationService {
     return inTenant(this.pool, ctx.organizationId, async (c) => {
       const row = (
         await c.query(
-          "SELECT pptx,pptx_hash FROM presentation_decks WHERE presentation_id=$1 AND version=$2",
+          "SELECT pptx,pptx_hash,stored,asset_id FROM presentation_decks WHERE presentation_id=$1 AND version=$2",
           [presentationId, version],
         )
       ).rows[0];
@@ -417,7 +466,15 @@ export class PresentationService {
           "Deze PowerPoint is nog niet gemaakt. Vraag de export aan en probeer het zo opnieuw.",
           409,
         );
-      return row as { pptx: Buffer; pptx_hash: string };
+      return {
+        pptx: await documentBytes(
+          this.storage,
+          ctx.organizationId,
+          row,
+          row.pptx,
+        ),
+        pptx_hash: row.pptx_hash as string,
+      };
     });
   }
 
@@ -573,7 +630,7 @@ export class PresentationService {
     return inTenant(this.pool, organization, async (c) => {
       const row = (
         await c.query(
-          `SELECT e.pdf,e.pdf_hash,s.version
+          `SELECT e.pdf,e.pdf_hash,e.stored,e.asset_id,s.version
              FROM presentation_shares s
              JOIN presentation_exports e
                ON e.organization_id=s.organization_id
@@ -589,7 +646,11 @@ export class PresentationService {
           "Deze link is niet beschikbaar of verlopen.",
           404,
         );
-      return row as { pdf: Buffer; pdf_hash: string; version: number };
+      return {
+        pdf: await documentBytes(this.storage, organization, row, row.pdf),
+        pdf_hash: row.pdf_hash as string,
+        version: row.version as number,
+      };
     });
   }
 }

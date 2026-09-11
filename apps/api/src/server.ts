@@ -31,6 +31,11 @@ import {
   commandSchema,
 } from "../../../packages/contracts/src/index";
 import { planSvg } from "../../../packages/documents/src/plan";
+import {
+  LocalStorage,
+  type StorageProvider,
+} from "../../../packages/storage/src/index";
+import { resolve } from "node:path";
 import { PresentationService } from "../../../packages/domain/src/presentations";
 import { presentationHtml } from "../../../packages/documents/src/presentation";
 import { ExportJobs } from "../../../packages/domain/src/export-jobs";
@@ -40,7 +45,10 @@ export function createServer(config: {
   identity: Pool;
   baseURL: string;
   secret: string;
+  /** Waar assetbytes heen gaan. Zonder opgave: een private map naast de app. */
+  storage?: StorageProvider;
 }) {
+  const storage = config.storage ?? new LocalStorage(resolve("work/assets"));
   const app = Fastify({
     logger: false,
     bodyLimit: 2_000_000,
@@ -291,7 +299,7 @@ export function createServer(config: {
       .header("Content-Disposition", 'attachment; filename="geometry.bin"')
       .send(model.positions);
   });
-  const underlays = new UnderlayAssetService(config.runtime);
+  const underlays = new UnderlayAssetService(config.runtime, storage);
   app.post(
     "/api/v1/underlay-assets/:id",
     {
@@ -339,7 +347,7 @@ export function createServer(config: {
   const materials = new MaterialService(config.runtime);
   const quotes = new QuoteService(config.runtime);
   const resources = new QuoteResources(config.runtime),
-    delivery = new QuoteDelivery(config.runtime, config.secret);
+    delivery = new QuoteDelivery(config.runtime, config.secret, storage);
   const versionParams = (params: unknown) =>
     z
       .object({
@@ -580,8 +588,12 @@ export function createServer(config: {
       req.body,
     ),
   );
-  const presentations = new PresentationService(config.runtime, config.secret);
-  const exports = new ExportJobs(config.runtime);
+  const presentations = new PresentationService(
+    config.runtime,
+    config.secret,
+    storage,
+  );
+  const exports = new ExportJobs(config.runtime, storage);
   const presentationVersionParams = (params: unknown) =>
     z
       .object({
@@ -695,7 +707,9 @@ export function createServer(config: {
        * de database, dus een aparte werker kan ze later zonder wijziging
        * oppakken. Het verzoek wacht er niet op.
        */
-      void drainExports(config.runtime, ctx.organizationId).catch(() => {});
+      void drainExports(config.runtime, ctx.organizationId, storage).catch(
+        () => {},
+      );
       return job;
     },
   );
@@ -905,6 +919,18 @@ export function createServer(config: {
   );
   app.post("/api/v1/variants/:variantId/copies", async (req) =>
     service.copyVariant(
+      await variantContext(req.headers, variant(req.params)),
+      variant(req.params),
+      req.body,
+    ),
+  );
+  /*
+   * Lokaal werk dat niet meer op de server past, naast het bestaande ontwerp
+   * zetten. Het document komt hier van de client en kan dus groter zijn dan een
+   * gewone opdracht; het contract begrenst het aantal objecten al.
+   */
+  app.post("/api/v1/variants/:variantId/rescues", async (req) =>
+    service.rescueVariant(
       await variantContext(req.headers, variant(req.params)),
       variant(req.params),
       req.body,

@@ -20,6 +20,16 @@
     }
   },
   {
+    "name": "@napi-rs/canvas",
+    "version": "1.0.9",
+    "license": "MIT",
+    "scope": "development",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/Brooooooklyn/canvas.git"
+    }
+  },
+  {
     "name": "@playwright/test",
     "version": "1.62.1",
     "license": "Apache-2.0",
@@ -230,6 +240,16 @@
       "type": "git",
       "url": "https://github.com/lucide-icons/lucide.git",
       "directory": "packages/lucide-react"
+    }
+  },
+  {
+    "name": "pdfjs-dist",
+    "version": "6.3.289",
+    "license": "Apache-2.0",
+    "scope": "application",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/mozilla/pdf.js.git"
     }
   },
   {

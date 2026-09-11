@@ -456,6 +456,80 @@ test("variantkopie is onafhankelijk, herhaalveilig en blijft één project", asy
   ).toBe(200);
   expect((await request("GET", route + "/document")).json()).toEqual(original);
 });
+test("lokaal werk dat niet meer past wordt een eigen variant en overschrijft niets", async () => {
+  const route = "/api/v1/variants/" + variant;
+  const original = (await request("GET", route + "/document")).json();
+  // Zo'n klad ziet eruit als het document dat dit venster zag: het bouwt voort
+  // op een revisie die de server intussen voorbij is, en wijkt inhoudelijk af.
+  const klad = {
+    ...original,
+    revision: original.revision + 1,
+    walls: original.walls.map((w: any, i: number) => (i === 0 ? { ...w, thickness: 321 } : w)),
+  };
+  const input = { variantId: randomUUID(), name: "Teruggehaald werk", scene: klad };
+  const results = await Promise.all([
+    request("POST", route + "/rescues", input),
+    request("POST", route + "/rescues", input),
+  ]);
+  // Twee keer versturen levert één variant op, niet twee.
+  expect(results.map((r) => r.statusCode), results.map((r) => r.body).join(" | ")).toEqual([200, 200]);
+  expect(results.map((r) => r.json().replayed).sort()).toEqual([false, true]);
+
+  const gered = (await request("GET", "/api/v1/variants/" + input.variantId + "/document")).json();
+  // Het lokale werk staat er werkelijk in, en niet de serverversie.
+  expect(gered.walls[0].thickness).toBe(321);
+  expect(original.walls[0].thickness).not.toBe(321);
+  // Het is een eigen ontwerp: eigen revisie, eigen objecten, zelfde project.
+  expect(gered.revision).toBe(0);
+  expect(gered.projectId).toBe(original.projectId);
+  expect(gered.designVariantId).toBe(input.variantId);
+  expect(gered.nodes[0].id).not.toBe(original.nodes[0].id);
+  expect(gered.walls[0].startId).toBe(gered.nodes[0].id);
+  // En het bestaande ontwerp is met geen byte veranderd.
+  expect((await request("GET", route + "/document")).json()).toEqual(original);
+
+  // Dezelfde ID voor ander werk is een fout, geen stille overschrijving.
+  expect(
+    (await request("POST", route + "/rescues", { ...input, name: "Iets anders" })).statusCode,
+  ).toBe(409);
+  // Een klad uit een ander project hoort hier niet thuis.
+  expect(
+    (
+      await request("POST", route + "/rescues", {
+        variantId: randomUUID(),
+        name: "Vreemd",
+        scene: { ...klad, projectId: randomUUID() },
+      })
+    ).statusCode,
+  ).toBe(422);
+  expect(
+    (
+      await request("POST", route + "/rescues", {
+        variantId: randomUUID(),
+        name: "Vreemd",
+        scene: { ...klad, organizationId: orgB },
+      })
+    ).statusCode,
+  ).toBe(422);
+  // Een onleesbaar document komt niet langs het contract.
+  expect(
+    (
+      await request("POST", route + "/rescues", {
+        variantId: randomUUID(),
+        name: "Kapot",
+        scene: { ...klad, walls: "geen muren" },
+      })
+    ).statusCode,
+  ).toBe(400);
+  // Leesrechten zijn niet genoeg om werk aan een project toe te voegen.
+  expect(
+    (await request("POST", route + "/rescues", { ...input, variantId: randomUUID() }, cookieViewer)).statusCode,
+  ).toBe(403);
+  // Het is navolgbaar wie dit gedaan heeft.
+  expect(
+    (await db.admin.query("SELECT count(*)::int AS n FROM audit_events WHERE action='design.variant_rescued' AND subject_id=$1", [input.variantId])).rows[0].n,
+  ).toBe(1);
+});
 test("bibliotheekversies zijn immutable, geïsoleerd en wijzigen plaatsingen niet", async () => {
   const definition = {
     name: "Eigen bank",
@@ -757,7 +831,8 @@ test("onderleggerafbeeldingen: type, maten, herhaling, quota en werkruimtegrens"
 
   const accepted = await upload(assetId, bytes);
   expect(accepted.statusCode, accepted.body).toBe(200);
-  expect(accepted.json()).toEqual({ id: assetId, mime: "image/png", widthPx: 1200, heightPx: 900 });
+  // `rotation` komt uit de EXIF-oriëntatie; dit bestand heeft er geen, dus 0.
+  expect(accepted.json()).toEqual({ id: assetId, mime: "image/png", widthPx: 1200, heightPx: 900, rotation: 0 });
   // Hetzelfde bestand onder dezelfde ID is een herhaling, geen tweede rij.
   expect((await upload(assetId, bytes)).json().widthPx).toBe(1200);
   expect((await db.admin.query("SELECT count(*)::int AS count FROM underlay_assets WHERE organization_id=$1", [orgA])).rows[0].count).toBe(1);
@@ -794,7 +869,9 @@ test("onderleggerafbeeldingen: type, maten, herhaling, quota en werkruimtegrens"
   await expect(inTenant(db.runtime, orgA, c => c.query("UPDATE underlay_assets SET width_px=1"))).rejects.toThrow(/permission denied/);
 
   // Quota per werkruimte.
-  await db.admin.query("INSERT INTO underlay_assets(organization_id,id,source_hash,mime,bytes,width_px,height_px,user_id) SELECT organization_id,gen_random_uuid(),source_hash,mime,bytes,width_px,height_px,user_id FROM underlay_assets CROSS JOIN generate_series(1,60) WHERE organization_id=$1 AND id=$2", [orgA, assetId]);
+  // Kopieer ook stored en byte_size: sinds migration 0018 staan de bytes in de
+  // opslag, en een rij zonder allebei is terecht ongeldig.
+  await db.admin.query("INSERT INTO underlay_assets(organization_id,id,source_hash,mime,bytes,stored,byte_size,width_px,height_px,user_id) SELECT organization_id,gen_random_uuid(),source_hash,mime,bytes,stored,byte_size,width_px,height_px,user_id FROM underlay_assets CROSS JOIN generate_series(1,60) WHERE organization_id=$1 AND id=$2", [orgA, assetId]);
   expect((await upload(randomUUID(), makePng(50, 50))).statusCode).toBe(409);
 });
 test("de API overleeft het wegvallen van inactieve databaseverbindingen", async () => {

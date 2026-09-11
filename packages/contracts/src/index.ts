@@ -541,6 +541,24 @@ export const variantCopyInput = z
   })
   .strict();
 
+/**
+ * Lokaal werk dat niet meer op de server past, veiligstellen als eigen variant.
+ *
+ * Anders dan bij `variantCopyInput` komt het document hier van de client: het is
+ * het klad uit de browser, dat juist níét meer aansluit op wat de server heeft.
+ * Er is dus geen `baseRevision` om tegen te toetsen — dat het afwijkt is de
+ * reden dat dit bestaat. De server neemt het document niet op gezag aan: het
+ * moet een geldige scène zijn, in dezelfde werkruimte en hetzelfde project als
+ * de bronvariant.
+ */
+export const variantRescueInput = z
+  .object({
+    variantId: id,
+    name: z.string().trim().min(1).max(120),
+    scene: sceneSchema,
+  })
+  .strict();
+
 export const libraryDefinitionSchema = itemSchema.pick({
   symbol: true,
   catalog: true,

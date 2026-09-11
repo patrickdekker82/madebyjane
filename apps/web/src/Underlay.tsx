@@ -40,9 +40,73 @@ export function UnderlayPanel({
 }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  /** Een gekozen PDF waarvan de pagina nog gekozen moet worden. */
+  const [pdf, setPdf] = useState<{ bytes: Uint8Array; pages: number } | null>(
+    null,
+  );
+  const [page, setPage] = useState(1);
   const file = useRef<HTMLInputElement>(null);
   const { tool, setTool } = useEditor();
   const underlay = scene.underlay;
+
+  /**
+   * Een PDF gaat nooit als PDF de editor in: dat is actieve inhoud, en die
+   * hoort niet in de pagina en niet in de opslag. De gekozen pagina wordt hier
+   * op dit apparaat tot pixels gerekend; wat daarna verstuurd wordt is een
+   * gewone PNG, langs dezelfde weg en dezelfde keuring als elke andere
+   * onderlegger. pdf.js wordt pas geladen zodra iemand werkelijk een PDF kiest.
+   */
+  const pdfToPng = async (bytes: Uint8Array, pageNumber: number) => {
+    const [{ renderPdfPage }, { default: workerSrc }] = await Promise.all([
+      import("../../../packages/image-import/src/pdf-page"),
+      import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url"),
+    ]);
+    const { canvas } = await renderPdfPage(
+      bytes,
+      pageNumber,
+      (width, height) => new OffscreenCanvas(width, height),
+      { workerSrc },
+    );
+    const blob = await (canvas as OffscreenCanvas).convertToBlob({
+      type: "image/png",
+    });
+    return new File([blob], `plattegrond-pagina-${pageNumber}.png`, {
+      type: "image/png",
+    });
+  };
+
+  /** Een gekozen bestand: een PDF vraagt eerst om een pagina, beeld gaat door. */
+  const choose = async (chosen: File) => {
+    setError("");
+    if (chosen.type !== "application/pdf") {
+      setPdf(null);
+      await upload(chosen);
+      return;
+    }
+    setBusy(true);
+    try {
+      const bytes = new Uint8Array(await chosen.arrayBuffer());
+      const { pdfPageCount } =
+        await import("../../../packages/image-import/src/pdf-page");
+      const { default: workerSrc } =
+        await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url");
+      const pages = await pdfPageCount(bytes, { workerSrc });
+      setPage(1);
+      // Bij één pagina valt er niets te kiezen; die gaat er meteen door.
+      if (pages === 1) {
+        setPdf(null);
+        await upload(await pdfToPng(bytes, 1));
+        return;
+      }
+      setPdf({ bytes, pages });
+    } catch {
+      setError(
+        "Deze PDF kon niet worden gelezen. Kies een andere, of exporteer de pagina zelf als PNG.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const upload = async (chosen: File) => {
     setBusy(true);
@@ -58,7 +122,7 @@ export function UnderlayPanel({
             heightPx: uploaded.heightPx,
             x: 0,
             y: 0,
-            rotation: 0,
+            rotation: uploaded.rotation,
             opacity: 45,
             calibration: null,
           },
@@ -78,20 +142,58 @@ export function UnderlayPanel({
       {!underlay && (
         <>
           <p className="small">
-            Leg een foto of scan van een bestaande plattegrond onder je tekening
-            en meet hem in. PNG of JPEG, maximaal 16 MiB.
+            Leg een foto, scan of PDF van een bestaande plattegrond onder je
+            tekening en meet hem in. PNG, JPEG of PDF, maximaal 16 MiB. Van een
+            PDF wordt de gekozen pagina op dit apparaat omgezet naar een
+            afbeelding; het PDF-bestand zelf wordt niet bewaard.
           </p>
           <input
             ref={file}
             type="file"
             aria-label="Onderlegger kiezen"
-            accept="image/png,image/jpeg"
+            accept="image/png,image/jpeg,application/pdf"
             disabled={disabled || busy}
             onChange={(event) => {
               const chosen = event.target.files?.[0];
-              if (chosen) void upload(chosen);
+              if (chosen) void choose(chosen);
             }}
           />
+          {pdf && (
+            <div className="underlay-pdf">
+              <label>
+                Pagina (1 tot {pdf.pages})
+                <input
+                  type="number"
+                  min={1}
+                  max={pdf.pages}
+                  value={page}
+                  disabled={busy}
+                  onChange={(event) => setPage(Number(event.target.value))}
+                />
+              </label>
+              <button
+                disabled={busy || page < 1 || page > pdf.pages}
+                onClick={() => {
+                  setBusy(true);
+                  void (async () => {
+                    try {
+                      const beeld = await pdfToPng(pdf.bytes, page);
+                      setPdf(null);
+                      await upload(beeld);
+                    } catch {
+                      setError(
+                        "Deze pagina kon niet worden omgezet. Exporteer hem zelf als PNG en kies die.",
+                      );
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+              >
+                Pagina gebruiken
+              </button>
+            </div>
+          )}
         </>
       )}
       {underlay && (
