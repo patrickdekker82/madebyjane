@@ -11,6 +11,7 @@
     "dev": "tsx scripts/dev.ts",
     "dev:web": "vite --config apps/web/vite.config.ts --host 127.0.0.1",
     "dev:api": "tsx apps/api/src/main.ts",
+    "start:api": "tsx apps/api/src/main.ts",
     "typecheck": "tsc --noEmit",
     "build": "pnpm typecheck && vite build --config apps/web/vite.config.ts",
     "test": "vitest run",
@@ -47,6 +48,7 @@
     "react-konva": "19.2.6",
     "tailwindcss": "4.3.3",
     "three": "0.185.1",
+    "tsx": "4.23.13",
     "vite": "7.3.6",
     "zod": "4.5.4",
     "zustand": "5.0.15"
@@ -62,7 +64,6 @@
     "embedded-postgres": "18.4.0-beta.17",
     "fast-check": "4.9.0",
     "prettier": "3.9.6",
-    "tsx": "4.23.13",
     "typescript": "5.9.3",
     "vitest": "4.1.11"
   }
