@@ -289,13 +289,17 @@ export class QuoteService {
           );
         }
       }
-      await c.query("INSERT INTO audit_events VALUES($1,$2,$3,$4,$5,now())", [
-        ctx.organizationId,
-        randomUUID(),
-        ctx.userId,
-        number ? "quote.finalized" : "quote.saved",
-        id,
-      ]);
+      await c.query(
+        "INSERT INTO audit_events(organization_id,id,user_id,action,subject_id,detail) VALUES($1,$2,$3,$4,$5,$6)",
+        [
+          ctx.organizationId,
+          randomUUID(),
+          ctx.userId,
+          number ? "quote.finalized" : "quote.saved",
+          id,
+          { version: row.version, number },
+        ],
+      );
       return row as QuoteRecord;
     });
   }
@@ -399,6 +403,34 @@ export class QuoteService {
         )
       ).rows[0];
       return next as QuoteRecord;
+    });
+  }
+  /**
+   * Registratie van wie wat wanneer met deze offerte deed. Leest audit_events;
+   * deellinkregels horen bij de offerte via hun share. De namen worden in de
+   * API-laag toegevoegd, omdat de runtimeverbinding identity niet mag lezen.
+   */
+  audit(ctx: Context, project: string, id: string) {
+    this.authorize(ctx);
+    return inTenant(this.pool, ctx.organizationId, async (c) => {
+      await this.project(c, project);
+      if (
+        !(
+          await c.query(
+            "SELECT 1 FROM quote_versions WHERE project_id=$1 AND id=$2",
+            [project, id],
+          )
+        ).rowCount
+      )
+        throw new DomainError("NOT_FOUND", "Offerte niet gevonden.", 404);
+      return {
+        items: (
+          await c.query(
+            "SELECT a.id,a.action,a.user_id,a.created_at,(a.detail->>'version')::int AS version,a.detail->>'number' AS number FROM audit_events a LEFT JOIN quote_shares s ON s.id=a.subject_id WHERE a.action IN ('quote.saved','quote.finalized','quote.share_created','quote.share_revoked') AND (a.subject_id=$1 OR s.quote_id=$1) ORDER BY a.created_at DESC,a.id DESC LIMIT 200",
+            [id],
+          )
+        ).rows,
+      };
     });
   }
   events(ctx: Context, project: string, id: string, version: number) {

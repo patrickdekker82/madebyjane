@@ -243,6 +243,29 @@ export function createServer(config: {
   app.post("/api/v1/projects/:id/quotes/:quoteId/finalize", async req => {
     const p=quoteParams(req.params); return quotes.finalize(await context(req.headers),p.id,p.quoteId,req.body);
   });
+  // Namen horen bij identity; de runtimeverbinding mag die tabel niet lezen.
+  async function withActors<T extends { user_id: string }>(rows: T[]) {
+    const ids = [...new Set(rows.map((r) => r.user_id))];
+    const users = ids.length
+      ? (
+          await config.identity.query(
+            'SELECT id,name,email FROM identity."user" WHERE id = ANY($1)',
+            [ids],
+          )
+        ).rows
+      : [];
+    const byId = new Map(users.map((u) => [u.id, u]));
+    return rows.map((r) => ({
+      ...r,
+      user_name: byId.get(r.user_id)?.name ?? null,
+      user_email: byId.get(r.user_id)?.email ?? null,
+    }));
+  }
+  app.get("/api/v1/projects/:id/quotes/:quoteId/audit", async (req) => {
+    const p = quoteParams(req.params);
+    const r = await quotes.audit(await context(req.headers), p.id, p.quoteId);
+    return { items: await withActors(r.items) };
+  });
   app.get("/api/v1/projects/:id/quotes/:quoteId/history",async req=>{const p=quoteParams(req.params);return quotes.history(await context(req.headers),p.id,p.quoteId);});
   app.get("/api/v1/projects/:id/quotes/:quoteId/versions/:version",async req=>{const p=versionParams(req.params);return quotes.get(await context(req.headers),p.id,p.quoteId,p.version);});
   app.post("/api/v1/projects/:id/quotes/:quoteId/revise",async req=>{const p=quoteParams(req.params);return quotes.revise(await context(req.headers),p.id,p.quoteId,req.body);});

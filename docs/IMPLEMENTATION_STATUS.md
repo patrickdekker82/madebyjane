@@ -1,5 +1,30 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — auditoverzicht per offerte
+
+Dit sluit het open punt "een auditoverzicht in de gebruikersinterface" uit de vorige aanvulling. De tabel `audit_events` werd al geschreven maar nergens gelezen; er was dus registratie zonder inzage.
+
+Een offerte heeft nu een knop **Auditoverzicht bekijken**. Die toont per regel de handeling (concept opgeslagen, definitief gemaakt, deellink gemaakt, deellink ingetrokken), de offerteversie waarop de handeling sloeg, het offertenummer bij finalisatie, en wie het deed met naam, e-mailadres en tijdstip in Europe/Amsterdam. Nieuwste regel bovenaan, maximaal 200 regels. Het overzicht is alleen leesbaar; er is geen pad om auditregels te schrijven of te wijzigen vanuit de interface.
+
+Migration 0013 voegt `detail jsonb` toe aan `audit_events` (maximaal 2000 tekens) plus een index op `(organization_id,subject_id,created_at DESC)`. De offerte-, deel- en intrekpaden schrijven de versie in dat veld. Regels van vóór deze migration hebben geen versie; het scherm toont daar "versie niet vastgelegd" in plaats van een geraden waarde. Bestaande audit-inserts in de andere modules zijn ongewijzigd gebleven en blijven werken, omdat de nieuwe kolom een default heeft.
+
+Rechten en isolatie: alleen owner, admin en finance kunnen het overzicht opvragen; designer en viewer krijgen server-side 403. RLS op `audit_events` beperkt de rijen tot de eigen organisatie. Namen komen uit `identity."user"` via de identity-verbinding, omdat de runtimeverbinding die tabel niet mag lezen; het domein blijft daarmee los van identity.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded), pnpm 11.19.0
+
+- TypeScript strict geslaagd; productiebuild geslaagd (7,26 s). De bestaande waarschuwing over chunks groter dan 500 kB blijft open.
+- Vitest: **160 van 162 tests geslaagd**. De nieuwe integratieproef dekt volgorde, versie, offertenummer, naam en e-mailadres per regel, het maken en intrekken van een deellink bij de juiste versie, scheiding tussen twee offertes in hetzelfde project, 403 voor designer en viewer, en 404 bij een onbekende offerte en vanuit een andere organisatie.
+- Playwright: **14 van 17 routes geslaagd (3,5 min)**. De offerteroute opent het auditoverzicht na definitief maken en leest "Definitief gemaakt · versie 2" en "Concept opgeslagen · versie 1"; `outputs/qa/offerte-audit.png` is visueel gecontroleerd en toont versie, nummer, naam, e-mailadres en tijdstip.
+
+### Niet geverifieerd in deze omgeving
+
+De twee mislukte Vitest-tests en de drie mislukte browserroutes zijn **niet** door deze wijziging veroorzaakt: dezelfde vijf vallen om op de ongewijzigde code van commit 82305d1, met identieke foutmelding en regelnummer. De oorzaak is deze container: Chromium kan zijn sandbox niet starten, dus elke server-side PDF-render geeft 500. `chromiumSandbox: true` is bewust niet aangepast om de proef te laten slagen. De auditassertie voor deellinks is daarom bewust in een proef zonder renderer gezet: die schrijft de PDF-bytes vooraf in `quote_exports`, zodat de registratie wordt getoetst en niet de renderer. Het renderpad houdt zijn eigen bestaande tests. Linux-CI met de gepinde Chromium moet de vijf resterende proeven bevestigen.
+
+### Eerstvolgende stap
+
+Het resterende open punt van fase 6 is een aantoonbare PDF-proef met meerdere planbladen; die vraagt een werkende Chromium-sandbox. Daarna blijven de grenzen uit de vorige aanvulling staan: fase-5-presentatiebouwer, PPTX, productie-exportqueue, installatie/back-up/herstel en fase-9-hardening. Een werkruimtebreed auditscherm buiten offertes is niet gebouwd en is geen onderdeel van fase 6.
+
+
 ## Aanvulling 10 september 2026 — afronding offerteworkflow fase 6
 
 Deze aanvulling is leidend voor fase 6; de oudere rapportages hieronder blijven als historische testregistraties staan. De wijzigingen zijn samengevoegd met main cb03021, inclusief de materiaalberekeningen en nieuwe editor-/browsertests. Het eerste offertedeel uit PR #2 staat al in main; de afronding krijgt een afzonderlijke pull request.

@@ -147,8 +147,8 @@ export class QuoteDelivery {
           )
         ).rows[0];
         await c.query(
-          "INSERT INTO audit_events VALUES($1,$2,$3,'quote.share_created',$4,now())",
-          [ctx.organizationId, randomUUID(), ctx.userId, v.id],
+          "INSERT INTO audit_events(organization_id,id,user_id,action,subject_id,detail) VALUES($1,$2,$3,'quote.share_created',$4,$5)",
+          [ctx.organizationId, randomUUID(), ctx.userId, v.id, { version }],
         );
       }
       return {
@@ -175,13 +175,19 @@ export class QuoteDelivery {
     requireFinance(ctx);
     return inTenant(this.pool, ctx.organizationId, async (c) => {
       const r = await c.query(
-        "UPDATE quote_shares SET revoked_at=now() WHERE id=$1 AND revoked_at IS NULL RETURNING id",
+        "UPDATE quote_shares SET revoked_at=now() WHERE id=$1 AND revoked_at IS NULL RETURNING id,quote_version",
         [grant],
       );
       if (r.rowCount) {
         await c.query(
-          "INSERT INTO audit_events VALUES($1,$2,$3,'quote.share_revoked',$4,now())",
-          [ctx.organizationId, randomUUID(), ctx.userId, grant],
+          "INSERT INTO audit_events(organization_id,id,user_id,action,subject_id,detail) VALUES($1,$2,$3,'quote.share_revoked',$4,$5)",
+          [
+            ctx.organizationId,
+            randomUUID(),
+            ctx.userId,
+            grant,
+            { version: r.rows[0].quote_version },
+          ],
         );
       } else if (
         !(await c.query("SELECT id FROM quote_shares WHERE id=$1", [grant]))

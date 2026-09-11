@@ -1136,6 +1136,23 @@ test("offerteconcept, decimalen, finalisatie en vaste prijzen na herladen", asyn
   await expect(
     page.getByLabel("Inkoopprijs per eenheid EUR post 1", { exact: true }),
   ).toHaveValue("12");
+  // Auditoverzicht: wie deze offerte opsloeg en definitief maakte, met versie.
+  await page
+    .getByRole("button", { name: "Auditoverzicht bekijken", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Auditoverzicht", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/^Definitief gemaakt · versie 2 · 20/),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Concept opgeslagen · versie 1", { exact: false }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "outputs/qa/offerte-audit.png",
+    fullPage: true,
+  });
   const downloaded = page.waitForEvent("download");
   await page
     .getByRole("button", { name: "Offerte-PDF downloaden", exact: true })
