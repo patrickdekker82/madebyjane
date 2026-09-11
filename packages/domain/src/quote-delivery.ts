@@ -8,7 +8,8 @@ import { QuoteService } from "./quotes";
 import { quoteHtml, quoteTemplateVersion } from "../../documents/src/quote";
 import { renderQuotePdf } from "../../documents/src/quote-pdf";
 import { requireFinance, digest, quoteContentHash } from "./quote-resources";
-import { DomainError } from "./index";
+import { DomainError, requirePermission } from "./index";
+import { resolveProjectRole } from "./project-access";
 export class QuoteDelivery {
   constructor(
     private pool: Pool,
@@ -92,7 +93,7 @@ export class QuoteDelivery {
     version: number,
     input: unknown,
   ) {
-    requireFinance(ctx);
+    requirePermission(ctx.role, "share.publish");
     const v = z
         .object({ id, days: z.number().int().min(1).max(30) })
         .strict()
@@ -147,8 +148,8 @@ export class QuoteDelivery {
           )
         ).rows[0];
         await c.query(
-          "INSERT INTO audit_events VALUES($1,$2,$3,'quote.share_created',$4,now())",
-          [ctx.organizationId, randomUUID(), ctx.userId, v.id],
+          "INSERT INTO audit_events(organization_id,id,user_id,action,subject_id,detail) VALUES($1,$2,$3,'quote.share_created',$4,$5)",
+          [ctx.organizationId, randomUUID(), ctx.userId, v.id, { version }],
         );
       }
       return {
@@ -172,16 +173,31 @@ export class QuoteDelivery {
     }));
   }
   revoke(ctx: Context, grant: string) {
-    requireFinance(ctx);
+    requirePermission(ctx.role, "share.revoke");
     return inTenant(this.pool, ctx.organizationId, async (c) => {
+      // De link wijst een project aan; ook hier geldt de projecttoegang, anders
+      // zou een beperkt project via zijn deellink alsnog bereikbaar zijn.
+      const owner = (
+        await c.query(
+          "SELECT DISTINCT v.project_id FROM quote_shares s JOIN quote_versions v ON v.organization_id=s.organization_id AND v.id=s.quote_id WHERE s.id=$1",
+          [grant],
+        )
+      ).rows[0];
+      if (owner) await resolveProjectRole(c, ctx, owner.project_id);
       const r = await c.query(
-        "UPDATE quote_shares SET revoked_at=now() WHERE id=$1 AND revoked_at IS NULL RETURNING id",
+        "UPDATE quote_shares SET revoked_at=now() WHERE id=$1 AND revoked_at IS NULL RETURNING id,quote_version",
         [grant],
       );
       if (r.rowCount) {
         await c.query(
-          "INSERT INTO audit_events VALUES($1,$2,$3,'quote.share_revoked',$4,now())",
-          [ctx.organizationId, randomUUID(), ctx.userId, grant],
+          "INSERT INTO audit_events(organization_id,id,user_id,action,subject_id,detail) VALUES($1,$2,$3,'quote.share_revoked',$4,$5)",
+          [
+            ctx.organizationId,
+            randomUUID(),
+            ctx.userId,
+            grant,
+            { version: r.rows[0].quote_version },
+          ],
         );
       } else if (
         !(await c.query("SELECT id FROM quote_shares WHERE id=$1", [grant]))

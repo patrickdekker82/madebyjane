@@ -2,9 +2,11 @@ import { useState, useRef } from "react";
 import { api, ApiError } from "./api";
 import {
   quoteStatuses,
+  auditActions,
   type QuoteRecord,
   type QuoteSummary,
   type QuoteStatus,
+  type QuoteAuditEntry,
 } from "../../../packages/contracts/src/quotes";
 export function QuoteActions({
   organizationId,
@@ -37,6 +39,8 @@ export function QuoteActions({
     [shares, setShares] = useState<
       { id: string; expires_at: string; revoked_at: string | null }[]
     >([]),
+    [audit, setAudit] = useState<QuoteAuditEntry[]>([]),
+    [auditOpen, setAuditOpen] = useState(false),
     [link, setLink] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -137,6 +141,50 @@ export function QuoteActions({
           {quoteStatuses[h.status ?? (h.number ? "final" : "draft")]}
         </button>
       ))}
+      <button
+        disabled={disabled || busy}
+        onClick={() =>
+          void run(async () => {
+            setAudit(
+              (
+                await api<{ items: QuoteAuditEntry[] }>(
+                  root + "/audit",
+                  organizationId,
+                )
+              ).items,
+            );
+            setAuditOpen(true);
+          })
+        }
+      >
+        Auditoverzicht bekijken
+      </button>
+      {auditOpen && (
+        <div>
+          <h4>Auditoverzicht</h4>
+          <p>
+            Wie heeft wat wanneer met deze offerte gedaan. Deze registratie is
+            alleen intern zichtbaar en kan niet worden bewerkt. Verzending en
+            klantreacties staan in de statusgeschiedenis.
+          </p>
+          {audit.length === 0 && <p>Nog geen registraties.</p>}
+          {audit.map((a) => (
+            <p key={a.id}>
+              {auditActions[a.action]}
+              {a.version === null
+                ? " · versie niet vastgelegd"
+                : ` · versie ${a.version}`}
+              {a.number ? ` · ${a.number}` : ""}
+              <br />
+              {a.user_name ?? "Onbekende gebruiker"}
+              {a.user_email ? ` (${a.user_email})` : ""} ·{" "}
+              {new Date(a.created_at).toLocaleString("nl-NL", {
+                timeZone: "Europe/Amsterdam",
+              })}
+            </p>
+          ))}
+        </div>
+      )}
       {row.number && (
         <>
           <button

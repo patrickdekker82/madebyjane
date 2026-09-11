@@ -160,6 +160,99 @@ test("finance mag offertes beheren; designer/viewer en andere organisaties niet"
     404,
   );
 });
+test("auditoverzicht toont opslaan en definitief maken met versie, actor en rechten", async () => {
+  const path = `/api/v1/projects/${project}/quotes`,
+    d = draft();
+  expect((await call("POST", path, d, "finance")).statusCode).toBe(200);
+  expect(
+    (
+      await call(
+        "POST",
+        path,
+        { ...d, requestId: randomUUID(), baseVersion: 1 },
+        "finance",
+      )
+    ).statusCode,
+  ).toBe(200);
+  const final = await call(
+    "POST",
+    `${path}/${d.id}/finalize`,
+    { requestId: randomUUID(), baseVersion: 2 },
+    "owner",
+  );
+  expect(final.statusCode, final.body).toBe(200);
+  const audit = await call("GET", `${path}/${d.id}/audit`);
+  expect(audit.statusCode, audit.body).toBe(200);
+  const items = audit.json().items as {
+    action: string;
+    version: number | null;
+    number: string | null;
+    user_name: string;
+    user_email: string;
+    created_at: string;
+  }[];
+  // Nieuwste eerst, met de versie waarop de handeling sloeg.
+  expect(
+    items.map((a) => [a.action, a.version, a.number, a.user_name]),
+  ).toEqual([
+    ["quote.finalized", 3, final.json().number, "owner"],
+    ["quote.saved", 2, null, "finance"],
+    ["quote.saved", 1, null, "finance"],
+  ]);
+  expect(items[0]!.user_email).toBe("owner@example.test");
+  expect(Number.isFinite(Date.parse(items[0]!.created_at))).toBe(true);
+  // Deellinks: het delen en intrekken landen bij de juiste versie. De PDF is
+  // hier vooraf opgeslagen, zodat deze proef de registratie toetst en niet de
+  // renderer; het renderpad heeft zijn eigen tests.
+  await db.admin.query(
+    "INSERT INTO quote_exports(organization_id,quote_id,quote_version,template_version,content_hash,pdf,pdf_hash) VALUES($1,$2,3,'test','x',$3,'y')",
+    [org, d.id, Buffer.from("%PDF-1.4 fixture")],
+  );
+  const share = await call("POST", `${path}/${d.id}/versions/3/shares`, {
+    id: randomUUID(),
+    days: 7,
+  });
+  expect(share.statusCode, share.body).toBe(200);
+  expect(
+    (await call("POST", `/api/v1/quote-shares/${share.json().id}/revoke`, {}))
+      .statusCode,
+  ).toBe(200);
+  const afterShare = (await call("GET", `${path}/${d.id}/audit`)).json()
+    .items as { action: string; version: number | null }[];
+  expect(afterShare.slice(0, 2).map((a) => [a.action, a.version])).toEqual([
+    ["quote.share_revoked", 3],
+    ["quote.share_created", 3],
+  ]);
+  // Een andere offerte in hetzelfde project deelt de registratie niet.
+  const e = draft();
+  expect((await call("POST", path, e)).statusCode).toBe(200);
+  expect(
+    (await call("GET", `${path}/${e.id}/audit`)).json().items,
+  ).toHaveLength(1);
+  // Alleen finance-rollen; onbekende offertes en andere organisaties niets.
+  for (const role of ["designer", "viewer"])
+    expect(
+      (await call("GET", `${path}/${d.id}/audit`, undefined, role)).statusCode,
+    ).toBe(403);
+  expect((await call("GET", `${path}/${randomUUID()}/audit`)).statusCode).toBe(
+    404,
+  );
+  expect(
+    (
+      await call(
+        "GET",
+        `/api/v1/projects/${otherProject}/quotes/${d.id}/audit`,
+        undefined,
+        "other",
+        other,
+      )
+    ).statusCode,
+  ).toBe(404);
+  expect(
+    (await call("GET", `${path}/${d.id}/audit`, undefined, "other", org))
+      .statusCode,
+  ).toBe(404);
+});
 test("retries, conflictcontrole, unieke gelijktijdige nummering en prijsfreeze", async () => {
   const path = `/api/v1/projects/${project}/quotes`,
     a = draft(),

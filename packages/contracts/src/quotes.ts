@@ -139,6 +139,24 @@ export const quoteStatuses = {
   replaced: "Vervangen",
 } as const;
 export type QuoteStatus = keyof typeof quoteStatuses;
+export const auditActions = {
+  "quote.saved": "Concept opgeslagen",
+  "quote.finalized": "Definitief gemaakt",
+  "quote.share_created": "Deellink gemaakt",
+  "quote.share_revoked": "Deellink ingetrokken",
+} as const;
+export type QuoteAuditAction = keyof typeof auditActions;
+/** Eén registratie uit audit_events. `version` is null bij regels van vóór migration 0013. */
+export type QuoteAuditEntry = {
+  id: string;
+  action: QuoteAuditAction;
+  version: number | null;
+  number: string | null;
+  created_at: string;
+  user_id: string;
+  user_name: string | null;
+  user_email: string | null;
+};
 export const statusInput = z
   .object({
     requestId: id,

@@ -2,6 +2,7 @@ import { Materials } from "./Materials";
 import { Quotes } from "./Quotes";
 import { LibraryPanel } from "./LibraryPanel";
 import { Variants, VariantName } from "./Variants";
+import { ProjectMembers } from "./ProjectMembers";
 import { RoomSummary } from "./RoomSummary";
 import { RevisionHistory } from "./RevisionHistory";
 import { StructureProperties } from "./StructureProperties";
@@ -1298,6 +1299,11 @@ function Editor() {
             projectId={scene.projectId}
           />
         )}
+        <ProjectMembers
+          organizationId={org.id}
+          projectId={scene.projectId}
+          role={org.role}
+        />
         <Variants
           organizationId={org.id}
           variantId={variantId}
