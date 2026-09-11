@@ -179,6 +179,27 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
         });
         break;
       }
+      case "SaveCamera": {
+        /*
+         * Bewaren onder een bestaande ID is bijwerken. Dat is wat de gebruiker
+         * bedoelt als hij een standpunt opnieuw vastlegt, en het voorkomt dat
+         * een dubbel verzonden opdracht twee keer hetzelfde standpunt oplevert.
+         */
+        const at = s.cameras.findIndex((c) => c.id === op.camera.id);
+        if (at >= 0) s.cameras[at] = op.camera;
+        else if (s.cameras.length >= 24)
+          throw new Error(
+            "Er passen 24 camerastandpunten in een ontwerp. Verwijder er eerst een.",
+          );
+        else s.cameras.push(op.camera);
+        break;
+      }
+      case "DeleteCamera": {
+        const at = s.cameras.findIndex((c) => c.id === op.id);
+        if (at < 0) throw new Error("Camerastandpunt niet gevonden.");
+        s.cameras.splice(at, 1);
+        break;
+      }
       case "DeleteSelection":
         if (s.items.some((i) => op.ids.includes(i.id) && i.locked))
           throw new Error(
