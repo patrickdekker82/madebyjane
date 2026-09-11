@@ -1,5 +1,61 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 3: bibliotheekitems archiveren
+
+Een bibliotheekitem dat niet meer gevoerd wordt, bleef voor altijd in elke
+zoekopdracht opduiken. Er was geen manier om het met rust te laten. Voor een
+bibliotheek die jaren meegaat is dat hetzelfde probleem als de vollopende
+beeldbank: hij groeit alleen maar.
+
+### Archiveren raakt de versies niet aan
+
+Dat is de kern. Bibliotheekversies zijn onveranderlijk, en dat is precies de
+belofte waar elke geplaatste revisie op steunt: een bank die vorig jaar in een
+ontwerp is gezet blijft die bank, ook als het item vandaag niet meer gevoerd
+wordt. De runtime-rol heeft op `library_versions` dan ook alleen `SELECT` en
+`INSERT`, en daar verandert niets aan.
+
+**Migration 0021** voegt daarom een eigen tabel `library_archived` toe: een rij
+erin betekent "niet meer aanbieden". Terughalen is het weghalen van die rij. Wát
+er ooit is gearchiveerd en door wie blijft leesbaar in `audit_events`; de tabel
+zegt alleen wat nú geldt.
+
+### Wat het wel en niet doet
+
+- Gearchiveerde items staan niet meer in de lijst, maar zijn met
+  `?archived=true` te vínden — anders valt er niets terug te halen.
+- Een nieuwe versie publiceren op een gearchiveerd item wordt geweigerd. Dat zou
+  het stilzwijgend laten terugkomen, en terughalen hoort een bewuste handeling
+  te zijn.
+- Twee keer archiveren is geen fout: de uitkomst is wat de aanroeper wilde.
+- Archiveren en terughalen vragen `library.manage`; leesrechten volstaan niet.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+TypeScript strict geslaagd, frontendbuild geslaagd. `integration.test.ts` 20
+geslaagd, met een uitgebreide bibliotheekroute die vastlegt: archiveren haalt
+het item uit de lijst maar niet uit het archief, **het ontwerp met het geplaatste
+meubel is met geen byte veranderd**, een nieuwe versie op een gearchiveerd item
+geeft 409, twee keer archiveren mag, terughalen zet het terug mét de laatste
+versie, een onbekend item geeft 404, leesrechten geven 403, en er staan precies
+drie auditregels. Volledige run: 287 geslaagd, 6 gefaald — de bekende
+Chromium-sandboxfouten.
+
+### Niet geverifieerd in deze omgeving
+
+De schakelaar en de knoppen in het bibliotheekvenster zijn niet door een browser
+gedraaid; er is voor deze stap geen E2E-route bijgekomen.
+
+### Wat fase 3 nog mist
+
+Het exitcriterium van fase 3 — "gebruiker maakt zonder programmeren een nieuw
+meubelsymbool en lichtsymbool, gebruikt dit in twee projecten en importeert
+veilig een bekend GLB" — is **niet als browserroute vastgelegd**. De onderdelen
+bestaan (symboleneditor, GLB-import met validatie, onveranderlijke versies) en
+zijn los getoetst, maar er is geen enkele E2E-route die dat pad als geheel
+aflegt. Zolang die er niet is, kan fase 3 niet op de exit worden afgetekend.
+Verder blijven prijsbron, rechten-/exportmetadata en anker- en schaalmodi open.
+
 ## Aanvulling 11 september 2026 — de beeldbank kon vollopen zonder uitweg
 
 Bij het opruimen van de eigen losse eindjes bleek er een hardere grens te zitten

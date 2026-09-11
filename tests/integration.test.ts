@@ -615,6 +615,38 @@ test("bibliotheekversies zijn immutable, geïsoleerd en wijzigen plaatsingen nie
   expect(storedItem.catalog.sku).toBe("BANK-01");
   expect((await request("GET", "/api/v1/library?q=BANK-01")).json().items).toEqual([]);
   expect((await request("GET", "/api/v1/library?q=bank-02&category=zitmeubels")).json().items).toHaveLength(1);
+  /*
+   * Archiveren: een item dat niet meer gevoerd wordt, hoeft niet voor altijd in
+   * elke zoekopdracht te blijven opduiken. De harde eis is dat het geplaatste
+   * meubel er niets van merkt — dat is de belofte waar elke oude revisie op
+   * steunt.
+   */
+  const geplaatstVoor = (await request("GET", route + "/document")).json();
+  expect((await request("POST", "/api/v1/library/" + v1.entryId + "/archive", {}, cookieViewer)).statusCode).toBe(403);
+  expect((await request("POST", "/api/v1/library/" + v1.entryId + "/archive", {})).statusCode).toBe(200);
+  // Uit de aanbieding, maar wel terug te vinden om te herstellen.
+  expect((await request("GET", "/api/v1/library")).json().items).toHaveLength(0);
+  expect((await request("GET", "/api/v1/library?archived=true")).json().items).toHaveLength(1);
+  // Het ontwerp is met geen byte veranderd; de bank staat er nog precies zo.
+  expect((await request("GET", route + "/document")).json()).toEqual(geplaatstVoor);
+  // Een nieuwe versie op een gearchiveerd item zou het stilzwijgend terugbrengen.
+  expect(
+    (await request("POST", "/api/v1/library", { ...v2, versionId: randomUUID(), baseVersion: 2 })).statusCode,
+  ).toBe(409);
+  // Twee keer archiveren is geen fout: de uitkomst is wat de aanroeper wilde.
+  expect((await request("POST", "/api/v1/library/" + v1.entryId + "/archive", {})).statusCode).toBe(200);
+  // Terughalen zet het weer in de aanbieding, met de laatste versie erbij.
+  expect((await request("DELETE", "/api/v1/library/" + v1.entryId + "/archive")).statusCode).toBe(200);
+  expect((await request("GET", "/api/v1/library")).json().items).toHaveLength(1);
+  expect((await request("GET", "/api/v1/library?archived=true")).json().items).toHaveLength(0);
+  expect((await request("GET", "/api/v1/library")).json().items[0].definition.width).toBe(3000);
+  // Een item dat niet bestaat is een fout, geen stille instemming.
+  expect((await request("POST", "/api/v1/library/" + randomUUID() + "/archive", {})).statusCode).toBe(404);
+  // En het is navolgbaar wie wat gedaan heeft.
+  expect(
+    (await db.admin.query("SELECT count(*)::int AS n FROM audit_events WHERE action IN ('library.archived','library.restored') AND subject_id=$1", [v1.entryId])).rows[0].n,
+  ).toBe(3);
+
   const foreign = { ...v1, entryId: randomUUID(), versionId: randomUUID() };
   await request("POST", "/api/v1/library", foreign, cookieB, orgB);
   const rejected = await request("POST", route + "/commands", {

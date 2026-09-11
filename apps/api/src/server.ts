@@ -872,6 +872,22 @@ export function createServer(config: {
   app.post("/api/v1/library", async (req) =>
     library.publish(await context(req.headers), req.body),
   );
+  /*
+   * Archiveren haalt een item uit de aanbieding zonder ook maar iets aan de
+   * versies te veranderen; geplaatste meubels blijven dus wat ze waren.
+   */
+  app.post("/api/v1/library/:entryId/archive", async (req) =>
+    library.archive(
+      await context(req.headers),
+      z.object({ entryId: id }).parse(req.params).entryId,
+    ),
+  );
+  app.delete("/api/v1/library/:entryId/archive", async (req) =>
+    library.restore(
+      await context(req.headers),
+      z.object({ entryId: id }).parse(req.params).entryId,
+    ),
+  );
   // Ledenbeheer per project. De keuzelijst komt uit identity, omdat de
   // runtimeverbinding die tabel niet mag lezen.
   app.get("/api/v1/organization/members", async (req) => {
