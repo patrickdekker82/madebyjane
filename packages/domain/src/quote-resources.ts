@@ -10,7 +10,7 @@ import {
 } from "../../contracts/src/quotes";
 import { planSvg, escapeXml as esc } from "../../documents/src/plan";
 import { sceneSchema } from "../../contracts/src/index";
-import { DomainError } from "./index";
+import { DomainError, requirePermission } from "./index";
 import type { Context } from "./projects";
 export const digest = (v: unknown) =>
   createHash("sha256")
@@ -24,14 +24,9 @@ export const quoteContentHash = (q: QuoteRecord) =>
     totals: q.totals,
     frozen: q.frozen,
   });
-export const requireFinance = (ctx: Context) => {
-  if (!["owner", "admin", "finance"].includes(ctx.role))
-    throw new DomainError(
-      "FORBIDDEN",
-      "Je hebt geen toegang tot offertes.",
-      403,
-    );
-};
+/** Offertetoegang loopt via de rechtenmatrix, niet via een rollijst. */
+export const requireFinance = (ctx: Context) =>
+  requirePermission(ctx.role, "quote.read");
 export async function checkProject(c: PoolClient, project: string) {
   if (
     !(await c.query("SELECT 1 FROM projects WHERE id=$1", [project])).rowCount

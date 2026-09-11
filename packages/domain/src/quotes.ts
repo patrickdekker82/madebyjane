@@ -8,21 +8,21 @@ import {
   type QuoteRecord,
   type QuoteDefinition,
 } from "../../contracts/src/quotes";
-import { DomainError, type Role } from "./index";
+import {
+  DomainError,
+  can,
+  requirePermission,
+  type Role,
+  type Permission,
+} from "./index";
 import type { Context } from "./projects";
 import { calculateQuote } from "./quote-calculation";
 import { resourceCheck, digest, quoteContentHash } from "./quote-resources";
-export const canFinance = (role: Role) =>
-  ["owner", "admin", "finance"].includes(role);
+export const canFinance = (role: Role) => can(role, "quote.read");
 export class QuoteService {
   constructor(private pool: Pool) {}
-  private authorize(ctx: Context) {
-    if (!canFinance(ctx.role))
-      throw new DomainError(
-        "FORBIDDEN",
-        "Je hebt geen toegang tot offertes.",
-        403,
-      );
+  private authorize(ctx: Context, permission: Permission = "quote.read") {
+    requirePermission(ctx.role, permission);
   }
   private async project(c: PoolClient, project: string) {
     if (
@@ -110,7 +110,7 @@ export class QuoteService {
     });
   }
   save(ctx: Context, project: string, input: unknown) {
-    this.authorize(ctx);
+    this.authorize(ctx, "quote.write");
     const v = quoteSaveSchema.parse(input);
     return this.write(
       ctx,
@@ -122,7 +122,7 @@ export class QuoteService {
     );
   }
   finalize(ctx: Context, project: string, id: string, input: unknown) {
-    this.authorize(ctx);
+    this.authorize(ctx, "quote.finalize");
     const v = quoteFinalizeSchema.parse(input);
     return this.write(ctx, project, id, v.requestId, v.baseVersion, null);
   }
@@ -333,7 +333,7 @@ export class QuoteService {
     });
   }
   revise(ctx: Context, project: string, id: string, input: unknown) {
-    this.authorize(ctx);
+    this.authorize(ctx, "quote.write");
     const v = quoteFinalizeSchema.parse(input),
       hash = digest({ action: "revise", project, id, ...v });
     return inTenant(this.pool, ctx.organizationId, async (c) => {

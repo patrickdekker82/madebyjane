@@ -1,5 +1,49 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 1: rechtenmatrix en projectmembership
+
+Dit pakt twee open punten van fase 1: de **volledige rechtenmatrix** en **expliciete projectmembership**. Tot nu toe zag elk organisatielid elk project in de werkruimte, en stonden de rechten verspreid over losse rollijsten (`canWrite`, `canFinance`, `requireFinance`).
+
+### De rechtenmatrix als enige bron
+
+`packages/domain/src/permissions.ts` bevat de matrix uit paragraaf 15 van de opdracht, met de gevraagde splitsing: `project.read/write`, `library.manage`, `quote.read/write/finalize`, `costs.read`, `members.manage` en `share.publish/revoke`. Services en routes vragen een recht op in plaats van een rolnaam. Het bestand importeert niets uit `index.ts`, zodat de matrix geen kringverwijzing maakt en ook in de interface bruikbaar is.
+
+Deze stap is gedragsbehoudend: dezelfde rollen mogen precies hetzelfde als daarvoor. De splitsing maakt alleen expliciet wat eerst impliciet in één `requireFinance` zat. `permissions.test.ts` pint de volledige matrix vast, zodat een rol die een recht wint of verliest een bewuste wijziging is en geen bijvangst.
+
+### Projecttoegang
+
+Migration 0014 voegt `projects.access` toe (`organization` of `restricted`, default `organization`) en de tabel `project_memberships` met RLS, FORCE RLS en tenantpolicy. Bestaande projecten blijven open: niemand raakt werk kwijt door deze wijziging, en er is niets nep-teruggevuld.
+
+`resolveProjectRole` is de enige plek die beslist wie bij een project mag:
+
+- Owner en admin beheren de werkruimte en houden hun rol.
+- Een expliciet projectlid krijgt de projectrol. Die kan hoger of lager zijn dan de werkruimterol; alleen owner en admin kennen hem toe.
+- Anders geldt de werkruimterol, maar alleen bij een open project.
+
+Een beperkt project zonder lidmaatschap geeft **404 en geen 403**: het bestaan van het project is zelf al informatie. Projectrollen zijn bewust beperkt tot designer, finance en viewer — owner of admin toekennen zou ledenbeheer via een project uitbreidbaar maken tot de hele werkruimte.
+
+De API resolveert dit vóór de services: elke projectroute gebruikt `projectContext`, elke variantroute `variantContext`, zodat de rol die een service ziet de rol voor dát project is. Daarmee is "organisatie en project op elke route gecontroleerd" ook werkelijk op elke route waar. Het filter op de projectlijst staat in de query, niet in de interface, zodat een beperkt project ook niet via de API lekt. Het intrekken van een offerte-deellink loopt via een link-ID en controleert nu eveneens de projecttoegang.
+
+De interface heeft een dialoog **Projecttoegang** voor owner en admin: openstellen of beperken, leden toevoegen met een projectrol, en lidmaatschap intrekken. Ledenbeheer schrijft auditregels (`project.access_changed`, `project.member_set`, `project.member_removed`) met dezelfde `detail`-kolom uit migration 0013.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded), pnpm 11.19.0
+
+- TypeScript strict en productiebuild geslaagd (6,41 s). De bestaande waarschuwing over chunks groter dan 500 kB blijft open.
+- Vitest: **170 van 172 tests geslaagd**. Nieuw: 3 matrixproeven en 7 toegangsproeven (open project blijft zichtbaar; beperken sluit project-, variant-, offerte- en planbladroutes af met 404; owner en admin houden toegang; een projectlid krijgt de projectrol en mag tekenen waar zijn werkruimterol dat niet toestaat; een projectrol kan ook mínder geven; ledenbeheer is 403 voor andere rollen; intrekken sluit weer af en schrijft precies één auditregel; een andere organisatie bereikt niets).
+- Playwright: **15 van 18 routes geslaagd (3,6 min)**. De nieuwe route beperkt een project in de browser, laat zien dat het bij de collega uit de lijst verdwijnt, geeft toegang terug via lidmaatschap en trekt die weer in. `outputs/qa/projecttoegang.png` is visueel gecontroleerd.
+- Gecontroleerd dat de productiebundel geen servercode of SQL bevat: de gedeelde waarden staan in `packages/contracts`, niet in de domeinmodule met databasetoegang.
+
+### Niet geverifieerd in deze omgeving
+
+De 2 mislukte Vitest-tests en 3 mislukte browserroutes zijn **niet** door deze wijziging veroorzaakt: dezelfde vijf vielen om vóór deze wijziging, met identieke foutmelding en regelnummer. Oorzaak blijft dat Chromium in deze container zijn sandbox niet kan starten, waardoor server-side PDF-rendering 500 geeft. `chromiumSandbox: true` is opnieuw niet aangepast.
+
+De nieuwe browserroute liep aanvankelijk vast op de auth-rate-limit van 30 verzoeken per minuut. Die limiet is **niet** verlaagd; de route hergebruikt bestaande sessies en geeft de twee gesimuleerde personen elk hun eigen `x-studio-client-ip`, wat overeenkomt met twee mensen op twee machines.
+
+### Eerstvolgende stap
+
+Van fase 1 resteren: account recovery en wachtwoordherstel, productie-Compose met installatie- en herstelprocedure, assetroutes en S3-adapter, en operationele back-up/restore. De productiecontainers en de installatieproef vragen een omgeving waar Docker daadwerkelijk gedraaid kan worden. Er is nog steeds geen productiegeschiktheidsclaim.
+
+
 ## Aanvulling 11 september 2026 — auditoverzicht per offerte
 
 Dit sluit het open punt "een auditoverzicht in de gebruikersinterface" uit de vorige aanvulling. De tabel `audit_events` werd al geschreven maar nergens gelezen; er was dus registratie zonder inzage.
