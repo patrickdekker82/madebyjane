@@ -96,8 +96,16 @@
       "sha256": "0bd30383b7a570a26f7af69730159feebc8159a2267533fcbca21f8037fdc103"
     },
     {
-      "name": "0013_viewer_views.sql",
-      "sha256": "bc0a34ecee52fc1b83a0a95ffef2eb87aab6dd6c567ad42d8eb09b120426d3b4"
+      "name": "0013_audit_detail.sql",
+      "sha256": "0e77b7bc8886f359584287c6b00881b922a568445cdbfda25275710d57ef6a37"
+    },
+    {
+      "name": "0014_project_memberships.sql",
+      "sha256": "a76571212d72d7d28186e561b134b69446553caea3c0e0073ce86e8f2af2bd41"
+    },
+    {
+      "name": "0015_viewer_views.sql",
+      "sha256": "48e32ac2b2e733f7f9a927434e661f8de4a88316f7854ee747f8045f50a290d6"
     }
   ],
   "containers": {
