@@ -29,10 +29,30 @@ ontbrak; die alinea is gecorrigeerd.
 
 ### Verificatie
 
-TypeScript strict geslaagd. De route zelf is hier **niet gedraaid** — Chromium
-start in deze container niet — en wordt in CI geverifieerd. De volledige
-Vitest-suite is ongewijzigd: 287 geslaagd, 6 gefaald (de bekende
-sandboxfouten).
+TypeScript strict geslaagd. De volledige Vitest-suite ongewijzigd: 287 geslaagd,
+6 gefaald (de bekende sandboxfouten).
+
+De route zelf kon hier niet draaien — Chromium start in deze container niet — en
+is in CI bevestigd: run 34615746829, **24 Playwright-routes geslaagd**, waaronder
+deze in 7,4 seconden.
+
+### Wat CI aanwees en wat dat leerde
+
+De route viel drie keer om voordat hij liep, en telkens lag het aan de route,
+niet aan de app; de 23 bestaande routes slaagden onafgebroken.
+
+De laatste oorzaak is het vermelden waard. De herstelroute meldt zich af,
+waarna elke volgende route opnieuw moet aanmelden. Dat doen ze ook allemaal,
+want de sessiecookies worden vlak ná de aanmeldklik uitgelezen en zijn dan nog
+niet gezet, zodat het bewaren ervan niets oplevert. Aanmelden is bewust
+gelimiteerd tegen raden, en als vierde op rij in korte tijd kwam deze route er
+niet meer doorheen. Hij staat nu vóór de routes die zich afmelden en draait op
+een geldige sessie.
+
+Die cookie-race zit dus in drie bestaande routes en laat ze onnodig opnieuw
+aanmelden. Ze slagen, dus het is geen defect, maar het maakt de suite gevoelig
+voor precies deze grens. Opruimen daarvan is een eigen stap en is hier bewust
+niet meegenomen.
 
 ## Aanvulling 11 september 2026 — fase 3: bibliotheekitems archiveren
 
