@@ -288,6 +288,59 @@ Van de openstaande punten van fase 3 zijn prijsbron, rechten- en
 exportmetadata en de anker- en schaalmodi hiermee ingevuld. Wat blijft: een
 projectexport die deze exportrechten ook werkelijk toepast, want die export
 bestaat nog niet.
+## Aanvulling 11 september 2026 — fase 3: het exitpad in de browser
+
+Toevoeging van één E2E-route die de twee stukken van het fase-3-exitcriterium
+aflegt die nog nergens stonden: een **zelfgemaakt lichtsymbool** en het
+gebruiken van dezelfde bibliotheekitems in **twee projecten**.
+
+De route maakt zonder programmeren twee items — een bank met een rechthoek en
+een lichtpunt met een ellips, elk getekend in de symboleneditor — plaatst ze in
+een project, maakt een tweede project, plaatst ze daar opnieuw, en controleert
+dat het om dezelfde bibliotheekversie gaat. Dat laatste is de kern: een
+bibliotheekitem hoort van de werkruimte te zijn en niet van het project waarin
+het toevallig is gemaakt. Tot slot wordt gecontroleerd dat het eerste project
+niets is kwijtgeraakt.
+
+Bewust een eigen route met eigen projecten. De bestaande routes zijn lang en
+delen een sessie; er ingrijpen brak vandaag al twee keer iets dat er niets mee
+te maken had.
+
+### Wat hier níét bij hoefde
+
+Bij het nalopen bleek het meeste van het exitcriterium al gedekt door de
+bestaande route met de muur en het raam: GLB-import inclusief weigering van
+ongeldige bestanden en externe bronnen, de 3D-controle, de symboleneditor met
+grenscontrole, en het bewijs dat een nieuwe bibliotheekversie een bestaande
+plaatsing niet verandert. Een eerdere aanvulling beweerde dat dit allemaal
+ontbrak; die alinea is gecorrigeerd.
+
+### Verificatie
+
+TypeScript strict geslaagd. De volledige Vitest-suite ongewijzigd: 287 geslaagd,
+6 gefaald (de bekende sandboxfouten).
+
+De route zelf kon hier niet draaien — Chromium start in deze container niet — en
+is in CI bevestigd: run 34615746829, **24 Playwright-routes geslaagd**, waaronder
+deze in 7,4 seconden.
+
+### Wat CI aanwees en wat dat leerde
+
+De route viel drie keer om voordat hij liep, en telkens lag het aan de route,
+niet aan de app; de 23 bestaande routes slaagden onafgebroken.
+
+De laatste oorzaak is het vermelden waard. De herstelroute meldt zich af,
+waarna elke volgende route opnieuw moet aanmelden. Dat doen ze ook allemaal,
+want de sessiecookies worden vlak ná de aanmeldklik uitgelezen en zijn dan nog
+niet gezet, zodat het bewaren ervan niets oplevert. Aanmelden is bewust
+gelimiteerd tegen raden, en als vierde op rij in korte tijd kwam deze route er
+niet meer doorheen. Hij staat nu vóór de routes die zich afmelden en draait op
+een geldige sessie.
+
+Die cookie-race zit dus in drie bestaande routes en laat ze onnodig opnieuw
+aanmelden. Ze slagen, dus het is geen defect, maar het maakt de suite gevoelig
+voor precies deze grens. Opruimen daarvan is een eigen stap en is hier bewust
+niet meegenomen.
 
 ## Aanvulling 11 september 2026 — fase 3: bibliotheekitems archiveren
 
@@ -337,12 +390,21 @@ gedraaid; er is voor deze stap geen E2E-route bijgekomen.
 
 ### Wat fase 3 nog mist
 
-Het exitcriterium van fase 3 — "gebruiker maakt zonder programmeren een nieuw
-meubelsymbool en lichtsymbool, gebruikt dit in twee projecten en importeert
-veilig een bekend GLB" — is **niet als browserroute vastgelegd**. De onderdelen
-bestaan (symboleneditor, GLB-import met validatie, onveranderlijke versies) en
-zijn los getoetst, maar er is geen enkele E2E-route die dat pad als geheel
-aflegt. Zolang die er niet is, kan fase 3 niet op de exit worden afgetekend.
+**Correctie op een eerdere versie van deze alinea.** Daar stond dat het
+exitcriterium van fase 3 "niet als browserroute is vastgelegd". Dat was
+onjuist en te stellig. De route met de muur en het raam
+(`studio.spec.ts:440`) legt het grootste deel al af: een GLB wordt geweigerd
+als hij ongeldig is of naar externe bronnen verwijst, een geldig model wordt
+gecontroleerd, in 3D getoond, bewaard en geplaatst; de symboleneditor maakt
+rechthoek, ellips en lijn met grenscontrole; en een nieuwe bibliotheekversie
+laat een bestaande plaatsing aantoonbaar ongemoeid.
+
+Wat er werkelijk ontbrak is smaller: een **zelfgemaakt lichtsymbool** — de
+elektrasymbolen elders zijn ingebouwd, niet zelf getekend, en de keuze
+"Lichtpunt" in de itemeditor werd nergens gebruikt — en het gebruiken van
+dezelfde items in **twee** projecten, terwijl alles zich in één project
+afspeelde. Beide staan nu in een eigen route.
+
 Verder blijven prijsbron, rechten-/exportmetadata en anker- en schaalmodi open.
 
 ## Aanvulling 11 september 2026 — de beeldbank kon vollopen zonder uitweg
