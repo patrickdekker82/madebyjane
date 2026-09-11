@@ -1,5 +1,77 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 7: dag, avond en lichtvisualisatie
+
+De 3D-weergave kende maar één tijdstip: een egale dag. Daarmee was het
+lichtplan uit fase 4 in 3D onzichtbaar — precies het plan waarvoor iemand de
+bundelhoeken, kleurtemperaturen en dimstanden heeft ingevuld.
+
+### De keuzes staan in een pure functie, niet in de weergave
+
+`lightPlan` bepaalt wat er 's avonds aangaat: welke armaturen branden, welke
+kant ze op schijnen, hoe warm hun licht is en hoe fel ze staan ten opzichte van
+elkaar. De weergave tekent alleen wat die functie zegt.
+
+Dat is geen nette laagjesindeling om zichzelfs wil. Chromium start in deze
+container niet, dus alles wat in de weergave zelf zou staan is hier niet te
+toetsen. Wat in een pure functie staat wél, en dat is zeven tests waard
+geworden in plaats van een aanname.
+
+### Nog steeds geen lichtberekening, en dat staat in beeld
+
+Dezelfde belofte als bij de bundels op het planblad: er komt geen lux uit, geen
+luxkaart en geen gelijkmatigheid. De avondweergave zegt dat zelf onderin het
+beeld, in dezelfde bewoording als het planblad.
+
+De felheid is een verhouding tussen de lampen onderling. Zonder opgegeven
+lichtstroom is elke lamp even fel — eerlijker dan een getal verzinnen. Mét
+lichtstroom telt de verhouding tot een gewone lamp van 800 lumen mee, begrensd
+tussen een kwart en het dubbele, zodat één bouwlamp van 20.000 lumen de rest
+niet wegvaagt.
+
+### Acht lampen, en het aantal dat niet getekend is
+
+WebGL kan maar een beperkt aantal lichtbronnen tegelijk aan. Bij een plafond vol
+spots worden daarom de felste getekend en de rest geteld, en dat getal staat in
+beeld. Zonder die mededeling zou een donkere hoek eruitzien als een
+ontwerpkeuze, terwijl er gewoon licht gepland staat.
+
+Welke lampen dat zijn ligt vast — op sterkte, dan op ID — zodat hetzelfde
+ontwerp twee keer hetzelfde beeld oplevert.
+
+### De lichtstand hoort bij het standpunt
+
+Een bewaard standpunt krijgt er een veld bij: dag of avond. "Vanaf de eettafel"
+overdag en 's avonds zijn twee verschillende platen, en juist die tweede is
+waarvoor het lichtplan is gemaakt. Standpunten van vóór dit veld openen zoals ze
+altijd deden: overdag.
+
+### Kleurtemperatuur naar beeldschermkleur
+
+Met de benadering van Tanner Helland. Exact is die niet — de omrekening van
+Kelvin naar sRGB kent geen enkele juiste uitkomst — maar de volgorde klopt, en
+dat is wat iemand ziet: 2700 K warm geel, 6500 K wit, daarboven blauw.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2
+
+TypeScript strict geslaagd, frontendbuild geslaagd. Zeven nieuwe tests in
+`light-3d.test.ts` en een achtste in `cameras.test.ts`. Volledige suite 307
+geslaagd, 6 gefaald — dezelfde zes die Chromium vragen.
+
+### Niet geverifieerd in deze omgeving
+
+**Er is geen avondbeeld gezien.** Wat `lightPlan` uitrekent is getoetst; dat de
+weergave daar een bruikbare plaat van maakt is dat niet. Concreet onbewezen:
+dat de kegels van spots er goed uitzien in plaats van als grijze mist, dat de
+gekozen sterktes een kamer opleveren die niet te donker of uitgebrand is, en dat
+acht lampen op deze hardware vloeiend draaien. Dat zijn precies de dingen die
+je pas ziet als je kijkt.
+
+### Wat fase 7 hierna nog mist
+
+Materialen op vlakken, en het narekenen van transformaties en performance op
+referentiehardware.
+
 ## Aanvulling 11 september 2026 — fase 7: een standpunt bewaren en als beeld opslaan
 
 Het exitcriterium van fase 7 vraagt dat een opgeslagen camera een bruikbaar
