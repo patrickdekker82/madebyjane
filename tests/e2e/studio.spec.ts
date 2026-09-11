@@ -3288,6 +3288,9 @@ test("presentatie samenstellen → publiceren → PDF → deellink intrekken", a
 test("eigen meubel- en lichtsymbool maken → in twee projecten gebruiken", async ({
   page,
 }) => {
+  // Deze route legt een lang pad af: twee items met een eigen symbool, twee
+  // projecten en vier plaatsingen. Dat past niet in de standaardtijd.
+  test.slow();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const credentials = JSON.parse(
@@ -3309,6 +3312,11 @@ test("eigen meubel- en lichtsymbool maken → in twee projecten gebruiken", asyn
       .getByLabel("Wachtwoord", { exact: true })
       .fill(credentials.password);
     await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+    // Eerst wachten tot het aanmelden werkelijk rond is. Meteen doornavigeren
+    // brak het verzoek af, waarna de app op het aanmeldscherm bleef staan.
+    await expect(
+      page.getByRole("button", { name: "Nieuw project", exact: true }),
+    ).toBeVisible();
     ownerCookies = await page.context().cookies();
   }
 
@@ -3316,9 +3324,12 @@ test("eigen meubel- en lichtsymbool maken → in twee projecten gebruiken", asyn
     expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
   const nieuwProject = async (naam: string) => {
     await page.goto("/");
-    await page
-      .getByRole("button", { name: "Nieuw project", exact: true })
-      .click();
+    const nieuw = page.getByRole("button", {
+      name: "Nieuw project",
+      exact: true,
+    });
+    await expect(nieuw).toBeVisible();
+    await nieuw.click();
     await page.getByLabel("Projectnaam").fill(naam);
     await page.getByLabel("Start met de fictieve woonkamer").check();
     await page
