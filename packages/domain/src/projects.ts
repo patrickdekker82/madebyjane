@@ -36,15 +36,21 @@ export class ProjectService {
       subject,
     ]);
   }
+  /**
+   * Owner en admin zien alles; anderen zien open projecten plus de beperkte
+   * projecten waarvan zij expliciet lid zijn. Het filter staat in de query en
+   * niet in de interface, zodat een beperkt project ook niet in de API lekt.
+   */
   list(ctx: Context, offset = 0) {
+    const manages = ctx.role === "owner" || ctx.role === "admin";
     return inTenant(
       this.pool,
       ctx.organizationId,
       async (c) =>
         (
           await c.query(
-            "SELECT p.*,v.id AS variant_id FROM projects p JOIN LATERAL (SELECT id FROM design_variants WHERE organization_id=p.organization_id AND project_id=p.id ORDER BY EXISTS (SELECT 1 FROM variant_copies cp WHERE cp.organization_id=p.organization_id AND cp.variant_id=design_variants.id),name,id LIMIT 1) v ON true ORDER BY p.updated_at DESC,p.id LIMIT 50 OFFSET $1",
-            [offset],
+            "SELECT p.*,v.id AS variant_id FROM projects p JOIN LATERAL (SELECT id FROM design_variants WHERE organization_id=p.organization_id AND project_id=p.id ORDER BY EXISTS (SELECT 1 FROM variant_copies cp WHERE cp.organization_id=p.organization_id AND cp.variant_id=design_variants.id),name,id LIMIT 1) v ON true WHERE $2 OR p.access='organization' OR EXISTS (SELECT 1 FROM project_memberships m WHERE m.project_id=p.id AND m.user_id=$3) ORDER BY p.updated_at DESC,p.id LIMIT 50 OFFSET $1",
+            [offset, manages, ctx.userId],
           )
         ).rows,
     );

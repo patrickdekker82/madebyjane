@@ -8,21 +8,21 @@ import {
   type QuoteRecord,
   type QuoteDefinition,
 } from "../../contracts/src/quotes";
-import { DomainError, type Role } from "./index";
+import {
+  DomainError,
+  can,
+  requirePermission,
+  type Role,
+  type Permission,
+} from "./index";
 import type { Context } from "./projects";
 import { calculateQuote } from "./quote-calculation";
 import { resourceCheck, digest, quoteContentHash } from "./quote-resources";
-export const canFinance = (role: Role) =>
-  ["owner", "admin", "finance"].includes(role);
+export const canFinance = (role: Role) => can(role, "quote.read");
 export class QuoteService {
   constructor(private pool: Pool) {}
-  private authorize(ctx: Context) {
-    if (!canFinance(ctx.role))
-      throw new DomainError(
-        "FORBIDDEN",
-        "Je hebt geen toegang tot offertes.",
-        403,
-      );
+  private authorize(ctx: Context, permission: Permission = "quote.read") {
+    requirePermission(ctx.role, permission);
   }
   private async project(c: PoolClient, project: string) {
     if (
@@ -110,7 +110,7 @@ export class QuoteService {
     });
   }
   save(ctx: Context, project: string, input: unknown) {
-    this.authorize(ctx);
+    this.authorize(ctx, "quote.write");
     const v = quoteSaveSchema.parse(input);
     return this.write(
       ctx,
@@ -122,7 +122,7 @@ export class QuoteService {
     );
   }
   finalize(ctx: Context, project: string, id: string, input: unknown) {
-    this.authorize(ctx);
+    this.authorize(ctx, "quote.finalize");
     const v = quoteFinalizeSchema.parse(input);
     return this.write(ctx, project, id, v.requestId, v.baseVersion, null);
   }
@@ -289,13 +289,17 @@ export class QuoteService {
           );
         }
       }
-      await c.query("INSERT INTO audit_events VALUES($1,$2,$3,$4,$5,now())", [
-        ctx.organizationId,
-        randomUUID(),
-        ctx.userId,
-        number ? "quote.finalized" : "quote.saved",
-        id,
-      ]);
+      await c.query(
+        "INSERT INTO audit_events(organization_id,id,user_id,action,subject_id,detail) VALUES($1,$2,$3,$4,$5,$6)",
+        [
+          ctx.organizationId,
+          randomUUID(),
+          ctx.userId,
+          number ? "quote.finalized" : "quote.saved",
+          id,
+          { version: row.version, number },
+        ],
+      );
       return row as QuoteRecord;
     });
   }
@@ -329,7 +333,7 @@ export class QuoteService {
     });
   }
   revise(ctx: Context, project: string, id: string, input: unknown) {
-    this.authorize(ctx);
+    this.authorize(ctx, "quote.write");
     const v = quoteFinalizeSchema.parse(input),
       hash = digest({ action: "revise", project, id, ...v });
     return inTenant(this.pool, ctx.organizationId, async (c) => {
@@ -399,6 +403,34 @@ export class QuoteService {
         )
       ).rows[0];
       return next as QuoteRecord;
+    });
+  }
+  /**
+   * Registratie van wie wat wanneer met deze offerte deed. Leest audit_events;
+   * deellinkregels horen bij de offerte via hun share. De namen worden in de
+   * API-laag toegevoegd, omdat de runtimeverbinding identity niet mag lezen.
+   */
+  audit(ctx: Context, project: string, id: string) {
+    this.authorize(ctx);
+    return inTenant(this.pool, ctx.organizationId, async (c) => {
+      await this.project(c, project);
+      if (
+        !(
+          await c.query(
+            "SELECT 1 FROM quote_versions WHERE project_id=$1 AND id=$2",
+            [project, id],
+          )
+        ).rowCount
+      )
+        throw new DomainError("NOT_FOUND", "Offerte niet gevonden.", 404);
+      return {
+        items: (
+          await c.query(
+            "SELECT a.id,a.action,a.user_id,a.created_at,(a.detail->>'version')::int AS version,a.detail->>'number' AS number FROM audit_events a LEFT JOIN quote_shares s ON s.id=a.subject_id WHERE a.action IN ('quote.saved','quote.finalized','quote.share_created','quote.share_revoked') AND (a.subject_id=$1 OR s.quote_id=$1) ORDER BY a.created_at DESC,a.id DESC LIMIT 200",
+            [id],
+          )
+        ).rows,
+      };
     });
   }
   events(ctx: Context, project: string, id: string, version: number) {

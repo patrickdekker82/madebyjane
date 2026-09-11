@@ -1,5 +1,6 @@
 import { MaterialService } from "../../../packages/domain/src/materials";
 import { QuoteService } from "../../../packages/domain/src/quotes";
+import { ProjectAccessService } from "../../../packages/domain/src/project-access";
 import {QuoteResources} from "../../../packages/domain/src/quote-resources";
 import {QuoteDelivery} from "../../../packages/domain/src/quote-delivery";
 import { ModelAssetService } from "../../../packages/domain/src/model-assets";
@@ -18,7 +19,11 @@ import {
   ProjectService,
   type Context,
 } from "../../../packages/domain/src/projects";
-import { DomainError, canWrite } from "../../../packages/domain/src/index";
+import {
+  DomainError,
+  canWrite,
+  requirePermission,
+} from "../../../packages/domain/src/index";
 import {
   id,
   projectInput,
@@ -142,6 +147,19 @@ export function createServer(config: {
       );
     return { userId: s.user.id, organizationId: org, role: r.rows[0].role };
   }
+  const access = new ProjectAccessService(config.runtime);
+  /**
+   * Contexten voor projectgebonden routes. De rol die de services zien is de
+   * rol voor dít project, zodat elke route organisatie én project controleert.
+   */
+  const projectContext = async (
+    headers: Parameters<typeof context>[0],
+    project: string,
+  ) => access.forProject(await context(headers), project);
+  const variantContext = async (
+    headers: Parameters<typeof context>[0],
+    variantId: string,
+  ) => access.forVariant(await context(headers), variantId);
   app.get("/api/v1/health", async () => ({ status: "ok", version: "0.0.1" }));
   app.get("/api/v1/me", async (req) => {
     const s = await session(req.headers);
@@ -230,35 +248,62 @@ export function createServer(config: {
   const quotes = new QuoteService(config.runtime);
   const resources=new QuoteResources(config.runtime),delivery=new QuoteDelivery(config.runtime,config.secret);
   const versionParams=(params:unknown)=>z.object({id,quoteId:id,version:z.coerce.number().int().min(1).max(500)}).parse(params);
-  app.get("/api/v1/projects/:id/quote-resources",async req=>resources.list(await context(req.headers),z.object({id}).parse(req.params).id));
-  app.post("/api/v1/projects/:id/quote-prices",async req=>resources.price(await context(req.headers),z.object({id}).parse(req.params).id,req.body));
-  app.post("/api/v1/projects/:id/quote-attachments",async req=>resources.attachment(await context(req.headers),z.object({id}).parse(req.params).id,req.body));
-  app.get("/api/v1/projects/:id/quote-design/:revisionId",async req=>{const p=z.object({id,revisionId:id}).parse(req.params);return resources.design(await context(req.headers),p.id,p.revisionId);});
+  app.get("/api/v1/projects/:id/quote-resources",async req=>resources.list(await projectContext(req.headers,z.object({id}).parse(req.params).id),z.object({id}).parse(req.params).id));
+  app.post("/api/v1/projects/:id/quote-prices",async req=>resources.price(await projectContext(req.headers,z.object({id}).parse(req.params).id),z.object({id}).parse(req.params).id,req.body));
+  app.post("/api/v1/projects/:id/quote-attachments",async req=>resources.attachment(await projectContext(req.headers,z.object({id}).parse(req.params).id),z.object({id}).parse(req.params).id,req.body));
+  app.get("/api/v1/projects/:id/quote-design/:revisionId",async req=>{const p=z.object({id,revisionId:id}).parse(req.params);return resources.design(await projectContext(req.headers,p.id),p.id,p.revisionId);});
   const quoteParams = (params:unknown) => z.object({id, quoteId:id}).parse(params);
-  app.get("/api/v1/projects/:id/quotes", async req => quotes.list(await context(req.headers), z.object({id}).parse(req.params).id));
-  app.post("/api/v1/projects/:id/quotes", async req => quotes.save(await context(req.headers), z.object({id}).parse(req.params).id, req.body));
+  app.get("/api/v1/projects/:id/quotes", async req => quotes.list(await projectContext(req.headers,z.object({id}).parse(req.params).id), z.object({id}).parse(req.params).id));
+  app.post("/api/v1/projects/:id/quotes", async req => quotes.save(await projectContext(req.headers,z.object({id}).parse(req.params).id), z.object({id}).parse(req.params).id, req.body));
   app.get("/api/v1/projects/:id/quotes/:quoteId/differences", async req => {
-    const p=quoteParams(req.params); return quotes.differences(await context(req.headers),p.id,p.quoteId);
+    const p=quoteParams(req.params); return quotes.differences(await projectContext(req.headers,p.id),p.id,p.quoteId);
   });
   app.post("/api/v1/projects/:id/quotes/:quoteId/finalize", async req => {
-    const p=quoteParams(req.params); return quotes.finalize(await context(req.headers),p.id,p.quoteId,req.body);
+    const p=quoteParams(req.params); return quotes.finalize(await projectContext(req.headers,p.id),p.id,p.quoteId,req.body);
   });
-  app.get("/api/v1/projects/:id/quotes/:quoteId/history",async req=>{const p=quoteParams(req.params);return quotes.history(await context(req.headers),p.id,p.quoteId);});
-  app.get("/api/v1/projects/:id/quotes/:quoteId/versions/:version",async req=>{const p=versionParams(req.params);return quotes.get(await context(req.headers),p.id,p.quoteId,p.version);});
-  app.post("/api/v1/projects/:id/quotes/:quoteId/revise",async req=>{const p=quoteParams(req.params);return quotes.revise(await context(req.headers),p.id,p.quoteId,req.body);});
-  app.get("/api/v1/projects/:id/quotes/:quoteId/versions/:version/events",async req=>{const p=versionParams(req.params);return quotes.events(await context(req.headers),p.id,p.quoteId,p.version);});
-  app.post("/api/v1/projects/:id/quotes/:quoteId/versions/:version/events",async req=>{const p=versionParams(req.params);return quotes.transition(await context(req.headers),p.id,p.quoteId,p.version,req.body);});
-  app.get("/api/v1/projects/:id/quotes/:quoteId/versions/:version/pdf",{config:{rateLimit:{max:10,timeWindow:"1 minute"}}},async(req,reply)=>{const p=versionParams(req.params),r=await delivery.export(await context(req.headers),p.id,p.quoteId,p.version);return reply.type("application/pdf").header("Content-Disposition",`attachment; filename="offerte-v${p.version}.pdf"`).header("X-Content-SHA256",r.pdf_hash).send(r.pdf);});
-  app.get("/api/v1/projects/:id/quotes/:quoteId/versions/:version/shares",async req=>{const p=versionParams(req.params);return delivery.shares(await context(req.headers),p.id,p.quoteId,p.version);});
-  app.post("/api/v1/projects/:id/quotes/:quoteId/versions/:version/shares",{config:{rateLimit:{max:10,timeWindow:"1 minute"}}},async req=>{const p=versionParams(req.params);return delivery.share(await context(req.headers),p.id,p.quoteId,p.version,req.body);});
+  // Namen horen bij identity; de runtimeverbinding mag die tabel niet lezen.
+  async function withActors<T extends { user_id: string }>(rows: T[]) {
+    const ids = [...new Set(rows.map((r) => r.user_id))];
+    const users = ids.length
+      ? (
+          await config.identity.query(
+            'SELECT id,name,email FROM identity."user" WHERE id = ANY($1)',
+            [ids],
+          )
+        ).rows
+      : [];
+    const byId = new Map(users.map((u) => [u.id, u]));
+    return rows.map((r) => ({
+      ...r,
+      user_name: byId.get(r.user_id)?.name ?? null,
+      user_email: byId.get(r.user_id)?.email ?? null,
+    }));
+  }
+  app.get("/api/v1/projects/:id/quotes/:quoteId/audit", async (req) => {
+    const p = quoteParams(req.params);
+    const r = await quotes.audit(
+      await projectContext(req.headers, p.id),
+      p.id,
+      p.quoteId,
+    );
+    return { items: await withActors(r.items) };
+  });
+  app.get("/api/v1/projects/:id/quotes/:quoteId/history",async req=>{const p=quoteParams(req.params);return quotes.history(await projectContext(req.headers,p.id),p.id,p.quoteId);});
+  app.get("/api/v1/projects/:id/quotes/:quoteId/versions/:version",async req=>{const p=versionParams(req.params);return quotes.get(await projectContext(req.headers,p.id),p.id,p.quoteId,p.version);});
+  app.post("/api/v1/projects/:id/quotes/:quoteId/revise",async req=>{const p=quoteParams(req.params);return quotes.revise(await projectContext(req.headers,p.id),p.id,p.quoteId,req.body);});
+  app.get("/api/v1/projects/:id/quotes/:quoteId/versions/:version/events",async req=>{const p=versionParams(req.params);return quotes.events(await projectContext(req.headers,p.id),p.id,p.quoteId,p.version);});
+  app.post("/api/v1/projects/:id/quotes/:quoteId/versions/:version/events",async req=>{const p=versionParams(req.params);return quotes.transition(await projectContext(req.headers,p.id),p.id,p.quoteId,p.version,req.body);});
+  app.get("/api/v1/projects/:id/quotes/:quoteId/versions/:version/pdf",{config:{rateLimit:{max:10,timeWindow:"1 minute"}}},async(req,reply)=>{const p=versionParams(req.params),r=await delivery.export(await projectContext(req.headers,p.id),p.id,p.quoteId,p.version);return reply.type("application/pdf").header("Content-Disposition",`attachment; filename="offerte-v${p.version}.pdf"`).header("X-Content-SHA256",r.pdf_hash).send(r.pdf);});
+  app.get("/api/v1/projects/:id/quotes/:quoteId/versions/:version/shares",async req=>{const p=versionParams(req.params);return delivery.shares(await projectContext(req.headers,p.id),p.id,p.quoteId,p.version);});
+  app.post("/api/v1/projects/:id/quotes/:quoteId/versions/:version/shares",{config:{rateLimit:{max:10,timeWindow:"1 minute"}}},async req=>{const p=versionParams(req.params);return delivery.share(await projectContext(req.headers,p.id),p.id,p.quoteId,p.version,req.body);});
   app.post("/api/v1/quote-shares/:id/revoke",async req=>delivery.revoke(await context(req.headers),z.object({id}).parse(req.params).id));
   app.get("/api/v1/quote-shares/:organization/:token",{config:{rateLimit:{max:30,timeWindow:"1 minute"}}},async(req,reply)=>{const p=z.object({organization:id,token:z.string().regex(/^[A-Za-z0-9_-]{43}$/)}).parse(req.params),r=await delivery.publicPdf(p.organization,p.token);return reply.type("application/pdf").header("Content-Disposition",'attachment; filename="offerte.pdf"').send(r.pdf);});
-  app.get("/api/v1/projects/:id/materials", async req => materials.list(await context(req.headers), z.object({ id }).parse(req.params).id));
+  app.get("/api/v1/projects/:id/materials", async req => materials.list(await projectContext(req.headers,z.object({ id }).parse(req.params).id), z.object({ id }).parse(req.params).id));
   app.get("/api/v1/projects/:id/quantities", async req => {
     const { variantId } = z.object({ variantId: id }).parse(req.query);
-    return materials.quantities(await context(req.headers), z.object({ id }).parse(req.params).id, variantId);
+    return materials.quantities(await projectContext(req.headers,z.object({ id }).parse(req.params).id), z.object({ id }).parse(req.params).id, variantId);
   });
-  app.post("/api/v1/projects/:id/materials", async req => materials.publish(await context(req.headers), z.object({ id }).parse(req.params).id, req.body));
+  app.post("/api/v1/projects/:id/materials", async req => materials.publish(await projectContext(req.headers,z.object({ id }).parse(req.params).id), z.object({ id }).parse(req.params).id, req.body));
   const library = new LibraryService(config.runtime);
   app.get("/api/v1/library", async (req) => {
     return library.list(await context(req.headers), libraryQuerySchema.parse(req.query));
@@ -266,6 +311,42 @@ export function createServer(config: {
   app.post("/api/v1/library", async (req) =>
     library.publish(await context(req.headers), req.body),
   );
+  // Ledenbeheer per project. De keuzelijst komt uit identity, omdat de
+  // runtimeverbinding die tabel niet mag lezen.
+  app.get("/api/v1/organization/members", async (req) => {
+    const ctx = await context(req.headers);
+    requirePermission(ctx.role, "members.manage");
+    const r = await config.identity.query(
+      'SELECT u.id,u.name,u.email,m.role FROM identity.membership m JOIN identity."user" u ON u.id=m.user_id WHERE m.organization_id=$1 ORDER BY u.name,u.id',
+      [ctx.organizationId],
+    );
+    return { items: r.rows };
+  });
+  app.get("/api/v1/projects/:id/members", async (req) => {
+    const project = z.object({ id }).parse(req.params).id;
+    const r = await access.list(await context(req.headers), project);
+    return { access: r.access, items: await withActors(r.items) };
+  });
+  app.post("/api/v1/projects/:id/access", async (req) =>
+    access.setAccess(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+      req.body,
+    ),
+  );
+  app.post("/api/v1/projects/:id/members", async (req) =>
+    access.addMember(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+      req.body,
+    ),
+  );
+  app.post("/api/v1/projects/:id/members/:userId/remove", async (req) => {
+    const p = z
+      .object({ id, userId: z.string().min(1).max(255) })
+      .parse(req.params);
+    return access.removeMember(await context(req.headers), p.id, p.userId);
+  });
   app.get("/api/v1/projects", async (req) => {
     const { offset } = z
       .object({ offset: z.coerce.number().int().min(0).max(100000).default(0) })
@@ -283,21 +364,21 @@ export function createServer(config: {
   const variant = (params: unknown) =>
     z.object({ variantId: id }).parse(params).variantId;
   app.get("/api/v1/variants/:variantId/alternatives", async (req) =>
-    service.variants(await context(req.headers), variant(req.params)),
+    service.variants(await variantContext(req.headers, variant(req.params)), variant(req.params)),
   );
   app.post("/api/v1/variants/:variantId/copies", async (req) =>
     service.copyVariant(
-      await context(req.headers),
+      await variantContext(req.headers, variant(req.params)),
       variant(req.params),
       req.body,
     ),
   );
   app.get("/api/v1/variants/:variantId/document", async (req) =>
-    service.document(await context(req.headers), variant(req.params)),
+    service.document(await variantContext(req.headers, variant(req.params)), variant(req.params)),
   );
   app.post("/api/v1/variants/:variantId/lease", async (req) =>
     service.lease(
-      await context(req.headers),
+      await variantContext(req.headers, variant(req.params)),
       variant(req.params),
       z.object({ leaseId: id }).strict().parse(req.body).leaseId,
     ),
@@ -307,17 +388,17 @@ export function createServer(config: {
     { schema: { body: z.toJSONSchema(commandSchema, { target: "draft-7" }) } },
     async (req) =>
       service.command(
-        await context(req.headers),
+        await variantContext(req.headers, variant(req.params)),
         variant(req.params),
         req.body,
       ),
   );
   app.get("/api/v1/variants/:variantId/revisions", async (req) =>
-    service.revisions(await context(req.headers), variant(req.params)),
+    service.revisions(await variantContext(req.headers, variant(req.params)), variant(req.params)),
   );
   app.post("/api/v1/variants/:variantId/revisions", async (req) =>
     service.revision(
-      await context(req.headers),
+      await variantContext(req.headers, variant(req.params)),
       variant(req.params),
       z
         .object({ name: z.string().trim().min(1).max(120) })
@@ -327,7 +408,7 @@ export function createServer(config: {
   );
   app.get("/api/v1/variants/:variantId/plan.svg", async (req, reply) => {
     const scene = await service.document(
-      await context(req.headers),
+      await variantContext(req.headers, variant(req.params)),
       variant(req.params),
     );
     const scale = z

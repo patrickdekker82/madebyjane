@@ -1,5 +1,74 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 1: rechtenmatrix en projectmembership
+
+Dit pakt twee open punten van fase 1: de **volledige rechtenmatrix** en **expliciete projectmembership**. Tot nu toe zag elk organisatielid elk project in de werkruimte, en stonden de rechten verspreid over losse rollijsten (`canWrite`, `canFinance`, `requireFinance`).
+
+### De rechtenmatrix als enige bron
+
+`packages/domain/src/permissions.ts` bevat de matrix uit paragraaf 15 van de opdracht, met de gevraagde splitsing: `project.read/write`, `library.manage`, `quote.read/write/finalize`, `costs.read`, `members.manage` en `share.publish/revoke`. Services en routes vragen een recht op in plaats van een rolnaam. Het bestand importeert niets uit `index.ts`, zodat de matrix geen kringverwijzing maakt en ook in de interface bruikbaar is.
+
+Deze stap is gedragsbehoudend: dezelfde rollen mogen precies hetzelfde als daarvoor. De splitsing maakt alleen expliciet wat eerst impliciet in één `requireFinance` zat. `permissions.test.ts` pint de volledige matrix vast, zodat een rol die een recht wint of verliest een bewuste wijziging is en geen bijvangst.
+
+### Projecttoegang
+
+Migration 0014 voegt `projects.access` toe (`organization` of `restricted`, default `organization`) en de tabel `project_memberships` met RLS, FORCE RLS en tenantpolicy. Bestaande projecten blijven open: niemand raakt werk kwijt door deze wijziging, en er is niets nep-teruggevuld.
+
+`resolveProjectRole` is de enige plek die beslist wie bij een project mag:
+
+- Owner en admin beheren de werkruimte en houden hun rol.
+- Een expliciet projectlid krijgt de projectrol. Die kan hoger of lager zijn dan de werkruimterol; alleen owner en admin kennen hem toe.
+- Anders geldt de werkruimterol, maar alleen bij een open project.
+
+Een beperkt project zonder lidmaatschap geeft **404 en geen 403**: het bestaan van het project is zelf al informatie. Projectrollen zijn bewust beperkt tot designer, finance en viewer — owner of admin toekennen zou ledenbeheer via een project uitbreidbaar maken tot de hele werkruimte.
+
+De API resolveert dit vóór de services: elke projectroute gebruikt `projectContext`, elke variantroute `variantContext`, zodat de rol die een service ziet de rol voor dát project is. Daarmee is "organisatie en project op elke route gecontroleerd" ook werkelijk op elke route waar. Het filter op de projectlijst staat in de query, niet in de interface, zodat een beperkt project ook niet via de API lekt. Het intrekken van een offerte-deellink loopt via een link-ID en controleert nu eveneens de projecttoegang.
+
+De interface heeft een dialoog **Projecttoegang** voor owner en admin: openstellen of beperken, leden toevoegen met een projectrol, en lidmaatschap intrekken. Ledenbeheer schrijft auditregels (`project.access_changed`, `project.member_set`, `project.member_removed`) met dezelfde `detail`-kolom uit migration 0013.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded), pnpm 11.19.0
+
+- TypeScript strict en productiebuild geslaagd (6,41 s). De bestaande waarschuwing over chunks groter dan 500 kB blijft open.
+- Vitest: **170 van 172 tests geslaagd**. Nieuw: 3 matrixproeven en 7 toegangsproeven (open project blijft zichtbaar; beperken sluit project-, variant-, offerte- en planbladroutes af met 404; owner en admin houden toegang; een projectlid krijgt de projectrol en mag tekenen waar zijn werkruimterol dat niet toestaat; een projectrol kan ook mínder geven; ledenbeheer is 403 voor andere rollen; intrekken sluit weer af en schrijft precies één auditregel; een andere organisatie bereikt niets).
+- Playwright: **15 van 18 routes geslaagd (3,6 min)**. De nieuwe route beperkt een project in de browser, laat zien dat het bij de collega uit de lijst verdwijnt, geeft toegang terug via lidmaatschap en trekt die weer in. `outputs/qa/projecttoegang.png` is visueel gecontroleerd.
+- Gecontroleerd dat de productiebundel geen servercode of SQL bevat: de gedeelde waarden staan in `packages/contracts`, niet in de domeinmodule met databasetoegang.
+
+### Niet geverifieerd in deze omgeving
+
+De 2 mislukte Vitest-tests en 3 mislukte browserroutes zijn **niet** door deze wijziging veroorzaakt: dezelfde vijf vielen om vóór deze wijziging, met identieke foutmelding en regelnummer. Oorzaak blijft dat Chromium in deze container zijn sandbox niet kan starten, waardoor server-side PDF-rendering 500 geeft. `chromiumSandbox: true` is opnieuw niet aangepast.
+
+De nieuwe browserroute liep aanvankelijk vast op de auth-rate-limit van 30 verzoeken per minuut. Die limiet is **niet** verlaagd; de route hergebruikt bestaande sessies en geeft de twee gesimuleerde personen elk hun eigen `x-studio-client-ip`, wat overeenkomt met twee mensen op twee machines.
+
+### Eerstvolgende stap
+
+Van fase 1 resteren: account recovery en wachtwoordherstel, productie-Compose met installatie- en herstelprocedure, assetroutes en S3-adapter, en operationele back-up/restore. De productiecontainers en de installatieproef vragen een omgeving waar Docker daadwerkelijk gedraaid kan worden. Er is nog steeds geen productiegeschiktheidsclaim.
+
+
+## Aanvulling 11 september 2026 — auditoverzicht per offerte
+
+Dit sluit het open punt "een auditoverzicht in de gebruikersinterface" uit de vorige aanvulling. De tabel `audit_events` werd al geschreven maar nergens gelezen; er was dus registratie zonder inzage.
+
+Een offerte heeft nu een knop **Auditoverzicht bekijken**. Die toont per regel de handeling (concept opgeslagen, definitief gemaakt, deellink gemaakt, deellink ingetrokken), de offerteversie waarop de handeling sloeg, het offertenummer bij finalisatie, en wie het deed met naam, e-mailadres en tijdstip in Europe/Amsterdam. Nieuwste regel bovenaan, maximaal 200 regels. Het overzicht is alleen leesbaar; er is geen pad om auditregels te schrijven of te wijzigen vanuit de interface.
+
+Migration 0013 voegt `detail jsonb` toe aan `audit_events` (maximaal 2000 tekens) plus een index op `(organization_id,subject_id,created_at DESC)`. De offerte-, deel- en intrekpaden schrijven de versie in dat veld. Regels van vóór deze migration hebben geen versie; het scherm toont daar "versie niet vastgelegd" in plaats van een geraden waarde. Bestaande audit-inserts in de andere modules zijn ongewijzigd gebleven en blijven werken, omdat de nieuwe kolom een default heeft.
+
+Rechten en isolatie: alleen owner, admin en finance kunnen het overzicht opvragen; designer en viewer krijgen server-side 403. RLS op `audit_events` beperkt de rijen tot de eigen organisatie. Namen komen uit `identity."user"` via de identity-verbinding, omdat de runtimeverbinding die tabel niet mag lezen; het domein blijft daarmee los van identity.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded), pnpm 11.19.0
+
+- TypeScript strict geslaagd; productiebuild geslaagd (7,26 s). De bestaande waarschuwing over chunks groter dan 500 kB blijft open.
+- Vitest: **160 van 162 tests geslaagd**. De nieuwe integratieproef dekt volgorde, versie, offertenummer, naam en e-mailadres per regel, het maken en intrekken van een deellink bij de juiste versie, scheiding tussen twee offertes in hetzelfde project, 403 voor designer en viewer, en 404 bij een onbekende offerte en vanuit een andere organisatie.
+- Playwright: **14 van 17 routes geslaagd (3,5 min)**. De offerteroute opent het auditoverzicht na definitief maken en leest "Definitief gemaakt · versie 2" en "Concept opgeslagen · versie 1"; `outputs/qa/offerte-audit.png` is visueel gecontroleerd en toont versie, nummer, naam, e-mailadres en tijdstip.
+
+### Niet geverifieerd in deze omgeving
+
+De twee mislukte Vitest-tests en de drie mislukte browserroutes zijn **niet** door deze wijziging veroorzaakt: dezelfde vijf vallen om op de ongewijzigde code van commit 82305d1, met identieke foutmelding en regelnummer. De oorzaak is deze container: Chromium kan zijn sandbox niet starten, dus elke server-side PDF-render geeft 500. `chromiumSandbox: true` is bewust niet aangepast om de proef te laten slagen. De auditassertie voor deellinks is daarom bewust in een proef zonder renderer gezet: die schrijft de PDF-bytes vooraf in `quote_exports`, zodat de registratie wordt getoetst en niet de renderer. Het renderpad houdt zijn eigen bestaande tests. Linux-CI met de gepinde Chromium moet de vijf resterende proeven bevestigen.
+
+### Eerstvolgende stap
+
+Het resterende open punt van fase 6 is een aantoonbare PDF-proef met meerdere planbladen; die vraagt een werkende Chromium-sandbox. Daarna blijven de grenzen uit de vorige aanvulling staan: fase-5-presentatiebouwer, PPTX, productie-exportqueue, installatie/back-up/herstel en fase-9-hardening. Een werkruimtebreed auditscherm buiten offertes is niet gebouwd en is geen onderdeel van fase 6.
+
+
 ## Aanvulling 10 september 2026 — afronding offerteworkflow fase 6
 
 Deze aanvulling is leidend voor fase 6; de oudere rapportages hieronder blijven als historische testregistraties staan. De wijzigingen zijn samengevoegd met main cb03021, inclusief de materiaalberekeningen en nieuwe editor-/browsertests. Het eerste offertedeel uit PR #2 staat al in main; de afronding krijgt een afzonderlijke pull request.
