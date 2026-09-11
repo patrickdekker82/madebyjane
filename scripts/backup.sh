@@ -5,6 +5,7 @@ source "$(dirname "$0")/backup-lib.sh"
 
 require_backup_tools
 DATA_DIR=$(data_dir)
+DATABASE_NAME=$(require_value POSTGRES_DB)
 STAGE_PARENT=${BACKUP_STAGING_DIR:-"$DATA_DIR/backups/staging"}
 mkdir -p "$STAGE_PARENT"
 STAGE=$(mktemp -d "$STAGE_PARENT/backup.XXXXXX")
@@ -34,8 +35,16 @@ compose stop --timeout 60 api
 api_stopped=1
 
 mkdir -p "$STAGE/db" "$STAGE/assets" "$STAGE/config"
-compose exec -T -u postgres postgres pg_dump -U postgres -d "$(require_value POSTGRES_DB)" -Fc >"$STAGE/db/database.dump"
+compose exec -T -u postgres postgres pg_dump -U postgres -d "$DATABASE_NAME" -Fc >"$STAGE/db/database.dump"
 compose exec -T -u postgres postgres pg_dumpall -U postgres --globals-only >"$STAGE/db/globals.sql"
+
+# Een geldige custom dump kan van de standaarddatabase `postgres` zijn. Lees de
+# inhoud met de client uit dezelfde PostgreSQL-container en eis producttabellen.
+compose exec -T -u postgres postgres pg_restore --list <"$STAGE/db/database.dump" >"$STAGE/db/database.list"
+for core_table in projects presentations quote_versions; do
+  grep -Fq "TABLE public $core_table" "$STAGE/db/database.list" || fail "Database-dump bevat producttabel $core_table niet."
+done
+rm "$STAGE/db/database.list"
 
 [ -d "$DATA_DIR/assets" ] || fail "Assetmap ontbreekt: $DATA_DIR/assets"
 cp -a "$DATA_DIR/assets/." "$STAGE/assets/"

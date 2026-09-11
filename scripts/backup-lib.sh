@@ -27,9 +27,10 @@ restic_password_file() {
   printf '%s' "$file"
 }
 restic_run() {
-  local repository=$1
+  local repository=$1 password_file
   shift
-  RESTIC_REPOSITORY="$repository" RESTIC_PASSWORD_FILE="$(restic_password_file)" restic "$@"
+  password_file=$(restic_password_file)
+  RESTIC_REPOSITORY="$repository" RESTIC_PASSWORD_FILE="$password_file" restic "$@"
 }
 backup_repository() {
   case "$1" in

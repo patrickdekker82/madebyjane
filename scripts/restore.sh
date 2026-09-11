@@ -6,20 +6,23 @@ source "$(dirname "$0")/backup-lib.sh"
 SOURCE=""
 TARGET=""
 DATABASE_CHECK=0
+CONFIRM_EMPTY_TARGET=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --from) SOURCE=${2:-}; shift 2 ;;
     --target) TARGET=${2:-}; shift 2 ;;
     --verify-database) DATABASE_CHECK=1; shift ;;
-    --confirm-empty-target) shift ;;
+    --confirm-empty-target) CONFIRM_EMPTY_TARGET=1; shift ;;
     *) fail "Gebruik: restore.sh --from synology|external --target /lege/herstelmap --confirm-empty-target [--verify-database]" ;;
   esac
 done
 
 [ "$SOURCE" = synology ] || [ "$SOURCE" = external ] || fail "Kies expliciet --from synology of --from external."
 [ -n "$TARGET" ] || fail "--target is verplicht."
+[ "$CONFIRM_EMPTY_TARGET" -eq 1 ] || fail "Bevestig een leeg hersteldoel met --confirm-empty-target."
 case "$TARGET" in /*) ;; *) fail "--target moet een absoluut pad zijn." ;; esac
-[ "$TARGET" != "$(data_dir)" ] || fail "Herstel naar de productiedatamap is verboden."
+PRODUCTION_DATA_DIR=$(data_dir)
+[ "$TARGET" != "$PRODUCTION_DATA_DIR" ] || fail "Herstel naar de productiedatamap is verboden."
 if [ -e "$TARGET" ] && [ "$(find "$TARGET" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
   fail "Hersteldoel is niet leeg: $TARGET"
 fi
@@ -48,8 +51,9 @@ if [ "$DATABASE_CHECK" -eq 1 ]; then
   docker exec -u postgres "$name" pg_isready -U postgres -d interieurstudio >/dev/null || fail "Geïsoleerde herstel-PostgreSQL startte niet."
   docker exec -i -u postgres "$name" psql -v ON_ERROR_STOP=1 -U postgres -d postgres <"$TARGET/db/globals.sql"
   docker exec -u postgres "$name" pg_restore -v --clean --if-exists -U postgres -d interieurstudio /recovery/db/database.dump
-  docker exec -u postgres "$name" psql -v ON_ERROR_STOP=1 -U postgres -d interieurstudio -Atc \
-    "SELECT to_regclass('public.projects'), to_regclass('public.presentations'), to_regclass('public.quote_versions'), to_regclass('identity.\"user\"');" | grep -q 'projects' || fail "Herstelde database mist kernschema's."
+  schema_count=$(docker exec -u postgres "$name" psql -v ON_ERROR_STOP=1 -U postgres -d interieurstudio -Atc \
+    "SELECT count(*) FROM (VALUES (to_regclass('public.projects')), (to_regclass('public.presentations')), (to_regclass('public.quote_versions')), (to_regclass('identity.\"user\"'))) AS required(table_name) WHERE table_name IS NOT NULL;")
+  [ "$schema_count" = 4 ] || fail "Herstelde database mist een of meer kernschema's."
   note "Geïsoleerde databaseherstelcontrole geslaagd."
 fi
 

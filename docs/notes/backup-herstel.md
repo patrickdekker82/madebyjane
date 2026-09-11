@@ -25,6 +25,14 @@ restic-bestemmingen moeten slagen voordat de status `success` wordt geregistreer
 De `EXIT`-handler start de API ook na een fout opnieuw; een mislukte herstart
 wordt nadrukkelijk als fout gemeld.
 
+De databasenaam wordt vóór `pg_dump` in een kale shell-toewijzing gevalideerd.
+Dat is bewust: een eerdere vorm plaatste `require_value POSTGRES_DB` rechtstreeks
+in een commando-argument. Bij een ontbrekende variabele beëindigde de fout dan
+alleen de commando-substitutie; `pg_dump` kon vervolgens stilzwijgend de
+standaarddatabase `postgres` dumpen. De nieuwe vorm stopt het script vóór het
+onderhoudsvenster en controleert daarna met `pg_restore --list` dat de dump de
+producttabellen voor projecten, presentaties en offertes bevat.
+
 Restic behoudt standaard 14 dagelijkse, 8 wekelijkse en 12 maandelijkse
 snapshots. De waarden zijn instelbaar via de drie `BACKUP_KEEP_*`-variabelen.
 De status staat lokaal in `STUDIO_DATA_DIR/backups/status.json` en verschijnt in
@@ -35,10 +43,14 @@ Pas gebruiker en checkoutpad aan, kopieer beide naar `/etc/systemd/system/` en
 activeer ze pas na een handmatige geslaagde backup. `Persistent=true` vangt een
 gemiste run na herstart op; de geplande start blijft 03:15 met maximaal 15
 minuten spreiding. Dit is een RPO-startdoel van 24 uur, geen al gemeten garantie.
+De unit laadt `.env` niet in systemd; `backup.sh` leest uitsluitend de waarden
+die het nodig heeft uit dat bestand.
 
 ## Herstel en verificatie
 
-Een restore kan nooit naar `STUDIO_DATA_DIR` en vereist een absoluut, leeg doel:
+Een restore kan nooit naar `STUDIO_DATA_DIR` en vereist een absoluut, leeg doel.
+De operator moet die leegte ook expliciet bevestigen met
+`--confirm-empty-target`; zonder die vlag start het script niet:
 
 ```sh
 scripts/restore.sh --from synology --target /srv/interieurstudio-recovery --confirm-empty-target
@@ -58,7 +70,7 @@ en offerte-smoketest uit. Er mag nooit tegelijk een tweede productie-writer
 draaien. De omschakeling is pas veilig na controle van TLS, storage-manifest,
 schema-compatibiliteit en gebruikersstroom.
 
-## Grenzen en vervolg
+## Niet geverifieerd in deze omgeving
 
 Deze omgeving heeft geen actieve Docker-daemon, restic-bestemming, Synology of
 tweede Linux-host. De scripts zijn syntactisch gecontroleerd; de echte
