@@ -1,5 +1,69 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — de beeldbank kon vollopen zonder uitweg
+
+Bij het opruimen van de eigen losse eindjes bleek er een hardere grens te zitten
+dan gedacht. De beeldbank kent een quota van 50 afbeeldingen of 200 MiB per
+werkruimte, en er was **geen enkele manier om er iets uit te halen**: de
+runtime-rol had alleen `SELECT` en `INSERT` op `underlay_assets`, er was geen
+route en er was geen knop. Een tweemansstudio die een jaar lang plattegronden
+inleest, loopt daar tegenaan en komt er dan niet meer uit.
+
+### Weghalen mag, wijzigen niet
+
+**Migration 0020** geeft de runtime-rol `DELETE` op `underlay_assets`, en
+bewust geen `UPDATE`: een geplaatste onderlegger blijft onveranderlijk zolang
+hij bestaat. Anders zou een ingemeten plattegrond onder een tekening kunnen
+veranderen zonder dat de tekening het merkt.
+
+### Of iets weg mág, is een controle en geen recht
+
+De verwijzingen naar een beeld zitten in JSONB-documenten — een onderlegger in
+een ontwerp, een logo of moodboardbeeld in een presentatie, en hetzelfde in een
+gepubliceerde presentatieversie — en niet in refererende kolommen die de
+database zelf kan bewaken. De domeinlaag zoekt daarom bewust grof: komt de ID
+érgens in zo'n document voor, dan weigert het verwijderen, met de plek erbij.
+
+Die ruime uitleg is de veilige kant om op te missen. Een beeld dat onterecht
+blijft staan kost ruimte; een beeld dat onterecht verdwijnt haalt een ingemeten
+plattegrond onder een tekening vandaan, of laat een gepubliceerde presentatie
+die de klant al heeft zonder beeld achter. Het betekent ook dat een nieuwe plek
+die beelden gebruikt hier vanzelf onder valt.
+
+De rij gaat eerst, het object daarna: andersom zou een rij kunnen achterblijven
+die naar niets wijst, en dat is een kapotte onderlegger.
+
+### Een eerdere notitie die niet klopte
+
+In de vorige aanvulling stond "geen opruimpad voor opslagobjecten bij het
+verwijderen van een project of presentatie" als openstaand punt. Dat was te
+stellig: er is in de hele app **geen enkele verwijderroute** voor projecten,
+presentaties of ontwerpen, dus weesobjecten konden langs die weg niet ontstaan.
+Het punt was een toekomstige zorg, geen bestaand gebrek. Wat er wél was, is
+hierboven opgelost.
+
+### De bouwstraat draaide alles dubbel
+
+`ci.yml` stond op `on: [push, pull_request]`, waardoor elke commit op een
+PR-tak twee keer volledig werd geverifieerd. Dat verdubbelde de belasting zonder
+iets extra's aan te tonen, en leverde een run op waarin vijf tests op 45 seconden
+afliepen terwijl dezelfde code in de parallelle job slaagde. Nu: pull requests
+worden geverifieerd, en main bij elke push erop.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+TypeScript strict geslaagd, frontendbuild geslaagd. `underlay-storage.test.ts`
+14 geslaagd (4 nieuw: een ongebruikt beeld verdwijnt uit database én opslag met
+auditregel, alle drie de gebruiksplekken weigeren met de plek in de melding,
+verwijderen maakt werkelijk quotaruimte vrij, en een onbekend beeld geeft 404);
+`integration.test.ts` 20 geslaagd, inclusief dat leesrechten niet volstaan.
+Volledige run: 287 geslaagd, 6 gefaald — de bekende Chromium-sandboxfouten.
+
+### Niet geverifieerd in deze omgeving
+
+De knop in de beeldbank is niet door een browser gedraaid; er is voor deze stap
+geen E2E-route bijgekomen. De server- en domeinkant liggen wel vast.
+
 ## Aanvulling 11 september 2026 — fase 2 in CI bevestigd
 
 De drie aanvullingen hieronder (metadata verwijderen, lokaal werk als variant,

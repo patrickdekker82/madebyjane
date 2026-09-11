@@ -1,5 +1,13 @@
 name: Foundation verification
-on: [push, pull_request]
+# Elke commit op een PR-tak werd twee keer volledig geverifieerd: één keer op
+# push en één keer op pull_request. Dat verdubbelde de belasting op de runners
+# zonder iets extra's aan te tonen, en leverde daardoor trage runs op met
+# tests die op 45 seconden afliepen terwijl dezelfde code elders slaagde.
+# Nu: pull requests worden geverifieerd, en main zelf bij elke push erop.
+on:
+  push:
+    branches: [main]
+  pull_request:
 permissions:
   contents: read
 jobs:

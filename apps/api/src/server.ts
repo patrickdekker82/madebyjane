@@ -334,6 +334,19 @@ export function createServer(config: {
   app.get("/api/v1/images", async (req) =>
     underlays.list(await context(req.headers)),
   );
+  /*
+   * Een beeld uit de beeldbank halen. Zonder dit liep een werkruimte vol zonder
+   * uitweg. De domeinlaag weigert een beeld dat nog ergens in gebruik is.
+   */
+  app.delete(
+    "/api/v1/underlay-assets/:id",
+    { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+    async (req) =>
+      underlays.delete(
+        await context(req.headers),
+        z.object({ id }).parse(req.params).id,
+      ),
+  );
   app.get("/api/v1/underlay-assets/:id", async (req, reply) => {
     const assetId = z.object({ id }).parse(req.params).id;
     const image = await underlays.get(await context(req.headers), assetId);

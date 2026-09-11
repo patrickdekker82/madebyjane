@@ -8,7 +8,7 @@ import {
   orientationRotation,
   MIRRORED_ORIENTATIONS,
 } from "../../image-import/src/index";
-import { DomainError, canWrite } from "./index";
+import { DomainError, canWrite, requirePermission } from "./index";
 import type { Context } from "./projects";
 
 const MAX_BYTES = 16 * 1024 * 1024;
@@ -182,6 +182,85 @@ export class UnderlayAssetService {
    * moodboard zetten. De bytes blijven hier buiten; die worden per afbeelding
    * opgehaald.
    */
+  /**
+   * Waar een beeld nog in gebruik is, of null wanneer het nergens voorkomt.
+   *
+   * De verwijzingen zitten in JSONB-documenten — een onderlegger in een
+   * ontwerp, een logo of moodboardbeeld in een presentatie — en niet in
+   * refererende kolommen die de database zelf kan bewaken. Daarom zoekt dit
+   * bewust grof: komt de ID érgens in zo'n document voor, dan is het beeld in
+   * gebruik. Die ruime uitleg is de veilige kant om op te missen. Een beeld dat
+   * onterecht bewaard blijft kost ruimte; een beeld dat onterecht verdwijnt
+   * haalt een ingemeten plattegrond onder een tekening vandaan, of laat een
+   * gepubliceerde presentatie die de klant al heeft zonder beeld achter.
+   *
+   * Het betekent ook dat een nieuwe plek die beelden gebruikt hier vanzelf
+   * onder valt, zonder dat iemand eraan hoeft te denken.
+   */
+  private async usedBy(c: PoolClient, assetId: string) {
+    const plekken = [
+      { tabel: "design_documents", kolom: "document", wat: "een ontwerp" },
+      { tabel: "presentations", kolom: "definition", wat: "een presentatie" },
+      {
+        tabel: "presentation_versions",
+        kolom: "definition",
+        wat: "een gepubliceerde presentatieversie",
+      },
+    ] as const;
+    for (const plek of plekken) {
+      const gevonden = await c.query(
+        `SELECT 1 FROM ${plek.tabel} WHERE ${plek.kolom}::text LIKE '%' || $1 || '%' LIMIT 1`,
+        [assetId],
+      );
+      if (gevonden.rowCount) return plek.wat;
+    }
+    return null;
+  }
+
+  /**
+   * Een beeld uit de beeldbank halen.
+   *
+   * Zonder dit liep een werkruimte vol zonder uitweg: 50 beelden of 200 MiB en
+   * geen manier om er een weg te halen. Verwijderen kan alleen als het beeld
+   * nergens meer in gebruik is; anders weigert het met de plek erbij, zodat de
+   * gebruiker weet waar hij moet kijken.
+   *
+   * De rij gaat eerst, het object daarna. Andersom zou een rij kunnen
+   * achterblijven die naar niets wijst, en dat is een kapotte onderlegger. Een
+   * object dat blijft liggen kost hooguit ruimte.
+   */
+  delete(ctx: Context, id: string) {
+    requirePermission(ctx.role, "library.manage");
+    return inTenant(this.pool, ctx.organizationId, async (c) => {
+      const rij = (
+        await c.query("SELECT id FROM underlay_assets WHERE id=$1", [id])
+      ).rows[0];
+      if (!rij)
+        throw new DomainError("NOT_FOUND", "Afbeelding niet gevonden.", 404);
+      const gebruikt = await this.usedBy(c, id);
+      if (gebruikt)
+        throw new DomainError(
+          "IMAGE_IN_USE",
+          `Deze afbeelding wordt nog gebruikt in ${gebruikt}. Haal hem daar eerst weg.`,
+          409,
+        );
+      await c.query("DELETE FROM underlay_assets WHERE id=$1", [id]);
+      await c.query("INSERT INTO audit_events VALUES($1,$2,$3,$4,$5,now())", [
+        ctx.organizationId,
+        randomUUID(),
+        ctx.userId,
+        "underlay.deleted",
+        id,
+      ]);
+      // Pas nu het object; mislukt dat, dan blijft er hooguit een bestand
+      // liggen dat niemand meer kan opvragen.
+      await this.storage
+        .delete({ organizationId: ctx.organizationId, assetId: id })
+        .catch(() => {});
+      return { id, deleted: true };
+    });
+  }
+
   list(ctx: Context) {
     return inTenant(this.pool, ctx.organizationId, async (c) => ({
       items: (

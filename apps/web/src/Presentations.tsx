@@ -913,20 +913,53 @@ function MoodboardEditor({
       {picking && !full && (
         <div className="image-picker">
           {unused.map((item) => (
-            <button
-              key={item.id}
-              title={`${item.widthPx} × ${item.heightPx} px`}
-              onClick={() => {
-                add(item.id);
-                setPicking(false);
-              }}
-            >
-              <StoredImage
-                assetId={item.id}
-                organizationId={organizationId}
-                alt={`Afbeelding van ${new Date(item.createdAt).toLocaleDateString("nl-NL")}`}
-              />
-            </button>
+            <div key={item.id} className="image-choice">
+              <button
+                title={`${item.widthPx} × ${item.heightPx} px`}
+                onClick={() => {
+                  add(item.id);
+                  setPicking(false);
+                }}
+              >
+                <StoredImage
+                  assetId={item.id}
+                  organizationId={organizationId}
+                  alt={`Afbeelding van ${new Date(item.createdAt).toLocaleDateString("nl-NL")}`}
+                />
+              </button>
+              {/*
+               * Zonder dit loopt een werkruimte vol zonder uitweg: 50 beelden
+               * of 200 MiB, en geen manier om er een weg te halen. De server
+               * weigert een beeld dat nog ergens in gebruik is en zegt waar;
+               * die melding komt hier terecht.
+               */}
+              <button
+                className="subtle danger"
+                disabled={busy}
+                aria-label={`Afbeelding uit de beeldbank verwijderen (${item.widthPx} × ${item.heightPx} px)`}
+                onClick={() => {
+                  setBusy(true);
+                  setError("");
+                  void (async () => {
+                    try {
+                      await api(
+                        "/underlay-assets/" + item.id,
+                        organizationId,
+                        undefined,
+                        "DELETE",
+                      );
+                      await onUploaded();
+                    } catch (e) {
+                      setError((e as Error).message);
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
           ))}
           {!unused.length && (
             <p className="small">

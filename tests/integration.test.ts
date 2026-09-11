@@ -23,7 +23,7 @@ let cookieA = "",
   variant = "",
   scene: any;
 async function request(
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "DELETE",
   url: string,
   body?: unknown,
   cookie = cookieA,
@@ -838,6 +838,10 @@ test("onderleggerafbeeldingen: type, maten, herhaling, quota en werkruimtegrens"
   expect((await db.admin.query("SELECT count(*)::int AS count FROM underlay_assets WHERE organization_id=$1", [orgA])).rows[0].count).toBe(1);
   // Een ander bestand onder dezelfde ID wordt geweigerd.
   expect((await upload(assetId, makePng(10, 10))).statusCode).toBe(409);
+
+  // Leesrechten zijn niet genoeg om een beeld uit de beeldbank te halen.
+  expect((await request("DELETE", "/api/v1/underlay-assets/" + assetId, undefined, cookieViewer)).statusCode).toBe(403);
+  expect((await request("GET", "/api/v1/underlay-assets/" + assetId)).statusCode).toBe(200);
 
   // Actieve inhoud en onbekende typen komen er niet in.
   for (const bad of [

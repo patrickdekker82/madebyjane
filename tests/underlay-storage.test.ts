@@ -22,7 +22,7 @@ const org = randomUUID(),
 let cookie = "",
   userId = "";
 
-const call = (method: "GET" | "POST", url: string, body?: Buffer) =>
+const call = (method: "GET" | "POST" | "DELETE", url: string, body?: Buffer) =>
   server.app.inject({
     method,
     url,
@@ -298,4 +298,186 @@ test("een gespiegelde foto wordt geweigerd in plaats van spiegelverkeerd getoond
   );
   expect(geweigerd.statusCode).toBe(422);
   expect(geweigerd.json().message).toMatch(/gespiegeld/);
+});
+
+/**
+ * Een werkruimte kon vollopen zonder uitweg: 50 beelden of 200 MiB, en geen
+ * manier om er een weg te halen. Verwijderen kan nu wel, maar alleen wat
+ * nergens meer in gebruik is.
+ */
+test("een ongebruikt beeld gaat weg, uit de database én uit de opslag", async () => {
+  const id = randomUUID(),
+    png = makePng(64, 48);
+  expect(
+    (await call("POST", "/api/v1/underlay-assets/" + id, png)).statusCode,
+  ).toBe(200);
+  expect(
+    Buffer.from(await storage.get({ organizationId: org, assetId: id })).equals(
+      png,
+    ),
+  ).toBe(true);
+
+  const weg = await call("DELETE", "/api/v1/underlay-assets/" + id);
+  expect(weg.statusCode, weg.body).toBe(200);
+
+  expect(
+    (await db.admin.query("SELECT 1 FROM underlay_assets WHERE id=$1", [id]))
+      .rowCount,
+  ).toBe(0);
+  // En het bestand ligt er ook werkelijk niet meer.
+  await expect(
+    storage.get({ organizationId: org, assetId: id }),
+  ).rejects.toThrow();
+  expect((await call("GET", "/api/v1/underlay-assets/" + id)).statusCode).toBe(
+    404,
+  );
+  // Het is navolgbaar wie dit gedaan heeft.
+  expect(
+    (
+      await db.admin.query(
+        "SELECT count(*)::int AS n FROM audit_events WHERE action='underlay.deleted' AND subject_id=$1",
+        [id],
+      )
+    ).rows[0].n,
+  ).toBe(1);
+});
+
+test("een beeld dat nog in gebruik is wordt niet weggegooid", async () => {
+  const project = randomUUID(),
+    variant = randomUUID();
+  await db.admin.query(
+    "INSERT INTO projects(organization_id,id,name,customer,description) VALUES($1,$2,'Project','Klant','')",
+    [org, project],
+  );
+  await db.admin.query(
+    "INSERT INTO design_variants VALUES($1,$2,$3,'Basisontwerp')",
+    [org, variant, project],
+  );
+
+  // Drie plekken die een beeld kunnen vasthouden, elk apart getoetst.
+  const gevallen = [
+    {
+      wat: "een ontwerp",
+      maak: async (assetId: string) => {
+        const scene = {
+          schemaVersion: 1,
+          revision: 0,
+          organizationId: org,
+          projectId: project,
+          designVariantId: variant,
+          floorId: randomUUID(),
+          nodes: [],
+          walls: [],
+          openings: [],
+          items: [],
+          annotations: [],
+          ledPaths: [],
+          underlay: {
+            assetId,
+            widthPx: 64,
+            heightPx: 48,
+            x: 0,
+            y: 0,
+            rotation: 0,
+            opacity: 45,
+            calibration: null,
+          },
+        };
+        await db.admin.query(
+          "INSERT INTO design_documents VALUES($1,$2,$3,0,$4)",
+          [org, variant, scene.floorId, scene],
+        );
+      },
+    },
+    {
+      wat: "een presentatie",
+      maak: async (assetId: string) => {
+        await db.admin.query(
+          "INSERT INTO presentations(organization_id,id,project_id,definition,user_id) VALUES($1,$2,$3,$4,$5)",
+          [
+            org,
+            randomUUID(),
+            project,
+            { logoAssetId: assetId, blocks: [] },
+            userId,
+          ],
+        );
+      },
+    },
+    {
+      wat: "een gepubliceerde presentatieversie",
+      maak: async (assetId: string) => {
+        const presentatie = randomUUID();
+        await db.admin.query(
+          "INSERT INTO presentations(organization_id,id,project_id,definition,user_id) VALUES($1,$2,$3,'{}',$4)",
+          [org, presentatie, project, userId],
+        );
+        await db.admin.query(
+          "INSERT INTO presentation_versions(organization_id,presentation_id,version,request_id,input_hash,definition,content,content_hash,template_version,user_id) VALUES($1,$2,1,$3,'h',$4,'{}','c','t',$5)",
+          [
+            org,
+            presentatie,
+            randomUUID(),
+            {
+              blocks: [
+                { type: "moodboard", images: [{ assetId, caption: "" }] },
+              ],
+            },
+            userId,
+          ],
+        );
+      },
+    },
+  ];
+
+  for (const geval of gevallen) {
+    const id = randomUUID();
+    expect(
+      (await call("POST", "/api/v1/underlay-assets/" + id, makePng(64, 48)))
+        .statusCode,
+      geval.wat,
+    ).toBe(200);
+    await geval.maak(id);
+
+    const geweigerd = await call("DELETE", "/api/v1/underlay-assets/" + id);
+    expect(geweigerd.statusCode, geval.wat).toBe(409);
+    // De melding zegt wáár het beeld nog vastzit, anders kan niemand het oplossen.
+    expect(geweigerd.json().message).toContain(geval.wat);
+    // En het beeld staat er nog, in de database en in de opslag.
+    expect(
+      (await call("GET", "/api/v1/underlay-assets/" + id)).statusCode,
+      geval.wat,
+    ).toBe(200);
+  }
+});
+
+test("verwijderen maakt ruimte vrij binnen de quota", async () => {
+  const meten = async () =>
+    Number(
+      (
+        await db.admin.query(
+          "SELECT coalesce(sum(coalesce(byte_size,octet_length(bytes))),0)::bigint AS bytes FROM underlay_assets WHERE organization_id=$1",
+          [org],
+        )
+      ).rows[0].bytes,
+    );
+  const voor = await meten();
+  const id = randomUUID(),
+    png = makePng(200, 200);
+  expect(
+    (await call("POST", "/api/v1/underlay-assets/" + id, png)).statusCode,
+  ).toBe(200);
+  expect(await meten()).toBe(voor + png.length);
+  expect(
+    (await call("DELETE", "/api/v1/underlay-assets/" + id)).statusCode,
+  ).toBe(200);
+  // Zonder dit zou de werkruimte vol blijven en was verwijderen zinloos.
+  expect(await meten()).toBe(voor);
+});
+
+test("een beeld dat niet bestaat levert 404, geen stille instemming", async () => {
+  expect(
+    (await call("DELETE", "/api/v1/underlay-assets/" + randomUUID()))
+      .statusCode,
+  ).toBe(404);
 });

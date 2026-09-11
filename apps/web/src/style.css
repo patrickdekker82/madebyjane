@@ -641,6 +641,19 @@ form {
   max-height: 160px;
   overflow-y: auto;
 }
+/* Kiezen en verwijderen naast elkaar: het beeld kiest, het kruisje ruimt op. */
+.image-choice {
+  position: relative;
+  display: inline-block;
+}
+.image-choice .danger {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
 .image-picker button {
   padding: 0;
   border: 1px solid var(--line);
