@@ -1129,6 +1129,21 @@ form {
 .underlay label {
   font-size: 10px;
 }
+/* Paginakeuze bij een PDF met meer dan één pagina. */
+.underlay-pdf {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.underlay-pdf label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.underlay-pdf input[type="number"] {
+  width: 64px;
+}
 .layers {
   padding: 16px 0;
   border-top: 1px solid var(--line);

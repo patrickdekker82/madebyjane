@@ -1,5 +1,70 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 2: een PDF-pagina als onderlegger
+
+Een bestaande plattegrond komt vaak als PDF binnen. Tot nu toe werd die
+geweigerd en moest de gebruiker zelf eerst een afbeelding maken.
+
+### De PDF komt de app niet in — alleen de pixels
+
+Een PDF is actieve inhoud: hij kan scripts, formulieren en externe verwijzingen
+bevatten. Hij wordt daarom nooit getoond en nooit bewaard. De gekozen pagina
+wordt **op het apparaat van de gebruiker** tot pixels gerekend met pdf.js; wat
+daarna wordt verstuurd is een gewone PNG, langs dezelfde route en dezelfde
+keuring als elke andere onderlegger. De server heeft dus geen PDF-parser
+gekregen — precies de component waar je er geen wilt hebben.
+
+Het uploadcontract is niet verruimd: de server accepteert nog steeds alleen PNG
+en JPEG, en weigert een PDF nog even hard als eerst.
+
+### Keuzes die in de proef vastliggen
+
+De pagina wordt op 2× de PDF-eenheid gerekend (ongeveer 144 dpi), met de langste
+zijde begrensd op 4000 px: een A0-plan wordt dus kleiner gerekend in plaats van
+geweigerd, en de verhouding blijft kloppen zodat de kalibratie klopt. Waar de
+pagina doorzichtig is wordt wit gevuld; anders zou de onderlegger als zwart vlak
+onder de tekening komen te staan. Bij meer dan één pagina kiest de gebruiker er
+een; bij precies één pagina gaat die meteen door.
+
+pdf.js wordt pas geladen zodra iemand werkelijk een PDF kiest. De hoofdbundel
+groeide daardoor met ongeveer 2 kB; pdf.js zelf staat in eigen chunks (496 kB
+plus een worker van 1,3 MB) die verder niemand ophaalt.
+
+### Twee afhankelijkheden erbij
+
+`pdfjs-dist` 6.3.289 (Apache-2.0) voor de omzetting, en `@napi-rs/canvas` 1.0.9
+(MIT) als ontwikkelafhankelijkheid, zodat dezelfde code in Node te toetsen is.
+Beide staan in `docs/DEPENDENCY_LICENSES.json`; de inventaris telt nu 38 directe
+pakketten.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+TypeScript strict geslaagd, frontendbuild geslaagd. `pdf-underlay.test.ts` 7
+tests geslaagd, met echte, in de proef zelf geschreven PDF's: het aantal
+pagina's, een pagina die een geldige PNG van de juiste maten oplevert (door
+`readImageHeader` gekeurd), de gekozen pagina is werkelijk die pagina, een
+niet-bestaande pagina geeft een uitlegbare melding, een A0-plan blijft binnen de
+grens met kloppende verhouding, lege plekken zijn wit en bedrukte plekken niet,
+en een bestand dat geen PDF is wordt geweigerd. Volledige run: 283 geslaagd, 6
+gefaald.
+
+### Niet geverifieerd in deze omgeving
+
+Die 6 zijn de bekende Chromium-sandboxfouten. De browserroute is uitgebreid met
+een tweepagina-PDF waarvan pagina 2 wordt gekozen en de maten worden nagekeken,
+maar die stap is hier **niet gedraaid**. De Node-proef gebruikt hetzelfde pdf.js
+als de browser, maar een ander canvas (`@napi-rs/canvas` tegenover
+`OffscreenCanvas`); dat de omzetting in een echte browser werkt is hier dus niet
+bewezen, alleen in CI.
+
+### Stand van fase 2
+
+Hiermee zijn de drie openstaande punten van fase 2 gebouwd: metadata verwijderen,
+lokaal werk veiligstellen als variant, en een PDF-pagina als onderlegger. De
+fase-exit vraagt daarnaast een geslaagde editor-E2E; die draait in CI en niet
+hier. Fase 2 wordt daarom niet als afgerond gemarkeerd zolang die run niet groen
+is gezien.
+
 ## Aanvulling 11 september 2026 — fase 2: lokaal werk veiligstellen als variant
 
 Staat er op de server een nieuwere versie dan die waarop het lokale klad

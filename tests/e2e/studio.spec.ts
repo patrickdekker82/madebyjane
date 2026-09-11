@@ -2054,6 +2054,35 @@ test("onderlegger uploaden → inmeten met twee punten → schaal klopt", async 
   });
   await expect(page.getByRole("alert")).toContainText("PNG- of JPEG");
 
+  /*
+   * Een PDF mag wél, maar niet als PDF: de gekozen pagina wordt in de browser
+   * tot pixels gerekend en als PNG verstuurd. Dit bestand heeft twee pagina's
+   * met verschillende maten, zodat aan de maten te zien is welke pagina er
+   * werkelijk is omgezet.
+   */
+  const { makePdf } = await import("../helpers/pdf");
+  await page.getByLabel("Onderlegger kiezen", { exact: true }).setInputFiles({
+    name: "plattegrond.pdf",
+    mimeType: "application/pdf",
+    buffer: makePdf([
+      { widthPt: 200, heightPt: 100 },
+      { widthPt: 300, heightPt: 400 },
+    ]),
+  });
+  const paginakeuze = page.getByLabel("Pagina (1 tot 2)", { exact: true });
+  await expect(paginakeuze).toBeVisible();
+  await paginakeuze.fill("2");
+  await page
+    .getByRole("button", { name: "Pagina gebruiken", exact: true })
+    .click();
+  await saved();
+  // 300 x 400 pt op 2x: de tweede pagina, niet de eerste.
+  await expect(page.getByText("600 × 800 px", { exact: false })).toBeVisible();
+  await page.screenshot({ path: "outputs/qa/onderlegger-pdf.png" });
+  await page
+    .getByRole("button", { name: "Onderlegger verwijderen", exact: true })
+    .click();
+
   // Een echte PNG van 1000 x 800 px, in de test zelf gemaakt.
   const { makePng } = await import("../helpers/image");
   await page.getByLabel("Onderlegger kiezen", { exact: true }).setInputFiles({
