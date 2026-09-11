@@ -8,4 +8,10 @@ printf 'Diagnose voor %s (%s)\n' "$(hostname)" "$(git -C "$ROOT" describe --alwa
 docker compose --env-file "$ENV_FILE" -f "$ROOT/compose.production.yaml" ps
 docker compose --env-file "$ENV_FILE" -f "$ROOT/compose.production.yaml" exec -T api \
   node -e "fetch('http://127.0.0.1:4311/api/v1/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"
+if [ -r "$(awk -F= '$1 == "STUDIO_DATA_DIR" {sub(/^[^=]*=/, ""); print; exit}' "$ENV_FILE")/backups/status.json" ]; then
+  printf 'Back-upstatus: '
+  cat "$(awk -F= '$1 == "STUDIO_DATA_DIR" {sub(/^[^=]*=/, ""); print; exit}' "$ENV_FILE")/backups/status.json"
+else
+  printf 'Back-upstatus: nog geen geslaagde backup of verificatie geregistreerd.\n'
+fi
 printf 'API-healthcheck is geslaagd. Controleer extern HTTPS en certificaatstatus afzonderlijk na DNS-propagatie.\n'

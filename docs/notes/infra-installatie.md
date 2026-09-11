@@ -78,7 +78,8 @@ publieke proxy-poorten.
 - De startschatting blijft 4 vCPU, 8–16 GiB RAM en 100–200 GiB lokale SSD,
   met één zware export tegelijk. De ingestelde containergrenzen zijn een
   verdeling binnen die startschatting, geen gemeten capaciteitsclaim.
-- Deze taak omvat geen back-up, restore, backupverificatie, projectimport of
-  -export, storagemigratie of aparte workercontainer. Exports draaien in de
-  huidige applicatie nog in proces; de aanwezige `pg-boss`-dependency wordt
-  hiervoor niet gestart.
+- Back-up, restore en backupverificatie staan nu in
+  [backup-herstel.md](backup-herstel.md). Projectimport/-export,
+  storagemigratie en een aparte workercontainer vallen daar niet onder.
+  Exports draaien in de huidige applicatie nog in proces; de aanwezige
+  `pg-boss`-dependency wordt hiervoor niet gestart.
