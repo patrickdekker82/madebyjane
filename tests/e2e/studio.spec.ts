@@ -3271,3 +3271,179 @@ test("presentatie samenstellen → publiceren → PDF → deellink intrekken", a
   await expect(page.getByRole("dialog")).toContainText("Versie 1");
   expect(errors).toEqual([]);
 });
+
+/*
+ * Het exitcriterium van fase 3: "gebruiker maakt zonder programmeren een nieuw
+ * meubelsymbool en lichtsymbool, gebruikt dit in twee projecten en importeert
+ * veilig een bekend GLB."
+ *
+ * Het GLB-deel, de symboleneditor en "een nieuwe versie verandert geen
+ * bestaande plaatsing" liggen al vast in de route hierboven met de muur en het
+ * raam. Wat daar níét in zit, en hier wel: een zelfgemaakt **lichtsymbool** —
+ * de elektrasymbolen elders zijn ingebouwd, niet zelf getekend — en het
+ * gebruiken van dezelfde items in **twee** projecten. Dat laatste is de kern:
+ * een bibliotheekitem hoort van de werkruimte te zijn en niet van het project
+ * waarin het toevallig is gemaakt.
+ */
+test("eigen meubel- en lichtsymbool maken → in twee projecten gebruiken", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) await page.context().addCookies(ownerCookies);
+  await page.goto("/");
+  // De herstelroute meldt zich af, dus een bewaarde sessie kan verlopen zijn.
+  await expect(
+    page
+      .getByLabel("E-mailadres")
+      .or(page.getByRole("button", { name: "Nieuw project", exact: true }))
+      .first(),
+  ).toBeVisible();
+  if (await page.getByLabel("E-mailadres").isVisible()) {
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+    ownerCookies = await page.context().cookies();
+  }
+
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  const nieuwProject = async (naam: string) => {
+    await page.goto("/");
+    await page
+      .getByRole("button", { name: "Nieuw project", exact: true })
+      .click();
+    await page.getByLabel("Projectnaam").fill(naam);
+    await page.getByLabel("Start met de fictieve woonkamer").check();
+    await page
+      .getByRole("button", { name: "Project aanmaken", exact: true })
+      .click();
+    await saved();
+    return page.url();
+  };
+  const bibliotheek = () =>
+    page
+      .getByRole("button", { name: "Eigen bibliotheek", exact: true })
+      .click();
+
+  const eersteProject = await nieuwProject("Bibliotheekstudio een");
+
+  /*
+   * Twee items, zonder ook maar iets te programmeren: een meubel en een
+   * lichtpunt, elk met een zelf getekend 2D-symbool.
+   */
+  for (const item of [
+    {
+      naam: "Studiobank",
+      type: "sofa",
+      categorie: "Zitmeubels",
+      breedte: "2200",
+      diepte: "900",
+      hoogte: "760",
+      vorm: "Rechthoek toevoegen",
+    },
+    {
+      naam: "Studiospot",
+      type: "light",
+      categorie: "Verlichting",
+      breedte: "120",
+      diepte: "120",
+      hoogte: "60",
+      vorm: "Ellips toevoegen",
+    },
+  ]) {
+    await bibliotheek();
+    await page
+      .getByRole("button", { name: "Bibliotheekitem maken", exact: true })
+      .click();
+    await page.getByLabel("Bibliotheeknaam", { exact: true }).fill(item.naam);
+    await page
+      .getByLabel("Item categorie", { exact: true })
+      .fill(item.categorie);
+    await page
+      .getByLabel("Bibliotheektype", { exact: true })
+      .selectOption(item.type);
+    await page
+      .getByLabel("Bibliotheekbreedte", { exact: true })
+      .fill(item.breedte);
+    await page
+      .getByLabel("Bibliotheekdiepte", { exact: true })
+      .fill(item.diepte);
+    await page
+      .getByLabel("Bibliotheekhoogte", { exact: true })
+      .fill(item.hoogte);
+    // Een eigen symbool tekenen: vorm erbij, maat instellen, toepassen.
+    await page.getByRole("button", { name: item.vorm, exact: true }).click();
+    await page.getByLabel("Symbool width", { exact: true }).fill("60");
+    await page.getByLabel("Symbool height", { exact: true }).fill("60");
+    await page
+      .getByRole("button", { name: "Vorm toepassen", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Versie bewaren", exact: true })
+      .click();
+    // Terug in de lijst, dus de versie is werkelijk bewaard.
+    await expect(
+      page.getByRole("button", { name: `Plaats ${item.naam}`, exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Sluiten", exact: true }).click();
+  }
+  await page.screenshot({ path: "outputs/qa/bibliotheek-eigen-symbolen.png" });
+
+  /** Plaatst beide items en geeft terug wat er daarna in het ontwerp staat. */
+  const plaatsBeide = async () => {
+    for (const naam of ["Studiobank", "Studiospot"]) {
+      await bibliotheek();
+      await page
+        .getByRole("button", { name: `Plaats ${naam}`, exact: true })
+        .click();
+      await saved();
+    }
+    return page.evaluate(async () => {
+      const variantId = location.pathname.split("/").pop();
+      const me = await (await fetch("/api/v1/me")).json();
+      const organizationId = me.organizations[0].id;
+      const document = await (
+        await fetch("/api/v1/variants/" + variantId + "/document", {
+          headers: { "x-organization-id": organizationId },
+        })
+      ).json();
+      return (document.items as { kind: string; libraryRef?: unknown }[])
+        .filter((i) => i.libraryRef)
+        .map((i) => ({ kind: i.kind, ref: JSON.stringify(i.libraryRef) }));
+    });
+  };
+
+  const inEerste = await plaatsBeide();
+  // Beide staan er, en het lichtpunt is werkelijk als lichtpunt bewaard.
+  expect(inEerste.map((i) => i.kind).sort()).toEqual(["light", "sofa"]);
+
+  // Een tweede project, en dezelfde twee items komen er gewoon in.
+  const tweedeProject = await nieuwProject("Bibliotheekstudio twee");
+  expect(tweedeProject).not.toBe(eersteProject);
+  const inTweede = await plaatsBeide();
+  expect(inTweede.map((i) => i.kind).sort()).toEqual(["light", "sofa"]);
+  // Het is dezelfde bibliotheekversie: een item is van de werkruimte, niet van
+  // het project waarin het toevallig is gemaakt.
+  expect(inTweede.map((i) => i.ref).sort()).toEqual(
+    inEerste.map((i) => i.ref).sort(),
+  );
+  await page.screenshot({ path: "outputs/qa/bibliotheek-tweede-project.png" });
+
+  // En het eerste project is er niets van kwijtgeraakt.
+  await page.goto(eersteProject);
+  await saved();
+  await expect(
+    page.getByRole("button", { name: "Studiobank", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Studiospot", exact: true }),
+  ).toBeVisible();
+  expect(errors).toEqual([]);
+});
