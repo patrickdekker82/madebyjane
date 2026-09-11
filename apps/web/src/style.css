@@ -995,6 +995,35 @@ form {
   border-radius: 4px;
   pointer-events: none;
 }
+/*
+ * De camerabalk staat bovenop het doek en niet ernaast: de weergave vult zijn
+ * hele vak, en een balk ernaast zou het beeld kleiner maken.
+ */
+.viewer-cameras {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+}
+.viewer-cameras form {
+  display: flex;
+  gap: 6px;
+}
+.viewer-cameras input {
+  width: 180px;
+  max-width: 40vw;
+}
+.viewer-cameras button,
+.viewer-cameras input {
+  background: #f9f8f0dc;
+  font-size: 11px;
+  padding: 5px 9px;
+}
 .canvas-pan {
   position: absolute;
   top: 16px;

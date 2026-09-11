@@ -286,7 +286,7 @@ export async function presentationPptx(
         accent,
         font,
       );
-    if (resolved.type === "products")
+    if (resolved.type === "products") {
       table(
         deck,
         s,
@@ -300,6 +300,25 @@ export async function presentationPptx(
         accent,
         font,
       );
+      // Dezelfde regel als in de PDF: wat is weggelaten, en wat verplicht
+      // vermeld moet worden. Een PowerPoint gaat net zo goed de deur uit.
+      const rechten = [
+        resolved.withheld
+          ? `Van ${resolved.withheld} product${resolved.withheld === 1 ? "" : "en"} zijn de leveranciersgegevens niet opgenomen: de rechten staan dat buiten de werkruimte niet toe.`
+          : "",
+        ...resolved.attributions,
+      ].filter(Boolean);
+      if (rechten.length)
+        s.addText(rechten.join(" · "), {
+          x: margin,
+          y: slide.height - 0.9,
+          w: slide.width - margin * 2,
+          h: 0.4,
+          fontSize: 9,
+          fontFace: font,
+          color: ink,
+        });
+    }
     if (resolved.type === "lighting")
       table(
         deck,

@@ -1741,7 +1741,11 @@ function Editor() {
               <Suspense
                 fallback={<div className="center">3D-weergave openen…</div>}
               >
-                <Viewer scene={scene} />
+                <Viewer
+                  scene={scene}
+                  onCommand={command}
+                  disabled={disabled}
+                />
               </Suspense>
             </ViewError>
           )}
