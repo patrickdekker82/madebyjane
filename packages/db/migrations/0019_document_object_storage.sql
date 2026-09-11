@@ -2,6 +2,10 @@
 -- opslagprovider. Dit zijn de grootste bestanden in de database: 20 MB per
 -- offerte-PDF en 40 MB per presentatiebestand, tegen 16 MB voor een onderlegger.
 -- Bestaande rijen houden hun bytes tot een beheerder ze verplaatst.
+--
+-- De runtime-rol krijgt hier bewust GEEN UPDATE-recht. Een vastgelegde export
+-- is onveranderlijk: de app schrijft hem één keer en leest hem daarna alleen.
+-- Het verhuisscript is een beheerhandeling en draait op een beheerverbinding.
 DO $$ DECLARE tab text; kolom text; BEGIN
  FOREACH tab IN ARRAY ARRAY['quote_exports','presentation_exports','presentation_decks'] LOOP
   kolom := CASE WHEN tab = 'presentation_decks' THEN 'pptx' ELSE 'pdf' END;
@@ -13,7 +17,6 @@ DO $$ DECLARE tab text; kolom text; BEGIN
   EXECUTE format('UPDATE %I SET byte_size = octet_length(%I) WHERE byte_size IS NULL', tab, kolom);
   -- Nooit allebei leeg: een rij wijst naar de opslag of draagt de bytes zelf.
   EXECUTE format('ALTER TABLE %I ADD CONSTRAINT %I CHECK (stored OR %I IS NOT NULL)', tab, tab || '_bytes_somewhere', kolom);
-  EXECUTE format('GRANT UPDATE(%I,stored,byte_size) ON %I TO studio_runtime', kolom, tab);
   EXECUTE format('CREATE UNIQUE INDEX %I ON %I(organization_id,asset_id)', tab || '_asset', tab);
  END LOOP;
 END $$;

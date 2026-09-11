@@ -17,9 +17,15 @@ De zes proeven die het documentpad dekken hebben Chromium nodig en vallen in dez
 ### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
 
 - TypeScript strict en productiebuild geslaagd (9,35 s).
-- Vitest: **263 van 269 tests geslaagd**; zes nieuwe proeven op het documentpad.
+- Vitest: **265 van 271 tests geslaagd**; zes nieuwe proeven op het documentpad en twee op de onveranderlijkheid.
 - Playwright: **18 van 22 routes geslaagd** — gelijk aan vóór deze wijziging.
 - De 6 + 4 afwijkingen zijn onveranderd dezelfde Chromium-sandboxfouten van deze container.
+
+### Een te ruim recht, door de bouwstraat gevangen
+
+De eerste opzet gaf de runtime-rol `UPDATE` op de blobkolommen, omdat het verhuisscript dat nodig leek te hebben. Linux-CI liet daarop een bestaande proef vallen die bewaakt dat een vastgelegde offerte-export **onveranderlijk** is voor de app. Dat was terecht: geen enkel applicatiepad wijzigt die kolommen — de app schrijft een export één keer en leest hem daarna alleen.
+
+Het recht is weer weg, bij de documenten én bij de onderleggers. Verplaatsen is een beheerhandeling: het script vraagt nu om `ADMIN_DATABASE_URL` en weigert te draaien op de runtimeverbinding. De eigenschap staat nu ook vastgelegd in proeven die zonder renderer draaien, zodat hij niet opnieuw stilletjes kan verdwijnen: de runtime-rol kan de vier assettabellen niet wijzigen en niet verwijderen.
 
 ### Eerstvolgende stap
 

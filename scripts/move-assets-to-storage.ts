@@ -6,8 +6,8 @@
  * eerst wat het gaat doen. Het is herhaalbaar: al verplaatste rijen slaat het
  * over, en het leegt de kolom pas nadat het object teruggelezen en vergeleken is.
  *
- *   pnpm tsx scripts/move-assets-to-storage.ts            # alleen tonen
- *   pnpm tsx scripts/move-assets-to-storage.ts --uitvoeren
+ *   ADMIN_DATABASE_URL=... pnpm tsx scripts/move-assets-to-storage.ts
+ *   ADMIN_DATABASE_URL=... pnpm tsx scripts/move-assets-to-storage.ts --uitvoeren
  */
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
@@ -183,18 +183,18 @@ export async function moveDocumentsToStorage(
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const uitvoeren = process.argv.includes("--uitvoeren");
-  const url = process.env.DATABASE_URL;
+  // Bewust een beheerverbinding: de runtime-rol mag een vastgelegde export of
+  // onderlegger niet wijzigen, en dat hoort zo te blijven. Verplaatsen is een
+  // beheerhandeling en vraagt daarom om een eigen verbinding.
+  const url = process.env.ADMIN_DATABASE_URL;
   if (!url) {
     console.error(
-      "DATABASE_URL ontbreekt. Zet die op de runtimeverbinding van de studio.",
+      "ADMIN_DATABASE_URL ontbreekt. Verplaatsen vraagt een beheerverbinding; de runtime-rol mag vastgelegde bestanden niet wijzigen.",
     );
     process.exit(1);
   }
   const root = process.env.STORAGE_DIR ?? resolve("work/assets");
-  const pool = guardPool(
-    new Pool({ connectionString: url, max: 2 }),
-    "runtime",
-  );
+  const pool = guardPool(new Pool({ connectionString: url, max: 2 }), "beheer");
   console.log(`Database : ${url.replace(/:\/\/[^@]*@/, "://***@")}`);
   console.log(`Opslag   : ${root}`);
   console.log(

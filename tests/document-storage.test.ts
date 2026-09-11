@@ -2,6 +2,7 @@ import { beforeAll, afterAll, test, expect } from "vitest";
 import { randomUUID, createHash } from "node:crypto";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { localDatabase } from "../scripts/local-db";
+import { inTenant } from "../packages/db/src/index";
 import { LocalStorage } from "../packages/storage/src/index";
 import {
   documentBytes,
@@ -220,4 +221,28 @@ test("elke documentrij krijgt een eigen opaque sleutel", async () => {
     expect(s).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
     );
+});
+
+test("de app mag een vastgelegd bestand niet wijzigen of wissen", async () => {
+  // Dit is de kern van een onveranderlijke export: de runtime-rol schrijft hem
+  // één keer en leest hem daarna alleen. Het verhuisscript draait daarom op een
+  // beheerverbinding en niet op deze rol.
+  for (const { tabel, kolom } of tabellen) {
+    await expect(
+      inTenant(db.runtime, org, (c) =>
+        c.query(`UPDATE ${tabel} SET ${kolom}='x'`),
+      ),
+      `${tabel}.${kolom}`,
+    ).rejects.toThrow(/permission denied/i);
+    await expect(
+      inTenant(db.runtime, org, (c) =>
+        c.query(`UPDATE ${tabel} SET stored=false`),
+      ),
+      `${tabel}.stored`,
+    ).rejects.toThrow(/permission denied/i);
+    await expect(
+      inTenant(db.runtime, org, (c) => c.query(`DELETE FROM ${tabel}`)),
+      `${tabel} delete`,
+    ).rejects.toThrow(/permission denied/i);
+  }
 });

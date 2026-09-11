@@ -2,6 +2,7 @@ import { beforeAll, afterAll, test, expect } from "vitest";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { localDatabase } from "../scripts/local-db";
+import { inTenant } from "../packages/db/src/index";
 import { createAuth } from "../packages/auth/src/index";
 import { createServer } from "../apps/api/src/server";
 import { LocalStorage } from "../packages/storage/src/index";
@@ -230,4 +231,19 @@ test("het verhuisscript toont eerst, verplaatst daarna en is herhaalbaar", async
   });
   expect(opnieuw.bekeken).toBe(0);
   expect(opnieuw.verplaatst).toBe(0);
+});
+
+test("de app mag een opgeslagen onderlegger niet wijzigen", async () => {
+  // Een geplaatste onderlegger is vastgelegd: de app schrijft hem één keer.
+  // Verplaatsen naar de opslag is een beheerhandeling, geen apphandeling.
+  await expect(
+    inTenant(db.runtime, org, (c) =>
+      c.query("UPDATE underlay_assets SET bytes=NULL,stored=true"),
+    ),
+  ).rejects.toThrow(/permission denied/i);
+  await expect(
+    inTenant(db.runtime, org, (c) =>
+      c.query("UPDATE underlay_assets SET byte_size=1"),
+    ),
+  ).rejects.toThrow(/permission denied/i);
 });
