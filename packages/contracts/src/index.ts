@@ -87,6 +87,15 @@ export const libraryQuerySchema = z
     offset: z.coerce.number().int().min(0).max(100000).default(0),
     q: z.string().trim().max(120).default(""),
     category: z.string().trim().max(80).default(""),
+    /**
+     * Gearchiveerde items staan standaard niet in de lijst: ze worden niet meer
+     * gevoerd. Ze moeten wel te vínden zijn, anders valt er niets terug te
+     * halen — vandaar deze schakelaar in plaats van ze te verbergen.
+     */
+    archived: z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .transform((v) => v === true || v === "true")
+      .default(false),
   })
   .strict();
 /**

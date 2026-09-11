@@ -36,17 +36,36 @@ export function LibraryPanel({
     baseVersion: number;
     definition: LibraryDefinition;
   } | null>(null);
-  const [filters, setFilters] = useState({ q: "", category: "" });
+  /**
+   * `archived` bepaalt welke helft van de bibliotheek je ziet: wat er gevoerd
+   * wordt, of wat er is opgeruimd. Gearchiveerde items zijn niet verdwenen —
+   * ze zijn alleen niet meer in de aanbieding — dus ze moeten te vinden zijn.
+   */
+  const [filters, setFilters] = useState({
+    q: "",
+    category: "",
+    archived: false,
+  });
   const load = async (offset = 0, selectedFilters = filters) => {
     setBusy(true);
-    if (offset === 0) { setRows([]); setNext(null); }
+    if (offset === 0) {
+      setRows([]);
+      setNext(null);
+    }
     try {
       const result = await api<{
         items: LibraryVersion[];
         nextOffset: number | null;
-      }>("/library?" + new URLSearchParams({
-        offset: String(offset), ...selectedFilters,
-      }), organizationId);
+      }>(
+        "/library?" +
+          new URLSearchParams({
+            offset: String(offset),
+            q: selectedFilters.q,
+            category: selectedFilters.category,
+            archived: String(selectedFilters.archived),
+          }),
+        organizationId,
+      );
       setRows((old) => (offset ? [...old, ...result.items] : result.items));
       setNext(result.nextOffset);
     } catch (e) {
@@ -75,8 +94,8 @@ export function LibraryPanel({
         if (value) {
           setError("");
           setEditing(undefined);
-          setFilters({ q: "", category: "" });
-          void load(0, { q: "", category: "" });
+          setFilters({ q: "", category: "", archived: false });
+          void load(0, { q: "", category: "", archived: false });
         }
       }}
     >
@@ -89,39 +108,92 @@ export function LibraryPanel({
           <Dialog.Title>Eigen meubelbibliotheek</Dialog.Title>
           <Dialog.Description>
             Bewaar vaste maten als eigen meubel of lichtpunt. Een nieuwe versie
-            verandert geen bestaande plaatsingen. Gebruik eigen 2D-symbolen of koppel een ondersteund GLB-model.
+            verandert geen bestaande plaatsingen. Gebruik eigen 2D-symbolen of
+            koppel een ondersteund GLB-model.
           </Dialog.Description>
           {editing === undefined ? (
             <>
-              {canEdit && <details>
-                <summary>3D-model controleren (GLB)</summary>
-                <Suspense fallback={<p>Modelcontrole laden…</p>}><GlbInspector organizationId={organizationId} onSaved={asset => {
-                  edit(null);
-                  setModel({ assetId: asset.id, width: asset.width, depth: asset.depth, height: asset.height });
-                  setFootprint({ width: asset.width, depth: asset.depth });
-                }} /></Suspense>
-              </details>}
-              <form className="library-search" onSubmit={(event) => {
-                event.preventDefault();
-                const data = new FormData(event.currentTarget);
-                const nextFilters = {
-                  q: String(data.get("q") ?? "").trim(),
-                  category: String(data.get("category") ?? "").trim(),
-                };
-                setFilters(nextFilters);
-                setError("");
-                void load(0, nextFilters);
-              }}>
-                <label>Zoeken
-                  <input name="q" defaultValue={filters.q} aria-label="Bibliotheek zoeken" maxLength={120}
-                    placeholder="Naam, zoekterm, leverancier of artikelnummer" disabled={busy} />
+              {canEdit && (
+                <details>
+                  <summary>3D-model controleren (GLB)</summary>
+                  <Suspense fallback={<p>Modelcontrole laden…</p>}>
+                    <GlbInspector
+                      organizationId={organizationId}
+                      onSaved={(asset) => {
+                        edit(null);
+                        setModel({
+                          assetId: asset.id,
+                          width: asset.width,
+                          depth: asset.depth,
+                          height: asset.height,
+                        });
+                        setFootprint({
+                          width: asset.width,
+                          depth: asset.depth,
+                        });
+                      }}
+                    />
+                  </Suspense>
+                </details>
+              )}
+              <form
+                className="library-search"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const data = new FormData(event.currentTarget);
+                  const nextFilters = {
+                    q: String(data.get("q") ?? "").trim(),
+                    category: String(data.get("category") ?? "").trim(),
+                    archived: filters.archived,
+                  };
+                  setFilters(nextFilters);
+                  setError("");
+                  void load(0, nextFilters);
+                }}
+              >
+                <label>
+                  Zoeken
+                  <input
+                    name="q"
+                    defaultValue={filters.q}
+                    aria-label="Bibliotheek zoeken"
+                    maxLength={120}
+                    placeholder="Naam, zoekterm, leverancier of artikelnummer"
+                    disabled={busy}
+                  />
                 </label>
-                <label>Categorie
-                  <input name="category" defaultValue={filters.category} aria-label="Bibliotheekcategorie filter" maxLength={80}
-                    placeholder="Exacte categorie · leeg voor alle" disabled={busy} />
+                <label>
+                  Categorie
+                  <input
+                    name="category"
+                    defaultValue={filters.category}
+                    aria-label="Bibliotheekcategorie filter"
+                    maxLength={80}
+                    placeholder="Exacte categorie · leeg voor alle"
+                    disabled={busy}
+                  />
                 </label>
-                <button type="submit" disabled={busy}>Zoeken in bibliotheek</button>
+                <button type="submit" disabled={busy}>
+                  Zoeken in bibliotheek
+                </button>
               </form>
+              <button
+                disabled={busy}
+                aria-pressed={filters.archived}
+                onClick={() => {
+                  const nextFilters = {
+                    ...filters,
+                    archived: !filters.archived,
+                  };
+                  setFilters(nextFilters);
+                  setError("");
+                  void load(0, nextFilters);
+                }}
+              >
+                {filters.archived
+                  ? "Terug naar de bibliotheek"
+                  : "Archief tonen"}
+              </button>
               {canEdit && (
                 <button
                   className="primary"
@@ -132,7 +204,15 @@ export function LibraryPanel({
                 </button>
               )}
               {busy && <p role="status">Bibliotheek laden…</p>}
-              {!busy && rows.length === 0 && <p>{filters.q || filters.category ? "Geen items gevonden voor deze zoekopdracht." : "Nog geen eigen items."}</p>}
+              {!busy && rows.length === 0 && (
+                <p>
+                  {filters.q || filters.category
+                    ? "Geen items gevonden voor deze zoekopdracht."
+                    : filters.archived
+                      ? "Er staat niets in het archief."
+                      : "Nog geen eigen items."}
+                </p>
+              )}
               <ul style={{ listStyle: "none", padding: 0 }}>
                 {rows.map((row) => (
                   <li
@@ -143,10 +223,17 @@ export function LibraryPanel({
                     }}
                   >
                     <strong>{row.definition.name}</strong>
-                    {row.definition.catalog && <p className="small">
-                      {[row.definition.catalog.category, row.definition.catalog.supplier,
-                        row.definition.catalog.sku].filter(Boolean).join(" · ")}
-                    </p>}
+                    {row.definition.catalog && (
+                      <p className="small">
+                        {[
+                          row.definition.catalog.category,
+                          row.definition.catalog.supplier,
+                          row.definition.catalog.sku,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    )}
                     <p>
                       {row.definition.width} × {row.definition.depth} ×{" "}
                       {row.definition.height} mm · versie {row.version}
@@ -161,6 +248,37 @@ export function LibraryPanel({
                       Plaats {row.definition.name}
                     </button>
                     {canEdit && (
+                      <button
+                        disabled={busy}
+                        onClick={() => {
+                          setBusy(true);
+                          setError("");
+                          void (async () => {
+                            try {
+                              // Dit raakt de versies niet aan: meubels die al
+                              // in een ontwerp staan, blijven precies wat ze
+                              // zijn. Het item wordt alleen niet meer
+                              // aangeboden.
+                              await api(
+                                "/library/" + row.entry_id + "/archive",
+                                organizationId,
+                                filters.archived ? undefined : {},
+                                filters.archived ? "DELETE" : "POST",
+                              );
+                              await load(0, filters);
+                            } catch (e) {
+                              setError((e as Error).message);
+                              setBusy(false);
+                            }
+                          })();
+                        }}
+                      >
+                        {filters.archived
+                          ? `${row.definition.name} terughalen`
+                          : `${row.definition.name} archiveren`}
+                      </button>
+                    )}
+                    {canEdit && !filters.archived && (
                       <button disabled={busy} onClick={() => edit(row)}>
                         Nieuwe versie van {row.definition.name}
                       </button>
@@ -194,7 +312,10 @@ export function LibraryPanel({
                         catalog: {
                           category: String(data.get("category") ?? ""),
                           description: String(data.get("description") ?? ""),
-                          keywords: String(data.get("keywords") ?? "").split(",").map(v => v.trim()).filter(Boolean),
+                          keywords: String(data.get("keywords") ?? "")
+                            .split(",")
+                            .map((v) => v.trim())
+                            .filter(Boolean),
                           supplier: String(data.get("supplier") ?? ""),
                           sku: String(data.get("sku") ?? ""),
                         },
@@ -222,8 +343,8 @@ export function LibraryPanel({
                   pending.current = null;
                   setEditing(undefined);
                   setError("");
-                  setFilters({ q: "", category: "" });
-                  await load(0, { q: "", category: "" });
+                  setFilters({ q: "", category: "", archived: false });
+                  await load(0, { q: "", category: "", archived: false });
                 } catch (e) {
                   setError((e as Error).message);
                 } finally {
@@ -232,7 +353,12 @@ export function LibraryPanel({
               }}
             >
               <h3>{editing ? "Nieuwe versie" : "Nieuw item"}</h3>
-              {model && <p className="small">Eigen 3D-model gekoppeld. De weergave volgt de meubelmaten hieronder.</p>}
+              {model && (
+                <p className="small">
+                  Eigen 3D-model gekoppeld. De weergave volgt de meubelmaten
+                  hieronder.
+                </p>
+              )}
               <fieldset
                 disabled={busy || !!pending.current}
                 style={{ border: 0, padding: 0, margin: 0 }}
@@ -247,23 +373,45 @@ export function LibraryPanel({
                     defaultValue={editing?.definition.name ?? ""}
                   />
                 </label>
-                {([
-                  ["category", "Categorie", 80],
-                  ["supplier", "Leverancier", 120],
-                  ["sku", "Artikelnummer", 120],
-                ] as const).map(([field, label, maxLength]) => (
-                  <label key={field}>{label}
-                    <input name={field} aria-label={"Item " + label.toLowerCase()}
-                      maxLength={maxLength} defaultValue={editing?.definition.catalog?.[field] ?? ""} />
+                {(
+                  [
+                    ["category", "Categorie", 80],
+                    ["supplier", "Leverancier", 120],
+                    ["sku", "Artikelnummer", 120],
+                  ] as const
+                ).map(([field, label, maxLength]) => (
+                  <label key={field}>
+                    {label}
+                    <input
+                      name={field}
+                      aria-label={"Item " + label.toLowerCase()}
+                      maxLength={maxLength}
+                      defaultValue={editing?.definition.catalog?.[field] ?? ""}
+                    />
                   </label>
                 ))}
-                <label>Omschrijving
-                  <textarea name="description" aria-label="Item omschrijving" maxLength={2000}
-                    rows={3} defaultValue={editing?.definition.catalog?.description ?? ""} />
+                <label>
+                  Omschrijving
+                  <textarea
+                    name="description"
+                    aria-label="Item omschrijving"
+                    maxLength={2000}
+                    rows={3}
+                    defaultValue={
+                      editing?.definition.catalog?.description ?? ""
+                    }
+                  />
                 </label>
-                <label>Zoektermen (gescheiden door komma’s, maximaal 20)
-                  <input name="keywords" aria-label="Item zoektermen" maxLength={1619}
-                    defaultValue={editing?.definition.catalog?.keywords.join(", ") ?? ""} />
+                <label>
+                  Zoektermen (gescheiden door komma’s, maximaal 20)
+                  <input
+                    name="keywords"
+                    aria-label="Item zoektermen"
+                    maxLength={1619}
+                    defaultValue={
+                      editing?.definition.catalog?.keywords.join(", ") ?? ""
+                    }
+                  />
                 </label>
                 <label>
                   Type
@@ -302,7 +450,12 @@ export function LibraryPanel({
                       required
                       inputMode="decimal"
                       defaultValue={
-                        editing?.definition[field] ?? [footprint.width, footprint.depth, model?.height ?? 780][i]
+                        editing?.definition[field] ??
+                        [
+                          footprint.width,
+                          footprint.depth,
+                          model?.height ?? 780,
+                        ][i]
                       }
                     />
                   </label>

@@ -1,0 +1,14 @@
+-- Een werkruimte kon vollopen zonder uitweg: 50 beelden of 200 MiB, en geen
+-- enkele manier om er een weg te halen. De runtime-rol had alleen SELECT en
+-- INSERT op deze tabel, dus ook de app kon het niet.
+--
+-- Dat recht komt er nu bij. Bewust alleen DELETE en geen UPDATE: een geplaatste
+-- onderlegger blijft onveranderlijk zolang hij bestaat. Weghalen mag, wijzigen
+-- niet — anders zou een ingemeten plattegrond onder een tekening kunnen
+-- veranderen zonder dat de tekening het merkt.
+--
+-- Of een beeld wég mag is geen recht maar een controle: de app weigert een
+-- beeld dat nog ergens in gebruik is. Die controle staat in de domeinlaag,
+-- omdat de verwijzingen in JSONB-documenten zitten en niet in refererende
+-- kolommen die de database zelf zou kunnen bewaken.
+GRANT DELETE ON underlay_assets TO studio_runtime;

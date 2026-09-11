@@ -334,6 +334,19 @@ export function createServer(config: {
   app.get("/api/v1/images", async (req) =>
     underlays.list(await context(req.headers)),
   );
+  /*
+   * Een beeld uit de beeldbank halen. Zonder dit liep een werkruimte vol zonder
+   * uitweg. De domeinlaag weigert een beeld dat nog ergens in gebruik is.
+   */
+  app.delete(
+    "/api/v1/underlay-assets/:id",
+    { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+    async (req) =>
+      underlays.delete(
+        await context(req.headers),
+        z.object({ id }).parse(req.params).id,
+      ),
+  );
   app.get("/api/v1/underlay-assets/:id", async (req, reply) => {
     const assetId = z.object({ id }).parse(req.params).id;
     const image = await underlays.get(await context(req.headers), assetId);
@@ -858,6 +871,22 @@ export function createServer(config: {
   });
   app.post("/api/v1/library", async (req) =>
     library.publish(await context(req.headers), req.body),
+  );
+  /*
+   * Archiveren haalt een item uit de aanbieding zonder ook maar iets aan de
+   * versies te veranderen; geplaatste meubels blijven dus wat ze waren.
+   */
+  app.post("/api/v1/library/:entryId/archive", async (req) =>
+    library.archive(
+      await context(req.headers),
+      z.object({ entryId: id }).parse(req.params).entryId,
+    ),
+  );
+  app.delete("/api/v1/library/:entryId/archive", async (req) =>
+    library.restore(
+      await context(req.headers),
+      z.object({ entryId: id }).parse(req.params).entryId,
+    ),
   );
   // Ledenbeheer per project. De keuzelijst komt uit identity, omdat de
   // runtimeverbinding die tabel niet mag lezen.
