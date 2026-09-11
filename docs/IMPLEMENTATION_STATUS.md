@@ -1,5 +1,97 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 3: anker, schaalmodus, prijsbron en rechten
+
+De vier velden die de itemeditor uit de masterprompt nog miste. Ze hebben één
+ding gemeen: ze leggen een belofte van het bibliotheekitem vast die daarna in
+het ontwerp wordt afgedwongen, in plaats van dat de gebruiker hem elke keer zelf
+moet onthouden.
+
+### Het anker wordt door de server teruggerekend
+
+Een kast hoort met zijn rug tegen de wand en niet met zijn hart op de wandlijn.
+Het anker zegt welk punt van het object je aanwijst; de scène bewaart nog steeds
+altijd het hart. Die omrekening staat in `centerFromAnchor` en gebeurt **op de
+server**, bij het oplossen van `PlaceLibraryItem`. De interface heeft er geen
+stem in, en een oudere interface plaatst dus niet stiekem anders.
+
+Het anker draait mee met het object: bij een kwartslag ligt de achterzijde
+links van het hart en niet erboven.
+
+### De schaalmodus wordt twee keer getoetst, tegen twee bronnen
+
+`applyOperations` toetst bij elke `TransformItem` het object zoals het in het
+ontwerp staat. Dat is de snelle weg en die geldt ook lokaal in de editor.
+
+Daarnaast toetst de commandoroute nog een keer tegen de **bibliotheekversie
+zelf**. Dat is geen dubbelop: objecten komen ook in een scène terecht langs
+wegen die geen enkele opdracht uitvoeren — een teruggezette revisie, een gered
+klad. De bron is de versie, en die heeft het laatste woord.
+
+Een vaste handelsmaat blijft vast, ook met maatwerk aan: 2.200 mm is wat de
+fabrikant levert. Gelijkmatig schalen wordt op de verhouding getoetst en niet op
+een factor, want breedte en diepte zijn hele millimeters; de marge is precies de
+afronding van een halve millimeter per as en niet meer.
+
+### Een prijs zonder bron en datum wordt geweigerd
+
+Dezelfde drie velden en dezelfde regel als bij materialen: `unitPrice`,
+`priceSource` en `priceDate`. Een bedrag zonder bron is een prijs waarvan
+niemand meer weet waar hij vandaan komt, en die duikt een half jaar later op in
+een offerte. Dit is de inkoop-/lijstprijs bij het item; wat de klant betaalt
+blijft een eigen keuze per project (`commercial_prices`) en wordt hier niet door
+overschreven.
+
+### Rechten doen iets, en precies één ding
+
+Per item: licentie, rechthebbende, verplichte vermelding en of de gegevens mee
+mogen naar buiten. Dat laatste is het enige dat afdwingt, en het doet dat in de
+productlijst van een presentatie — het enige pad waarlangs
+leveranciersgegevens van een item vandaag de werkruimte verlaten, in zowel de
+PDF als de PowerPoint.
+
+Staat export uit, dan blijven leverancier en artikelnummer leeg en meldt het
+document hoeveel producten dat betrof. Het meubel zelf blijft wél in de lijst:
+weglaten zou de presentatie laten liegen over wat er in het ontwerp staat. Een
+verplichte vermelding wordt juist afgedrukt — daar is hij voor. Rechten reizen
+mee met de publicatie en niet met de bibliotheek, zodat een uitgegeven
+presentatie over tien jaar nog laat zien welke vermelding er toen bij hoorde.
+
+### Geen migratie, en dat is een keuze
+
+Alle vier de velden hebben een standaardwaarde die precies het oude gedrag is:
+geen anker telt als midden, geen schaalmodus als vrij, geen rechten als "mag
+mee". Bibliotheekversies en scènes staan als JSON in de database en worden bij
+elk gebruik opnieuw gelezen; waren de velden verplicht geweest, dan was de hele
+bibliotheek in één keer onleesbaar.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+TypeScript strict geslaagd, frontendbuild geslaagd. Zeven nieuwe eenheidstests
+in `library-rules.test.ts` en een uitgebreide bibliotheekroute in
+`integration.test.ts` (20 geslaagd), die vastlegt: een kast met anker
+"achterzijde" komt met zijn rug op het aangewezen punt, prijsbron en rechten
+reizen mee met de plaatsing, en de server weigert het rekken van een vaste
+handelsmaat met 400 zonder het ontwerp te wijzigen.
+
+Volledige suite: 294 geslaagd, 6 gefaald. Die zes zijn dezelfde die vóór deze
+wijziging al faalden — ze vragen Chromium, dat in deze container niet start.
+
+### Niet geverifieerd in deze omgeving
+
+De nieuwe velden in het bibliotheekvenster zijn niet door een browser gedraaid;
+er is voor deze stap geen E2E-route bijgekomen. De weigering van een vaste
+handelsmaat is in de editor alleen langs de servertoets bewezen, niet als
+sleepbeweging op het tekenblad: de greep is nog gewoon te pakken en de
+melding verschijnt pas bij het loslaten.
+
+### Wat fase 3 hierna nog mist
+
+Van de openstaande punten van fase 3 zijn prijsbron, rechten- en
+exportmetadata en de anker- en schaalmodi hiermee ingevuld. Wat blijft: een
+projectexport die deze exportrechten ook werkelijk toepast, want die export
+bestaat nog niet.
+
 ## Aanvulling 11 september 2026 — fase 3: bibliotheekitems archiveren
 
 Een bibliotheekitem dat niet meer gevoerd wordt, bleef voor altijd in elke

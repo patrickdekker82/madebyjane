@@ -1,4 +1,4 @@
-import type { Point, Scene, Wall } from "../../contracts/src/index";
+import type { AnchorMode, Point, Scene, Wall } from "../../contracts/src/index";
 export const distance = (a: Point, b: Point) =>
   Math.hypot(b.x - a.x, b.y - a.y);
 export const toThree = (
@@ -7,6 +7,39 @@ export const toThree = (
   height = 0,
 ): [number, number, number] => [x / 1000, height / 1000, y / 1000];
 export const toThreeRotation = (degrees: number) => (-degrees * Math.PI) / 180;
+/**
+ * Van ankerpunt naar hart van het object.
+ *
+ * Een object wordt met zijn hart bewaard — dat is overal in de app zo en dat
+ * blijft zo. Het anker zegt alleen welk punt van het object de gebruiker
+ * aanwijst bij het plaatsen: de rug van een kast hoort tegen de wand, niet het
+ * hart ervan. Hier wordt die aanwijzing teruggerekend naar het hart.
+ *
+ * De zijde geldt vóór draaiing en draait mee: bij een kast die een kwartslag
+ * staat, wijst de achterzijde een kwartslag mee. Draairichting is die van het
+ * tekenblad, dezelfde als in het planblad (`rotate()` in SVG, y omlaag).
+ */
+export function centerFromAnchor(
+  anchor: AnchorMode | undefined,
+  item: { width: number; depth: number; rotation: number },
+  point: Point,
+): Point {
+  const local: Record<AnchorMode, Point> = {
+    center: { x: 0, y: 0 },
+    back: { x: 0, y: -item.depth / 2 },
+    front: { x: 0, y: item.depth / 2 },
+    left: { x: -item.width / 2, y: 0 },
+    right: { x: item.width / 2, y: 0 },
+  };
+  const offset = local[anchor ?? "center"],
+    radians = (item.rotation * Math.PI) / 180,
+    cos = Math.cos(radians),
+    sin = Math.sin(radians);
+  return {
+    x: Math.round(point.x - (offset.x * cos - offset.y * sin)),
+    y: Math.round(point.y - (offset.x * sin + offset.y * cos)),
+  };
+}
 export function endpoints(scene: Scene, wall: Wall) {
   const a = scene.nodes.find((n) => n.id === wall.startId),
     b = scene.nodes.find((n) => n.id === wall.endId);

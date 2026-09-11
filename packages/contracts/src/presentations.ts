@@ -238,6 +238,16 @@ export const resolvedBlockSchema = z.discriminatedUnion("type", [
           .strict(),
       )
       .max(300),
+    /*
+     * Rechten reizen mee met de publicatie, niet met de bibliotheek: een
+     * uitgegeven presentatie moet over tien jaar nog kunnen laten zien welke
+     * vermelding er toen bij hoorde. Beide velden hebben een standaardwaarde,
+     * zodat presentaties die vóór deze velden zijn gepubliceerd leesbaar
+     * blijven.
+     */
+    attributions: z.array(z.string().max(300)).max(300).default([]),
+    /** Aantal producten waarvan de leveranciersgegevens zijn weggelaten. */
+    withheld: z.number().int().nonnegative().default(0),
   }),
   resolved("price", {
     number: z.string().nullable(),

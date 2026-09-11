@@ -73,6 +73,54 @@ export const symbolShapeSchema = z
   });
 export const symbolSchema = z.array(symbolShapeSchema).min(1).max(32);
 export type SymbolShape = z.infer<typeof symbolShapeSchema>;
+/**
+ * Prijsvelden van een bibliotheekitem. Bewust dezelfde drie velden en dezelfde
+ * regel als bij materialen (`materials.ts`): een bedrag zonder bron en datum is
+ * een prijs waarvan niemand meer weet waar hij vandaan komt, en die duikt een
+ * half jaar later op in een offerte.
+ *
+ * Dit is de inkoop-/lijstprijs zoals hij bij het item hoort. De prijs die de
+ * klant ziet, blijft een eigen keuze per project (`commercial_prices`); die
+ * wordt hier niet door overschreven.
+ */
+const itemPriceDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const time = new Date(value + "T00:00:00.000Z");
+    return (
+      Number.isFinite(time.getTime()) &&
+      time.toISOString().slice(0, 10) === value
+    );
+  }, "Gebruik een geldige datum.");
+const itemMoney = z
+  .string()
+  .regex(
+    /^(?:0|[1-9]\d{0,6})(?:\.\d{1,2})?$/,
+    "Gebruik een bedrag met maximaal twee decimalen.",
+  );
+/**
+ * Rechten bij een item. Een meubel uit een leverancierscatalogus, een gekocht
+ * 3D-model en eigen tekenwerk hebben elk andere voorwaarden, en die zijn na een
+ * jaar niet meer uit het hoofd te reconstrueren. Daarom staan ze bij het item.
+ *
+ * `exportAllowed` is de enige die iets afdwingt: staat hij uit, dan gaan de
+ * leveranciersgegevens van dit item niet mee in documenten die de werkruimte
+ * verlaten. Het object zelf blijft gewoon in de tekening staan — het weglaten
+ * zou de plattegrond laten liegen over wat er staat.
+ */
+export const rightsSchema = z
+  .object({
+    /** Naam van de licentie of voorwaarde, vrij in te vullen. */
+    licence: z.string().trim().max(160).default(""),
+    /** Van wie het materiaal is: fabrikant, fotograaf, eigen werk. */
+    holder: z.string().trim().max(160).default(""),
+    /** Regel die letterlijk bij een export moet worden afgedrukt. */
+    attribution: z.string().trim().max(300).default(""),
+    exportAllowed: z.boolean().default(true),
+  })
+  .strict();
+export type Rights = z.infer<typeof rightsSchema>;
 export const catalogSchema = z
   .object({
     category: z.string().trim().max(80),
@@ -80,8 +128,71 @@ export const catalogSchema = z
     keywords: z.array(z.string().trim().min(1).max(80)).max(20),
     supplier: z.string().trim().max(120),
     sku: z.string().trim().max(120),
+    /**
+     * De drie prijsvelden en de rechten hebben een standaardwaarde, zodat
+     * bestaande scenes en bibliotheekversies zonder migratie geldig blijven.
+     */
+    priceSource: z.string().trim().max(160).default(""),
+    priceDate: itemPriceDate.nullable().default(null),
+    unitPrice: itemMoney.nullable().default(null),
+    rights: rightsSchema.default({
+      licence: "",
+      holder: "",
+      attribution: "",
+      exportAllowed: true,
+    }),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.unitPrice !== null && (!value.priceSource || !value.priceDate))
+      ctx.addIssue({
+        code: "custom",
+        path: ["priceSource"],
+        message: "Noteer bij een prijs ook de bron en de prijsdatum.",
+      });
+    if (value.priceDate !== null && !value.priceSource)
+      ctx.addIssue({
+        code: "custom",
+        path: ["priceSource"],
+        message: "Noteer waar de prijsdatum vandaan komt.",
+      });
+  });
+/**
+ * Waar de plaatsingscoördinaat van een item op slaat. Een kast hoort met zijn
+ * rug tegen de wand en niet met zijn hart op de wandlijn; een hanglamp hangt
+ * juist wél om zijn midden. Zonder anker moet de gebruiker dat elke keer zelf
+ * terugrekenen met de halve diepte.
+ *
+ * De zijde is die van het item zelf, vóór draaiing: de achterzijde is de kant
+ * met de kleinste y. Draait het item, dan draait het anker mee.
+ */
+export const anchorModes = {
+  center: "Midden",
+  back: "Achterzijde",
+  front: "Voorzijde",
+  left: "Linkerzijde",
+  right: "Rechterzijde",
+} as const;
+export type AnchorMode = keyof typeof anchorModes;
+export const anchorSchema = z.enum(
+  Object.keys(anchorModes) as [AnchorMode, ...AnchorMode[]],
+);
+/**
+ * Hoeveel vrijheid de maten van dit item hebben.
+ *
+ * `fixed` is de handelsmaat van een fabrikant: een bank van 2.200 mm is niet
+ * stiekem 2.350 mm te maken omdat hij anders niet past. `uniform` laat schalen
+ * toe zolang de verhouding klopt. `free` is tekenwerk zonder die belofte.
+ */
+export const scaleModes = {
+  free: "Vrij te schalen",
+  uniform: "Alleen gelijkmatig schalen",
+  fixed: "Vaste handelsmaat",
+} as const;
+export type ScaleMode = keyof typeof scaleModes;
+export const scaleModeSchema = z.enum(
+  Object.keys(scaleModes) as [ScaleMode, ...ScaleMode[]],
+);
 export const libraryQuerySchema = z
   .object({
     offset: z.coerce.number().int().min(0).max(100000).default(0),
@@ -193,6 +304,13 @@ export const itemSchema = z
     rotation: z.number().finite().min(-360).max(360),
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
     custom: z.boolean(),
+    /**
+     * Ontbreken bij scenes van vóór deze velden. Een ontbrekend anker telt als
+     * `center` en een ontbrekende schaalmodus als `free`: precies het gedrag
+     * dat die scenes altijd al hadden, dus ze blijven zonder migratie geldig.
+     */
+    anchor: anchorSchema.optional(),
+    scaleMode: scaleModeSchema.optional(),
     symbol: symbolSchema.optional(),
     catalog: catalogSchema.optional(),
     model: z
@@ -578,6 +696,8 @@ export const libraryDefinitionSchema = itemSchema.pick({
   depth: true,
   height: true,
   color: true,
+  anchor: true,
+  scaleMode: true,
 });
 export const libraryPublishSchema = z
   .object({
