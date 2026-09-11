@@ -102,10 +102,12 @@ project of een andere werkruimte 422, een onleesbaar document 400, leesrechten
 
 ### Niet geverifieerd in deze omgeving
 
-Die 6 zijn de bekende Chromium-sandboxfouten. De browserroute is uitgebreid met
-de nieuwe knop en de controle dat de editor daarna op de nieuwe variant staat met
-het lokale werk erin, maar die stap is hier **niet gedraaid**; Chromium start in
-deze container niet. CI draait de E2E-suite wel.
+Die 6 zijn de bekende Chromium-sandboxfouten; CI draaide dezelfde suite wel
+volledig groen (289 tests). Voor de browserkant is er een **eigen** E2E-route met
+een eigen project: bewaren als variant ruimt het klad op, en de bestaande
+herstelroute heeft dat klad nodig voor haar afmeldstap. Die twee in één route
+proppen liet de afmeldstap falen — vandaar de scheiding. De nieuwe route is hier
+niet gedraaid; Chromium start in deze container niet.
 
 ### Eerstvolgende stap
 

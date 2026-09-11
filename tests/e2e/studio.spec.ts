@@ -2470,6 +2470,148 @@ test("meubels groeperen → samen verslepen → groep opheffen", async ({
   expect(errors).toEqual([]);
 });
 
+/*
+ * Bewust een eigen route met een eigen project, los van de herstelroute
+ * hieronder. Bewaren als variant ruimt het klad op, en dat is precies wat de
+ * afmeldstap in die route nodig heeft; de twee horen elkaar niet in de weg te
+ * zitten.
+ */
+test("lokaal werk dat niet meer past → bewaren als aparte variant", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  await page
+    .getByRole("button", { name: "Nieuw project", exact: true })
+    .click();
+  await page.getByLabel("Projectnaam").fill("Variantstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+  const origineel = page.url();
+
+  await page.getByRole("button", { name: "Lokaal herstel uit" }).click();
+  await expect(
+    page.getByRole("button", { name: "Lokaal herstel aan" }),
+  ).toBeVisible();
+
+  // Werk dat de server niet haalt, maar wel in deze browser blijft staan.
+  await page.route("**/api/v1/variants/*/commands", (route) =>
+    route.abort("failed"),
+  );
+  await page
+    .getByRole("button", { name: "Bank · linnen naturel", exact: true })
+    .click();
+  await page.getByLabel("Positie X", { exact: true }).fill("2500");
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await expect(page.getByText("Lokaal bewaard op dit apparaat")).toBeVisible();
+  await page.unroute("**/api/v1/variants/*/commands");
+
+  /*
+   * En intussen schuift de server op. De bewerktoegang is exclusief, dus die
+   * wordt niet afgepakt maar hergebruikt — zoals wanneer dezelfde gebruiker op
+   * een ander apparaat verdergaat. Daarmee past het klad straks niet meer.
+   */
+  const rival = await page.evaluate(async () => {
+    const variantId = location.pathname.split("/").pop();
+    const me = await (await fetch("/api/v1/me")).json();
+    const organizationId = me.organizations[0].id;
+    const headers = {
+      "x-organization-id": organizationId,
+      "Content-Type": "application/json",
+    };
+    const document = await (
+      await fetch("/api/v1/variants/" + variantId + "/document", {
+        headers: { "x-organization-id": organizationId },
+      })
+    ).json();
+    const leaseId = sessionStorage.getItem(
+      "studio.lease:" + organizationId + ":" + variantId,
+    );
+    const response = await fetch(
+      "/api/v1/variants/" + variantId + "/commands",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          baseRevision: document.revision,
+          leaseId,
+          operations: [
+            {
+              type: "SetItemDisplay",
+              ids: [document.items[0].id],
+              hidden: true,
+            },
+          ],
+        }),
+      },
+    );
+    return response.status;
+  });
+  expect(rival).toBe(200);
+
+  // Na herladen is het klad onverzendbaar: terughalen kan niet meer.
+  await page.reload();
+  const banner = page.getByText("Lokaal werk gevonden op dit apparaat");
+  await expect(banner).toBeVisible();
+  await expect(page.locator(".editor-message")).toContainText(
+    "nieuwere versie",
+  );
+  await expect(
+    page.getByRole("button", { name: "Lokaal werk terughalen", exact: true }),
+  ).toHaveCount(0);
+
+  // Maar weggooien hoeft niet: het werk blijft bestaan als eigen variant.
+  await page
+    .getByRole("button", { name: "Bewaren als aparte variant", exact: true })
+    .click();
+  // De editor staat daarna op een ánder ontwerp: de zojuist gemaakte variant.
+  await expect(page).not.toHaveURL(origineel);
+  await expect(banner).toHaveCount(0);
+  await saved();
+  const gered = await page.evaluate(async () => {
+    const variantId = location.pathname.split("/").pop();
+    const me = await (await fetch("/api/v1/me")).json();
+    const organizationId = me.organizations[0].id;
+    const document = await (
+      await fetch("/api/v1/variants/" + variantId + "/document", {
+        headers: { "x-organization-id": organizationId },
+      })
+    ).json();
+    return { revision: document.revision, items: document.items.length };
+  });
+  // Een eigen ontwerp op revisie 0, met het werk erin.
+  expect(gered.revision).toBe(0);
+  expect(gered.items).toBeGreaterThan(0);
+  await page.screenshot({ path: "outputs/qa/herstel-variant.png" });
+
+  // Het oorspronkelijke ontwerp staat er nog, en het klad is opgeruimd.
+  await page.goto(origineel);
+  await saved();
+  await expect(banner).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test("lokaal herstel: mislukt opslaan → herladen → terughalen → conflict → afmelden", async ({
   page,
 }) => {
@@ -2631,53 +2773,6 @@ test("lokaal herstel: mislukt opslaan → herladen → terughalen → conflict �
     page.getByRole("button", { name: "Lokaal werk terughalen", exact: true }),
   ).toHaveCount(0);
   await page.screenshot({ path: "outputs/qa/herstel-gevonden.png" });
-
-  // Maar weggooien hoeft niet: het werk kan naast het bestaande ontwerp blijven
-  // bestaan als eigen variant. Dat is de derde weg naast terugsturen en
-  // downloaden, en de enige die bij een conflict niets verliest.
-  const origineel = page.url();
-  const bewaren = page.getByRole("button", {
-    name: "Bewaren als aparte variant",
-    exact: true,
-  });
-  await expect(bewaren).toBeVisible();
-  await bewaren.click();
-  // De editor staat daarna op een ánder ontwerp: de zojuist gemaakte variant.
-  await expect(page).not.toHaveURL(origineel);
-  await expect(banner).toHaveCount(0);
-  const gered = await page.evaluate(async () => {
-    const variantId = location.pathname.split("/").pop()!;
-    const me = await (await fetch("/api/v1/me")).json();
-    const organizationId = me.organizations[0].id;
-    const response = await fetch(
-      "/api/v1/variants/" + variantId + "/document",
-      {
-        headers: { "x-organization-id": organizationId },
-      },
-    );
-    return (await response.json()) as { revision: number; items: unknown[] };
-  });
-  expect(gered.revision).toBe(0);
-  expect(gered.items.length).toBeGreaterThan(0);
-  await page.screenshot({ path: "outputs/qa/herstel-variant.png" });
-
-  /*
-   * Het klad is hiermee opgeruimd: het staat nu als variant op de server. Voor
-   * het afmeldgedeelte hieronder is opnieuw lokaal werk nodig, dus dat wordt op
-   * het oorspronkelijke ontwerp opnieuw gemaakt — dat is meteen het bewijs dat
-   * het bewaren het klad werkelijk heeft opgeruimd en niet heeft laten staan.
-   */
-  await page.goto(origineel);
-  await saved();
-  await expect(banner).toHaveCount(0);
-  await blockSaving();
-  await page
-    .getByRole("button", { name: "Bank · linnen naturel", exact: true })
-    .click();
-  await page.getByLabel("Positie X", { exact: true }).fill("2700");
-  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
-  await expect(page.getByText("Lokaal bewaard op dit apparaat")).toBeVisible();
-  await allowSaving();
 
   // Afmelden waarschuwt en biedt eerst een export aan.
   await page.getByRole("button", { name: "Afmelden", exact: true }).click();
