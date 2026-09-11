@@ -504,6 +504,15 @@ export const cameraSchema = z
     target: z.object({ x: mm, y: mm, z: mm }).strict(),
     /** Beeldhoek in graden; smal is een telelens, breed vertekent. */
     fov: z.number().int().min(10).max(120),
+    /**
+     * Dag of avond. Hoort bij het standpunt omdat het bij het beeld hoort:
+     * "vanaf de eettafel" overdag en 's avonds zijn twee verschillende platen,
+     * en juist die tweede is waarvoor het lichtplan is gemaakt.
+     *
+     * Standaardwaarde, dus standpunten van vóór dit veld blijven geldig en
+     * openen zoals ze altijd deden: overdag.
+     */
+    light: z.enum(["day", "evening"]).default("day"),
   })
   .strict()
   .superRefine((value, ctx) => {

@@ -1,26 +1,31 @@
 import { ModelItems } from "./ModelItems";
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { Shape, Path, Vector2 } from "three";
+import { Shape, Path, Vector2, Vector3, Quaternion, DoubleSide } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { Camera, Operation, Scene } from "../../contracts/src/index";
+import type { PlannedLight } from "../../geometry/src/index";
 import {
   endpoints,
   fromThree,
+  lightPlan,
   toThree,
   toThreeRotation,
   wallSegments,
   detectRooms,
 } from "../../geometry/src/index";
-import type { PerspectiveCamera } from "three";
+import type { Object3D, PerspectiveCamera, SpotLight } from "three";
 /**
  * Wat de knoppen buiten het doek van de camera binnenin mogen weten en vragen.
  * De camera zelf leeft in de render-lus; alles wat eromheen staat is gewone
  * React en kan er niet bij zonder deze brug.
  */
 type ViewerApi = {
-  /** Het standpunt zoals het er nu bij staat, in millimeters van het plan. */
-  read: () => Omit<Camera, "id" | "name">;
+  /**
+   * Het standpunt zoals het er nu bij staat, in millimeters van het plan. De
+   * lichtstand komt er buiten de render-lus bij: die is gewone React-state.
+   */
+  read: () => Omit<Camera, "id" | "name" | "light">;
   apply: (camera: Camera) => void;
   /** Een PNG van het beeld zoals het er nu uitziet, als data-URI. */
   snapshot: () => string;
@@ -71,6 +76,79 @@ function Controls({ api }: { api: React.RefObject<ViewerApi | null> }) {
   }, [api, camera, gl, invalidate, scene]);
   return null;
 }
+/**
+ * Een spot met zijn zichtbare bundel.
+ *
+ * Twee dingen zitten hier bij elkaar omdat ze niet uit elkaar mogen lopen: het
+ * licht dat op de vloer valt en de doorzichtige kegel die laat zien waar het
+ * vandaan komt. Die kegel is nadrukkelijk een aanwijzing en geen lichtvlek —
+ * dezelfde belofte als de bundels op het planblad.
+ *
+ * Een spotlight in three.js mikt op een los object; dat object staat hier in de
+ * scene op het punt waar de lamp op gericht is.
+ */
+function SpotLamp({
+  at,
+  toward,
+  lamp,
+}: {
+  at: [number, number, number];
+  toward: [number, number, number];
+  lamp: PlannedLight;
+}) {
+  const licht = useRef<SpotLight>(null);
+  const doel = useRef<Object3D>(null);
+  useEffect(() => {
+    if (licht.current && doel.current) licht.current.target = doel.current;
+  }, []);
+  const halveHoek = ((lamp.coneHalfAngleDeg ?? 30) * Math.PI) / 180;
+  const richting = new Vector3(...toward).sub(new Vector3(...at));
+  const lengte = richting.length() || 0.001;
+  /*
+   * De kegel van three.js wijst met zijn punt omhoog. Hij wordt hier gedraaid
+   * tot die punt de kant op wijst waar de lamp vandaan schijnt, en met zijn
+   * hart op de helft tussen lamp en doel gezet.
+   */
+  const draai = new Quaternion().setFromUnitVectors(
+    new Vector3(0, -1, 0),
+    richting.clone().normalize(),
+  );
+  const midden = new Vector3(...at).addScaledVector(
+    richting.clone().normalize(),
+    lengte / 2,
+  );
+  return (
+    <>
+      <spotLight
+        ref={licht}
+        position={at}
+        color={lamp.color}
+        intensity={lamp.strength * 18}
+        angle={halveHoek}
+        penumbra={0.35}
+        distance={lengte * 3}
+        decay={2}
+        castShadow
+      />
+      <object3D ref={doel} position={toward} />
+      <mesh
+        position={midden.toArray()}
+        quaternion={draai.toArray() as [number, number, number, number]}
+      >
+        <coneGeometry
+          args={[Math.tan(halveHoek) * lengte, lengte, 24, 1, true]}
+        />
+        <meshBasicMaterial
+          color={lamp.color}
+          transparent
+          opacity={0.07}
+          depthWrite={false}
+          side={DoubleSide}
+        />
+      </mesh>
+    </>
+  );
+}
 function RenderReady({ onReady }: { onReady: () => void }) {
   const ready = useRef(false);
   useFrame(({ gl, invalidate }) => {
@@ -95,6 +173,12 @@ export default function Viewer({
   const [ready, setReady] = useState(false);
   const [modelStatus, setModelStatus] = useState("");
   const [cameraName, setCameraName] = useState("");
+  /*
+   * Dag of avond is een kijkstand en geen ontwerpgegeven, dus hij staat hier en
+   * niet in de scene. Bij een bewaard standpunt reist hij wel mee: daar hoort
+   * hij bij het beeld.
+   */
+  const [light, setLight] = useState<Camera["light"]>("day");
   const [cameraError, setCameraError] = useState("");
   const api = useRef<ViewerApi | null>(null);
   const floors = useMemo(
@@ -117,6 +201,15 @@ export default function Viewer({
       }),
     [scene.nodes, scene.walls],
   );
+  /*
+   * De grens van acht lampen komt van WebGL en niet van het ontwerp: meer
+   * lichtbronnen tegelijk halen de meeste browsers niet zonder haperen. Wat
+   * erbuiten valt wordt geteld en staat in beeld.
+   */
+  const plan = useMemo(
+    () => lightPlan(scene.items, { mode: light, max: 8 }),
+    [scene.items, light],
+  );
   return (
     <div className="viewer" data-render-ready={ready}>
       <Canvas
@@ -130,14 +223,45 @@ export default function Viewer({
          */
         gl={{ antialias: true, preserveDrawingBuffer: true }}
       >
-        <color attach="background" args={["#e9e8df"]} />
-        <ambientLight intensity={1.4} />
+        <color
+          attach="background"
+          args={[light === "day" ? "#e9e8df" : "#161a20"]}
+        />
+        {/*
+          Overdag doet de zon het werk. 's Avonds blijft er een restje
+          omgevingslicht staan: pikdonker tussen de lampen is fysiek
+          verdedigbaar maar maakt een plaat waar niemand iets aan heeft, en de
+          weergave is een presentatiemiddel.
+        */}
+        <ambientLight intensity={light === "day" ? 1.4 : 0.18} />
         <directionalLight
           position={[3, 8, 4]}
-          intensity={2.5}
+          intensity={light === "day" ? 2.5 : 0.12}
+          color={light === "day" ? "#ffffff" : "#8fa4c8"}
           castShadow
           shadow-mapSize={[1024, 1024]}
         />
+        {plan.lights.map((lamp) => {
+          const at = toThree(lamp.at.x, lamp.at.y, lamp.at.z),
+            toward = toThree(lamp.toward.x, lamp.toward.y, lamp.toward.z);
+          /*
+           * Een bundelhoek geeft een spot, geen bundelhoek een lamp die rondom
+           * schijnt. De reikwijdte is de afstand tot het punt waar hij op mikt,
+           * ruim genomen zodat de vloer niet precies op de rand valt.
+           */
+          return lamp.coneHalfAngleDeg === null ? (
+            <pointLight
+              key={lamp.id}
+              position={at}
+              color={lamp.color}
+              intensity={lamp.strength * 12}
+              distance={(lamp.reachMm / 1000) * 3}
+              decay={2}
+            />
+          ) : (
+            <SpotLamp key={lamp.id} at={at} toward={toward} lamp={lamp} />
+          );
+        })}
         <Controls api={api} />
         <RenderReady onReady={() => setReady(true)} />
         {floors.map((floor) => (
@@ -184,6 +308,14 @@ export default function Viewer({
       <div className="canvas-note">
         3D · sleep om te draaien · scroll om te zoomen
         {modelStatus && <span role="status"> · {modelStatus}</span>}
+        {light === "evening" && (
+          <span role="status">
+            {" "}
+            · Avondweergave: een visuele benadering, geen lichtberekening
+            {plan.omitted > 0 &&
+              ` · ${plan.omitted} armatuur${plan.omitted === 1 ? "" : "en"} brandt wel maar wordt niet als lichtbron getekend`}
+          </span>
+        )}
       </div>
       <div className="viewer-cameras">
         {scene.cameras.map((camera) => (
@@ -191,6 +323,8 @@ export default function Viewer({
             <button
               onClick={() => {
                 setCameraError("");
+                // De lichtstand hoort bij het beeld, dus die gaat mee terug.
+                setLight(camera.light);
                 api.current?.apply(camera);
               }}
             >
@@ -239,6 +373,7 @@ export default function Viewer({
                     ...standpunt,
                     id: bestaand?.id ?? crypto.randomUUID(),
                     name: naam,
+                    light,
                   },
                 },
               ]);
@@ -255,6 +390,12 @@ export default function Viewer({
             <button disabled={disabled}>Standpunt bewaren</button>
           </form>
         )}
+        <button
+          aria-pressed={light === "evening"}
+          onClick={() => setLight(light === "day" ? "evening" : "day")}
+        >
+          {light === "day" ? "Avond tonen" : "Dag tonen"}
+        </button>
         <button
           onClick={() => {
             const beeld = api.current?.snapshot();

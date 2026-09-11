@@ -182,6 +182,12 @@ export {
 } from "./underlay";
 export { ledLengthMm, ledSegments, ledCornerCount, ledBounds } from "./led";
 export { beamFootprint, beamBounds, type BeamFootprint } from "./beam";
+export {
+  lightPlan,
+  kelvinToRgb,
+  type LightPlan,
+  type PlannedLight,
+} from "./light-3d";
 export { fixtureSymbols, defaultSymbolSizeMm } from "./fixture-symbols";
 export {
   dimensionGeometry,
