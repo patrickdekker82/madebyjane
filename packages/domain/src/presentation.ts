@@ -255,18 +255,34 @@ export function resolveContent(
     if (block.type === "products") {
       const scene = input.scenes[block.variantId];
       if (!scene) continue;
+      /*
+       * Een presentatie verlaat de werkruimte. Staat export van een item niet
+       * toe, dan gaan de leveranciersgegevens ervan hier niet mee; het meubel
+       * zelf blijft wel in de lijst staan, want het staat nu eenmaal in het
+       * ontwerp en dat verzwijgen zou de presentatie laten liegen. Een
+       * verplichte vermelding wordt juist wél afgedrukt — daar is hij voor.
+       */
+      const shown = scene.items.filter((i) => !i.fixture && !i.hidden),
+        mag = (i: (typeof shown)[number]) =>
+          i.catalog?.rights?.exportAllowed !== false;
       blocks.push({
         blockId: block.id,
         type: "products",
         revision: scene.revision,
-        rows: scene.items
-          .filter((i) => !i.fixture && !i.hidden)
-          .map((i) => ({
-            name: i.name,
-            size: `${i.width} × ${i.depth} × ${i.height} mm`,
-            supplier: i.catalog?.supplier ?? "",
-            sku: i.catalog?.sku ?? "",
-          })),
+        rows: shown.map((i) => ({
+          name: i.name,
+          size: `${i.width} × ${i.depth} × ${i.height} mm`,
+          supplier: mag(i) ? (i.catalog?.supplier ?? "") : "",
+          sku: mag(i) ? (i.catalog?.sku ?? "") : "",
+        })),
+        attributions: [
+          ...new Set(
+            shown
+              .map((i) => i.catalog?.rights?.attribution ?? "")
+              .filter(Boolean),
+          ),
+        ],
+        withheld: shown.filter((i) => !mag(i)).length,
       });
       note("variant", block.variantId, scene.revision);
     }

@@ -5,18 +5,14 @@ import {
   assertSchemaCompatible,
 } from "../../../packages/db/src/index";
 import { createServer } from "./server";
-const { DATABASE_URL, AUTH_DATABASE_URL, AUTH_SECRET, PUBLIC_BASE_URL } =
-  process.env;
-if (!DATABASE_URL || !AUTH_DATABASE_URL || !AUTH_SECRET || !PUBLIC_BASE_URL)
-  throw new Error(
-    "Database- en authconfiguratie ontbreekt. Gebruik pnpm dev of configureer de omgeving.",
-  );
+import { loadRuntimeConfig } from "./config";
+const config = loadRuntimeConfig(process.env);
 const runtime = guardPool(
-    new Pool({ connectionString: DATABASE_URL, max: 10 }),
+    new Pool({ connectionString: config.DATABASE_URL, max: 10 }),
     "runtime",
   ),
   identity = guardPool(
-    new Pool({ connectionString: AUTH_DATABASE_URL, max: 5 }),
+    new Pool({ connectionString: config.AUTH_DATABASE_URL, max: 5 }),
     "identity",
   );
 await assertRuntimeRole(runtime);
@@ -24,12 +20,12 @@ await assertSchemaCompatible(runtime);
 const { app } = createServer({
   runtime,
   identity,
-  baseURL: PUBLIC_BASE_URL,
-  secret: AUTH_SECRET,
+  baseURL: config.PUBLIC_BASE_URL,
+  secret: config.AUTH_SECRET,
 });
 await app.listen({
-  port: Number(process.env.API_PORT ?? 4311),
-  host: process.env.API_HOST ?? "127.0.0.1",
+  port: config.API_PORT,
+  host: config.API_HOST,
 });
 for (const signal of ["SIGINT", "SIGTERM"] as const)
   process.on(signal, async () => {

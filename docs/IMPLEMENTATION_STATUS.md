@@ -1,5 +1,293 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 7: materialen op vlakken in 3D
+
+De 3D-weergave gaf elke vloer dezelfde zandkleur en elke muur hetzelfde
+gebroken wit, ongeacht wat er in het materiaalblad was gekozen. Daarmee was het
+werk uit fase 4 in 3D onzichtbaar.
+
+### De koppeling loopt over de berekening, niet over de ingetypte naam
+
+Een materiaalkeuze heeft een vrij in te typen `room` en `category`. Daar valt
+geen beeld op te bouwen: het zijn woorden van een mens. Wat wél hard is, is
+`calculation` — door de server berekend, met de variant, de ruimte-ID en de
+grondslag erin. `floor_area` is de vloer van die ruimte, `wall_area` zijn de
+muren eromheen, gevonden via de punten in doorloopvolgorde van de ruimte.
+
+Daaruit volgt ook wat er níét gebeurt: een keuze die op een andere variant is
+gemeten, of die helemaal niet gemeten is, kleurt niets.
+
+### Er wordt geen kleur verzonnen
+
+Een materiaal heeft een `colorCode` van de leverancier: "RAL 9010", "NCS S
+0500-N". Dat is niet betrouwbaar naar een schermkleur te rekenen, en een
+gegokte tint in een klantbeeld is erger dan een neutraal vlak.
+
+Daarom is er een eigen veld `displayColor` bijgekomen: de kleur zoals de
+ontwerper hem op het monster ziet, alleen voor de weergave, met een vinkje
+ernaast omdat "geen kleur" een geldige uitkomst is. Een keuze zonder
+weergavekleur laat het vlak neutraal en zegt dat in beeld.
+
+### Alleen een gemaakte keuze verft
+
+Een voorstel of een aangevraagd monster is nog geen besluit. Een beeld dat dat
+verschil niet maakt, praat de klant een keuze aan die niemand genomen heeft.
+Dus verven alleen "gekozen" en "door klant bevestigd"; de rest wordt geteld en
+gemeld in plaats van verzwegen.
+
+### Twee gevallen waarin een vlak bewust neutraal blijft
+
+Een muur tussen twee ruimtes met verschillende wandafwerking krijgt geen kleur:
+hij staat in 3D als één blok en heeft geen voor- en achterkant met een eigen
+materiaal. Kiezen beide ruimtes dezelfde kleur, dan is er geen strijd en wordt
+hij wel geverfd.
+
+Twee vloerkeuzes voor dezelfde ruimte laten die vloer ook neutraal. Beide
+gevallen staan met naam en toenaam onderin het beeld.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2
+
+TypeScript strict geslaagd, frontendbuild geslaagd. Zes nieuwe tests in
+`finishes.test.ts`, met een scène van twee kamers en een gedeelde muur: de
+koppeling via de berekening, het weigeren van een andere variant, de
+statusregel, het ontbreken van een weergavekleur, de gedeelde muur in drie
+varianten, en twee vloerkeuzes voor één ruimte. Volledige suite 315 geslaagd,
+6 gefaald — dezelfde zes die Chromium vragen.
+
+### Niet geverifieerd in deze omgeving
+
+**Er is geen gekleurd beeld gezien.** Wat `surfaceFinishes` uitrekent is
+getoetst; dat de weergave er een bruikbare plaat van maakt niet. Ook het
+ophalen van de materialen bij het openen van de 3D-weergave is niet in een
+browser gedraaid — alleen de code is nagelopen. Er is voor deze stap geen
+E2E-route bijgekomen.
+
+### Wat fase 7 hierna nog mist
+
+Plafonds hebben geen grondslag in de hoeveelheidberekening en blijven dus
+ongekleurd. Het planblad gebruikt deze kleuren nog niet; de masterprompt vraagt
+dat dezelfde materiaalversie in 2D, 3D én presentatie bruikbaar is, en daarvan
+is nu alleen 3D af. Verder blijft het narekenen van transformaties en
+performance op referentiehardware open.
+
+## Aanvulling 11 september 2026 — fase 7: dag, avond en lichtvisualisatie
+
+De 3D-weergave kende maar één tijdstip: een egale dag. Daarmee was het
+lichtplan uit fase 4 in 3D onzichtbaar — precies het plan waarvoor iemand de
+bundelhoeken, kleurtemperaturen en dimstanden heeft ingevuld.
+
+### De keuzes staan in een pure functie, niet in de weergave
+
+`lightPlan` bepaalt wat er 's avonds aangaat: welke armaturen branden, welke
+kant ze op schijnen, hoe warm hun licht is en hoe fel ze staan ten opzichte van
+elkaar. De weergave tekent alleen wat die functie zegt.
+
+Dat is geen nette laagjesindeling om zichzelfs wil. Chromium start in deze
+container niet, dus alles wat in de weergave zelf zou staan is hier niet te
+toetsen. Wat in een pure functie staat wél, en dat is zeven tests waard
+geworden in plaats van een aanname.
+
+### Nog steeds geen lichtberekening, en dat staat in beeld
+
+Dezelfde belofte als bij de bundels op het planblad: er komt geen lux uit, geen
+luxkaart en geen gelijkmatigheid. De avondweergave zegt dat zelf onderin het
+beeld, in dezelfde bewoording als het planblad.
+
+De felheid is een verhouding tussen de lampen onderling. Zonder opgegeven
+lichtstroom is elke lamp even fel — eerlijker dan een getal verzinnen. Mét
+lichtstroom telt de verhouding tot een gewone lamp van 800 lumen mee, begrensd
+tussen een kwart en het dubbele, zodat één bouwlamp van 20.000 lumen de rest
+niet wegvaagt.
+
+### Acht lampen, en het aantal dat niet getekend is
+
+WebGL kan maar een beperkt aantal lichtbronnen tegelijk aan. Bij een plafond vol
+spots worden daarom de felste getekend en de rest geteld, en dat getal staat in
+beeld. Zonder die mededeling zou een donkere hoek eruitzien als een
+ontwerpkeuze, terwijl er gewoon licht gepland staat.
+
+Welke lampen dat zijn ligt vast — op sterkte, dan op ID — zodat hetzelfde
+ontwerp twee keer hetzelfde beeld oplevert.
+
+### De lichtstand hoort bij het standpunt
+
+Een bewaard standpunt krijgt er een veld bij: dag of avond. "Vanaf de eettafel"
+overdag en 's avonds zijn twee verschillende platen, en juist die tweede is
+waarvoor het lichtplan is gemaakt. Standpunten van vóór dit veld openen zoals ze
+altijd deden: overdag.
+
+### Kleurtemperatuur naar beeldschermkleur
+
+Met de benadering van Tanner Helland. Exact is die niet — de omrekening van
+Kelvin naar sRGB kent geen enkele juiste uitkomst — maar de volgorde klopt, en
+dat is wat iemand ziet: 2700 K warm geel, 6500 K wit, daarboven blauw.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2
+
+TypeScript strict geslaagd, frontendbuild geslaagd. Zeven nieuwe tests in
+`light-3d.test.ts` en een achtste in `cameras.test.ts`. Volledige suite 307
+geslaagd, 6 gefaald — dezelfde zes die Chromium vragen.
+
+### Niet geverifieerd in deze omgeving
+
+**Er is geen avondbeeld gezien.** Wat `lightPlan` uitrekent is getoetst; dat de
+weergave daar een bruikbare plaat van maakt is dat niet. Concreet onbewezen:
+dat de kegels van spots er goed uitzien in plaats van als grijze mist, dat de
+gekozen sterktes een kamer opleveren die niet te donker of uitgebrand is, en dat
+acht lampen op deze hardware vloeiend draaien. Dat zijn precies de dingen die
+je pas ziet als je kijkt.
+
+### Wat fase 7 hierna nog mist
+
+Materialen op vlakken, en het narekenen van transformaties en performance op
+referentiehardware.
+
+## Aanvulling 11 september 2026 — fase 7: een standpunt bewaren en als beeld opslaan
+
+Het exitcriterium van fase 7 vraagt dat een opgeslagen camera een bruikbaar
+beeld oplevert. Daarvoor moest een standpunt eerst ergens kunnen wonen.
+
+### Het standpunt hoort bij het ontwerp, niet bij de browser
+
+Camerastandpunten staan in de scène, in millimeters en in de assen van het plan;
+de 3D-weergave deelt zelf door duizend. Ze gaan door dezelfde opdrachtenweg als
+een muur, met dezelfde revisie- en conflictcontrole. Daaruit volgt wat het
+waard is: een standpunt reist mee met varianten en revisies, en een collega die
+het project opent ziet hetzelfde beeld als degene die het bewaarde. Was het in
+de browser blijven zitten, dan was het van één apparaat geweest.
+
+`z` is de hoogte boven de vloer. Een camera die naar zijn eigen positie kijkt
+wordt geweigerd, net als een beeldhoek buiten het bereik van een lens.
+
+### Bewaren onder dezelfde ID werkt bij
+
+Dat is wat iemand bedoelt die de camera verzet en opnieuw bewaart, en het maakt
+een dubbel verzonden opdracht onschadelijk. In het venster gaat dat op naam:
+dezelfde naam is hetzelfde standpunt. Er passen er 24 in een ontwerp — een rem
+op een document dat ongemerkt volloopt, geen uitspraak over wat genoeg is.
+
+### Beeld opslaan tekent eerst, leest daarna
+
+De weergave tekent alleen op verzoek (`frameloop="demand"`). Zonder die
+volgorde lees je het beeld van een willekeurig moment daarvoor uit, of een leeg
+doek. Daarom rendert de knop zelf een beeld vlak voor het uitlezen, en staat
+`preserveDrawingBuffer` aan. Dat laatste kost geheugen en is niet voor niets
+standaard uit; het is de prijs voor een knop die een echt bestand oplevert.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2
+
+TypeScript strict geslaagd, frontendbuild geslaagd. Vijf nieuwe eenheidstests in
+`cameras.test.ts`: de heen-en-terugweg tussen millimeters en de weergave,
+bijwerken in plaats van verdubbelen, het maximum, de geweigerde onmogelijke
+camera, en een scène van vóór dit veld die gewoon leesbaar blijft. Volledige
+suite 299 geslaagd, 6 gefaald — dezelfde zes die Chromium vragen en hier al
+faalden.
+
+### Niet geverifieerd in deze omgeving
+
+**De knoppen zijn door geen browser gedraaid.** Chromium start in deze container
+niet, en er is voor deze stap geen E2E-route bijgekomen. Dat betekent concreet:
+dat een teruggezet standpunt hetzelfde beeld oplevert, en dat "Beeld opslaan"
+een PNG met inhoud geeft in plaats van een leeg doek, is **in code beredeneerd
+en niet gezien**. Voor het exitcriterium van fase 7 telt pas een gezien beeld.
+
+### Wat fase 7 hierna nog mist
+
+Materialen op vlakken, dag- en avondlicht, lichtvisualisatie in 3D, en het
+controleren van transformaties en performance op referentiehardware. De
+weergave toont nu vloeren, muren met echte openingen en eigen modellen.
+
+## Aanvulling 11 september 2026 — fase 3: anker, schaalmodus, prijsbron en rechten
+
+De vier velden die de itemeditor uit de masterprompt nog miste. Ze hebben één
+ding gemeen: ze leggen een belofte van het bibliotheekitem vast die daarna in
+het ontwerp wordt afgedwongen, in plaats van dat de gebruiker hem elke keer zelf
+moet onthouden.
+
+### Het anker wordt door de server teruggerekend
+
+Een kast hoort met zijn rug tegen de wand en niet met zijn hart op de wandlijn.
+Het anker zegt welk punt van het object je aanwijst; de scène bewaart nog steeds
+altijd het hart. Die omrekening staat in `centerFromAnchor` en gebeurt **op de
+server**, bij het oplossen van `PlaceLibraryItem`. De interface heeft er geen
+stem in, en een oudere interface plaatst dus niet stiekem anders.
+
+Het anker draait mee met het object: bij een kwartslag ligt de achterzijde
+links van het hart en niet erboven.
+
+### De schaalmodus wordt twee keer getoetst, tegen twee bronnen
+
+`applyOperations` toetst bij elke `TransformItem` het object zoals het in het
+ontwerp staat. Dat is de snelle weg en die geldt ook lokaal in de editor.
+
+Daarnaast toetst de commandoroute nog een keer tegen de **bibliotheekversie
+zelf**. Dat is geen dubbelop: objecten komen ook in een scène terecht langs
+wegen die geen enkele opdracht uitvoeren — een teruggezette revisie, een gered
+klad. De bron is de versie, en die heeft het laatste woord.
+
+Een vaste handelsmaat blijft vast, ook met maatwerk aan: 2.200 mm is wat de
+fabrikant levert. Gelijkmatig schalen wordt op de verhouding getoetst en niet op
+een factor, want breedte en diepte zijn hele millimeters; de marge is precies de
+afronding van een halve millimeter per as en niet meer.
+
+### Een prijs zonder bron en datum wordt geweigerd
+
+Dezelfde drie velden en dezelfde regel als bij materialen: `unitPrice`,
+`priceSource` en `priceDate`. Een bedrag zonder bron is een prijs waarvan
+niemand meer weet waar hij vandaan komt, en die duikt een half jaar later op in
+een offerte. Dit is de inkoop-/lijstprijs bij het item; wat de klant betaalt
+blijft een eigen keuze per project (`commercial_prices`) en wordt hier niet door
+overschreven.
+
+### Rechten doen iets, en precies één ding
+
+Per item: licentie, rechthebbende, verplichte vermelding en of de gegevens mee
+mogen naar buiten. Dat laatste is het enige dat afdwingt, en het doet dat in de
+productlijst van een presentatie — het enige pad waarlangs
+leveranciersgegevens van een item vandaag de werkruimte verlaten, in zowel de
+PDF als de PowerPoint.
+
+Staat export uit, dan blijven leverancier en artikelnummer leeg en meldt het
+document hoeveel producten dat betrof. Het meubel zelf blijft wél in de lijst:
+weglaten zou de presentatie laten liegen over wat er in het ontwerp staat. Een
+verplichte vermelding wordt juist afgedrukt — daar is hij voor. Rechten reizen
+mee met de publicatie en niet met de bibliotheek, zodat een uitgegeven
+presentatie over tien jaar nog laat zien welke vermelding er toen bij hoorde.
+
+### Geen migratie, en dat is een keuze
+
+Alle vier de velden hebben een standaardwaarde die precies het oude gedrag is:
+geen anker telt als midden, geen schaalmodus als vrij, geen rechten als "mag
+mee". Bibliotheekversies en scènes staan als JSON in de database en worden bij
+elk gebruik opnieuw gelezen; waren de velden verplicht geweest, dan was de hele
+bibliotheek in één keer onleesbaar.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+TypeScript strict geslaagd, frontendbuild geslaagd. Zeven nieuwe eenheidstests
+in `library-rules.test.ts` en een uitgebreide bibliotheekroute in
+`integration.test.ts` (20 geslaagd), die vastlegt: een kast met anker
+"achterzijde" komt met zijn rug op het aangewezen punt, prijsbron en rechten
+reizen mee met de plaatsing, en de server weigert het rekken van een vaste
+handelsmaat met 400 zonder het ontwerp te wijzigen.
+
+Volledige suite: 294 geslaagd, 6 gefaald. Die zes zijn dezelfde die vóór deze
+wijziging al faalden — ze vragen Chromium, dat in deze container niet start.
+
+### Niet geverifieerd in deze omgeving
+
+De nieuwe velden in het bibliotheekvenster zijn niet door een browser gedraaid;
+er is voor deze stap geen E2E-route bijgekomen. De weigering van een vaste
+handelsmaat is in de editor alleen langs de servertoets bewezen, niet als
+sleepbeweging op het tekenblad: de greep is nog gewoon te pakken en de
+melding verschijnt pas bij het loslaten.
+
+### Wat fase 3 hierna nog mist
+
+Van de openstaande punten van fase 3 zijn prijsbron, rechten- en
+exportmetadata en de anker- en schaalmodi hiermee ingevuld. Wat blijft: een
+projectexport die deze exportrechten ook werkelijk toepast, want die export
+bestaat nog niet.
 ## Aanvulling 11 september 2026 — fase 3: het exitpad in de browser
 
 Toevoeging van één E2E-route die de twee stukken van het fase-3-exitcriterium

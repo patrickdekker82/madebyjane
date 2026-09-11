@@ -647,12 +647,103 @@ test("bibliotheekversies zijn immutable, geïsoleerd en wijzigen plaatsingen nie
     (await db.admin.query("SELECT count(*)::int AS n FROM audit_events WHERE action IN ('library.archived','library.restored') AND subject_id=$1", [v1.entryId])).rows[0].n,
   ).toBe(3);
 
+  /*
+   * Anker en schaalmodus: twee beloften van het item aan het ontwerp. Het anker
+   * wordt hier door de server teruggerekend naar het hart, en de vaste maat
+   * wordt door de server geweigerd — de interface mag daar niet de laatste stem
+   * in hebben.
+   */
+  const kast = {
+    entryId: randomUUID(),
+    versionId: randomUUID(),
+    baseVersion: 0,
+    definition: {
+      name: "Wandkast",
+      kind: "cabinet",
+      width: 2000,
+      depth: 600,
+      height: 2200,
+      color: "#8d7f6a",
+      anchor: "back",
+      scaleMode: "fixed",
+      catalog: {
+        category: "Kasten",
+        description: "",
+        keywords: [],
+        supplier: "Atelier",
+        sku: "KAST-01",
+        priceSource: "Prijslijst 2026-1",
+        priceDate: "2026-09-11",
+        unitPrice: "1899.00",
+        rights: {
+          licence: "Eigen werk",
+          holder: "Studio",
+          attribution: "",
+          exportAllowed: false,
+        },
+      },
+    },
+  };
+  expect((await request("POST", "/api/v1/library", kast)).statusCode).toBe(200);
+  const kastId = randomUUID();
+  const tegenWand = await request("POST", route + "/commands", {
+    commandId: randomUUID(),
+    baseRevision: (await request("GET", route + "/document")).json().revision,
+    leaseId,
+    operations: [
+      {
+        type: "PlaceLibraryItem",
+        id: kastId,
+        versionId: kast.versionId,
+        x: 3000,
+        y: 100,
+        rotation: 0,
+      },
+    ],
+  });
+  expect(tegenWand.statusCode, tegenWand.body).toBe(200);
+  // De rug ligt op y=100, dus het hart staat een halve diepte verderop.
+  const geplaatsteKast = tegenWand
+    .json()
+    .scene.items.find((i: any) => i.id === kastId);
+  expect(geplaatsteKast).toMatchObject({ x: 3000, y: 400 });
+  // De prijsbron en de rechten reizen mee met de plaatsing.
+  expect(geplaatsteKast.catalog.priceSource).toBe("Prijslijst 2026-1");
+  expect(geplaatsteKast.catalog.rights.exportAllowed).toBe(false);
+  // Een vaste handelsmaat is ook met maatwerk niet te rekken.
+  const gerekt = await request("POST", route + "/commands", {
+    commandId: randomUUID(),
+    baseRevision: (await request("GET", route + "/document")).json().revision,
+    leaseId,
+    operations: [
+      {
+        type: "TransformItem",
+        id: kastId,
+        x: 3000,
+        y: 400,
+        width: 2400,
+        depth: 600,
+        rotation: 0,
+        custom: true,
+      },
+    ],
+  });
+  expect(gerekt.statusCode).toBe(400);
+  expect(gerekt.json().message).toMatch(/vaste handelsmaat/);
+  expect(
+    (await request("GET", route + "/document"))
+      .json()
+      .items.find((i: any) => i.id === kastId).width,
+  ).toBe(2000);
+
   const foreign = { ...v1, entryId: randomUUID(), versionId: randomUUID() };
   await request("POST", "/api/v1/library", foreign, cookieB, orgB);
   const rejected = await request("POST", route + "/commands", {
     ...place,
     commandId: randomUUID(),
-    baseRevision: scene.revision + 1,
+    // De huidige revisie, zodat deze toets over de verwijzing gaat en niet
+    // struikelt over het werk dat hierboven is toegevoegd.
+    baseRevision: (await request("GET", route + "/document")).json().revision,
     operations: [
       {
         ...place.operations[0],

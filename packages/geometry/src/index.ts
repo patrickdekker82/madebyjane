@@ -1,4 +1,4 @@
-import type { Point, Scene, Wall } from "../../contracts/src/index";
+import type { AnchorMode, Point, Scene, Wall } from "../../contracts/src/index";
 export const distance = (a: Point, b: Point) =>
   Math.hypot(b.x - a.x, b.y - a.y);
 export const toThree = (
@@ -7,6 +7,49 @@ export const toThree = (
   height = 0,
 ): [number, number, number] => [x / 1000, height / 1000, y / 1000];
 export const toThreeRotation = (degrees: number) => (-degrees * Math.PI) / 180;
+/**
+ * De weg terug uit de 3D-weergave: van meters naar hele millimeters in de assen
+ * van het plan. Het ontwerp kent maar één maatvoering, en een bewaard
+ * camerastandpunt hoort daar net zo goed in te staan als een muur.
+ */
+export const fromThree = (x: number, y: number, z: number) => ({
+  x: Math.round(x * 1000),
+  y: Math.round(z * 1000),
+  z: Math.round(y * 1000),
+});
+/**
+ * Van ankerpunt naar hart van het object.
+ *
+ * Een object wordt met zijn hart bewaard — dat is overal in de app zo en dat
+ * blijft zo. Het anker zegt alleen welk punt van het object de gebruiker
+ * aanwijst bij het plaatsen: de rug van een kast hoort tegen de wand, niet het
+ * hart ervan. Hier wordt die aanwijzing teruggerekend naar het hart.
+ *
+ * De zijde geldt vóór draaiing en draait mee: bij een kast die een kwartslag
+ * staat, wijst de achterzijde een kwartslag mee. Draairichting is die van het
+ * tekenblad, dezelfde als in het planblad (`rotate()` in SVG, y omlaag).
+ */
+export function centerFromAnchor(
+  anchor: AnchorMode | undefined,
+  item: { width: number; depth: number; rotation: number },
+  point: Point,
+): Point {
+  const local: Record<AnchorMode, Point> = {
+    center: { x: 0, y: 0 },
+    back: { x: 0, y: -item.depth / 2 },
+    front: { x: 0, y: item.depth / 2 },
+    left: { x: -item.width / 2, y: 0 },
+    right: { x: item.width / 2, y: 0 },
+  };
+  const offset = local[anchor ?? "center"],
+    radians = (item.rotation * Math.PI) / 180,
+    cos = Math.cos(radians),
+    sin = Math.sin(radians);
+  return {
+    x: Math.round(point.x - (offset.x * cos - offset.y * sin)),
+    y: Math.round(point.y - (offset.x * sin + offset.y * cos)),
+  };
+}
 export function endpoints(scene: Scene, wall: Wall) {
   const a = scene.nodes.find((n) => n.id === wall.startId),
     b = scene.nodes.find((n) => n.id === wall.endId);
@@ -92,6 +135,7 @@ export function validateGeometry(scene: Scene) {
     ...scene.openings,
     ...scene.items,
     ...scene.annotations,
+    ...scene.cameras,
   ].map((x) => x.id);
   if (new Set(all).size !== all.length) throw new Error("Dubbele object-ID.");
   for (const wall of scene.walls) {
@@ -117,6 +161,11 @@ export function validateGeometry(scene: Scene) {
       throw new Error("Opening heeft geen muur.");
 }
 export { detectRooms, type Room, type RoomDetection } from "./rooms";
+export {
+  surfaceFinishes,
+  type Finish,
+  type SurfaceFinishes,
+} from "./finishes";
 export { wallOutlines, type WallOutline } from "./walls";
 export {
   expandSelection,
@@ -138,6 +187,12 @@ export {
 } from "./underlay";
 export { ledLengthMm, ledSegments, ledCornerCount, ledBounds } from "./led";
 export { beamFootprint, beamBounds, type BeamFootprint } from "./beam";
+export {
+  lightPlan,
+  kelvinToRgb,
+  type LightPlan,
+  type PlannedLight,
+} from "./light-3d";
 export { fixtureSymbols, defaultSymbolSizeMm } from "./fixture-symbols";
 export {
   dimensionGeometry,

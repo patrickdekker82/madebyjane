@@ -8,6 +8,7 @@ import {
   commandSchema,
   type Scene,
 } from "../../contracts/src/index";
+import { centerFromAnchor } from "../../geometry/src/index";
 import { emptyScene, demoScene } from "../../test-fixtures/src/index";
 import {
   DomainError,
@@ -415,13 +416,33 @@ export class ProjectService {
             404,
           );
         const v = row.rows[0];
+        /*
+         * Het anker van het item bepaalt wat het aangewezen punt betekent. De
+         * scène bewaart altijd het hart, dus dat wordt hier teruggerekend —
+         * server-side, zodat het niet uitmaakt welke versie van de interface de
+         * opdracht stuurde.
+         */
+        const center = centerFromAnchor(
+          v.definition.anchor,
+          {
+            width: v.definition.width,
+            depth: v.definition.depth,
+            rotation: op.rotation,
+          },
+          { x: op.x, y: op.y },
+        );
+        if (Math.abs(center.x) > 100000 || Math.abs(center.y) > 100000)
+          throw new DomainError(
+            "OUT_OF_BOUNDS",
+            "Dit item valt met dit anker buiten het tekenblad. Plaats het verder van de rand.",
+          );
         resolved.push({
           type: "PlaceItem",
           item: {
             ...v.definition,
             id: op.id,
-            x: op.x,
-            y: op.y,
+            x: center.x,
+            y: center.y,
             rotation: op.rotation,
             custom: false,
             libraryRef: {
@@ -498,6 +519,34 @@ export class ProjectService {
             throw new DomainError(
               "CUSTOM_SIZE_REQUIRED",
               "Kies maatwerk om van de bibliotheekmaten af te wijken.",
+            );
+          /*
+           * De schaalmodus wordt hier nog een keer getoetst, en dan tegen de
+           * bibliotheekversie zelf in plaats van tegen de kopie in de scène.
+           * `applyOperations` kijkt naar het object in het ontwerp, en dat komt
+           * ook binnen langs wegen die geen enkele opdracht uitvoeren — een
+           * teruggezette revisie of een gered klad. De bron blijft de versie.
+           */
+          const mode = v.definition.scaleMode ?? "free",
+            afwijkend =
+              item.width !== v.definition.width ||
+              item.depth !== v.definition.depth;
+          if (mode === "fixed" && afwijkend)
+            throw new DomainError(
+              "FIXED_SIZE",
+              `"${v.definition.name}" heeft een vaste handelsmaat en is niet te schalen.`,
+            );
+          if (
+            mode === "uniform" &&
+            afwijkend &&
+            Math.abs(
+              item.width * v.definition.depth - item.depth * v.definition.width,
+            ) >
+              (v.definition.width + v.definition.depth) / 2 + 1
+          )
+            throw new DomainError(
+              "UNIFORM_SCALE_ONLY",
+              `"${v.definition.name}" schaalt alleen gelijkmatig. Houd breedte en diepte in verhouding.`,
             );
         }
       }

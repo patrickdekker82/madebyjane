@@ -1,0 +1,23 @@
+{$CADDY_SITE_ADDRESS} {
+	encode zstd gzip
+
+	# De volgorde van deze twee blokken is niet vrijblijvend, en daarom staan ze
+	# allebei in een `handle`.
+	#
+	# Caddy ordent losse directives niet op volgorde van het bestand maar op zijn
+	# eigen vaste lijst, en `try_files` staat daarin vóór `handle`. Stonden `root`,
+	# `try_files` en `file_server` hier los, dan werd elk verzoek dat geen bestaand
+	# bestand is — dus ook `/api/v1/...` — eerst herschreven naar `/index.html`.
+	# Daarna matcht `/api/*` niet meer op het herschreven pad en kreeg elke
+	# API-aanroep de SPA terug in plaats van de API. Twee `handle`-blokken sluiten
+	# elkaar uit en worden wél op volgorde afgehandeld.
+	handle /api/* {
+		reverse_proxy api:4311
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -19,6 +19,7 @@ export function emptyScene(
     annotations: [],
     ledPaths: [],
     underlay: null,
+    cameras: [],
   };
 }
 export function demoScene(

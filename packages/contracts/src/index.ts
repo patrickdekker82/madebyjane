@@ -73,6 +73,54 @@ export const symbolShapeSchema = z
   });
 export const symbolSchema = z.array(symbolShapeSchema).min(1).max(32);
 export type SymbolShape = z.infer<typeof symbolShapeSchema>;
+/**
+ * Prijsvelden van een bibliotheekitem. Bewust dezelfde drie velden en dezelfde
+ * regel als bij materialen (`materials.ts`): een bedrag zonder bron en datum is
+ * een prijs waarvan niemand meer weet waar hij vandaan komt, en die duikt een
+ * half jaar later op in een offerte.
+ *
+ * Dit is de inkoop-/lijstprijs zoals hij bij het item hoort. De prijs die de
+ * klant ziet, blijft een eigen keuze per project (`commercial_prices`); die
+ * wordt hier niet door overschreven.
+ */
+const itemPriceDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const time = new Date(value + "T00:00:00.000Z");
+    return (
+      Number.isFinite(time.getTime()) &&
+      time.toISOString().slice(0, 10) === value
+    );
+  }, "Gebruik een geldige datum.");
+const itemMoney = z
+  .string()
+  .regex(
+    /^(?:0|[1-9]\d{0,6})(?:\.\d{1,2})?$/,
+    "Gebruik een bedrag met maximaal twee decimalen.",
+  );
+/**
+ * Rechten bij een item. Een meubel uit een leverancierscatalogus, een gekocht
+ * 3D-model en eigen tekenwerk hebben elk andere voorwaarden, en die zijn na een
+ * jaar niet meer uit het hoofd te reconstrueren. Daarom staan ze bij het item.
+ *
+ * `exportAllowed` is de enige die iets afdwingt: staat hij uit, dan gaan de
+ * leveranciersgegevens van dit item niet mee in documenten die de werkruimte
+ * verlaten. Het object zelf blijft gewoon in de tekening staan — het weglaten
+ * zou de plattegrond laten liegen over wat er staat.
+ */
+export const rightsSchema = z
+  .object({
+    /** Naam van de licentie of voorwaarde, vrij in te vullen. */
+    licence: z.string().trim().max(160).default(""),
+    /** Van wie het materiaal is: fabrikant, fotograaf, eigen werk. */
+    holder: z.string().trim().max(160).default(""),
+    /** Regel die letterlijk bij een export moet worden afgedrukt. */
+    attribution: z.string().trim().max(300).default(""),
+    exportAllowed: z.boolean().default(true),
+  })
+  .strict();
+export type Rights = z.infer<typeof rightsSchema>;
 export const catalogSchema = z
   .object({
     category: z.string().trim().max(80),
@@ -80,8 +128,71 @@ export const catalogSchema = z
     keywords: z.array(z.string().trim().min(1).max(80)).max(20),
     supplier: z.string().trim().max(120),
     sku: z.string().trim().max(120),
+    /**
+     * De drie prijsvelden en de rechten hebben een standaardwaarde, zodat
+     * bestaande scenes en bibliotheekversies zonder migratie geldig blijven.
+     */
+    priceSource: z.string().trim().max(160).default(""),
+    priceDate: itemPriceDate.nullable().default(null),
+    unitPrice: itemMoney.nullable().default(null),
+    rights: rightsSchema.default({
+      licence: "",
+      holder: "",
+      attribution: "",
+      exportAllowed: true,
+    }),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.unitPrice !== null && (!value.priceSource || !value.priceDate))
+      ctx.addIssue({
+        code: "custom",
+        path: ["priceSource"],
+        message: "Noteer bij een prijs ook de bron en de prijsdatum.",
+      });
+    if (value.priceDate !== null && !value.priceSource)
+      ctx.addIssue({
+        code: "custom",
+        path: ["priceSource"],
+        message: "Noteer waar de prijsdatum vandaan komt.",
+      });
+  });
+/**
+ * Waar de plaatsingscoördinaat van een item op slaat. Een kast hoort met zijn
+ * rug tegen de wand en niet met zijn hart op de wandlijn; een hanglamp hangt
+ * juist wél om zijn midden. Zonder anker moet de gebruiker dat elke keer zelf
+ * terugrekenen met de halve diepte.
+ *
+ * De zijde is die van het item zelf, vóór draaiing: de achterzijde is de kant
+ * met de kleinste y. Draait het item, dan draait het anker mee.
+ */
+export const anchorModes = {
+  center: "Midden",
+  back: "Achterzijde",
+  front: "Voorzijde",
+  left: "Linkerzijde",
+  right: "Rechterzijde",
+} as const;
+export type AnchorMode = keyof typeof anchorModes;
+export const anchorSchema = z.enum(
+  Object.keys(anchorModes) as [AnchorMode, ...AnchorMode[]],
+);
+/**
+ * Hoeveel vrijheid de maten van dit item hebben.
+ *
+ * `fixed` is de handelsmaat van een fabrikant: een bank van 2.200 mm is niet
+ * stiekem 2.350 mm te maken omdat hij anders niet past. `uniform` laat schalen
+ * toe zolang de verhouding klopt. `free` is tekenwerk zonder die belofte.
+ */
+export const scaleModes = {
+  free: "Vrij te schalen",
+  uniform: "Alleen gelijkmatig schalen",
+  fixed: "Vaste handelsmaat",
+} as const;
+export type ScaleMode = keyof typeof scaleModes;
+export const scaleModeSchema = z.enum(
+  Object.keys(scaleModes) as [ScaleMode, ...ScaleMode[]],
+);
 export const libraryQuerySchema = z
   .object({
     offset: z.coerce.number().int().min(0).max(100000).default(0),
@@ -193,6 +304,13 @@ export const itemSchema = z
     rotation: z.number().finite().min(-360).max(360),
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
     custom: z.boolean(),
+    /**
+     * Ontbreken bij scenes van vóór deze velden. Een ontbrekend anker telt als
+     * `center` en een ontbrekende schaalmodus als `free`: precies het gedrag
+     * dat die scenes altijd al hadden, dus ze blijven zonder migratie geldig.
+     */
+    anchor: anchorSchema.optional(),
+    scaleMode: scaleModeSchema.optional(),
     symbol: symbolSchema.optional(),
     catalog: catalogSchema.optional(),
     model: z
@@ -364,6 +482,51 @@ export const ledPathSchema = z
         });
   });
 export type LedPath = z.infer<typeof ledPathSchema>;
+/**
+ * Een bewaard camerastandpunt.
+ *
+ * Alles in millimeter en in de assen van het plan, net als de rest van het
+ * ontwerp; de 3D-weergave deelt zelf door duizend. Zo blijft er één
+ * maatvoering in het document en is een standpunt ook buiten de viewer te
+ * lezen. `z` is de hoogte boven de vloer.
+ *
+ * Het standpunt hoort bij het ontwerp en niet bij de browser: het reist mee met
+ * revisies en varianten, en een collega die het project opent ziet hetzelfde
+ * beeld als degene die het bewaarde.
+ */
+export const cameraSchema = z
+  .object({
+    id,
+    name: z.string().trim().min(1).max(80),
+    /** Waar de camera staat. */
+    eye: z.object({ x: mm, y: mm, z: mm }).strict(),
+    /** Waar hij naar kijkt. */
+    target: z.object({ x: mm, y: mm, z: mm }).strict(),
+    /** Beeldhoek in graden; smal is een telelens, breed vertekent. */
+    fov: z.number().int().min(10).max(120),
+    /**
+     * Dag of avond. Hoort bij het standpunt omdat het bij het beeld hoort:
+     * "vanaf de eettafel" overdag en 's avonds zijn twee verschillende platen,
+     * en juist die tweede is waarvoor het lichtplan is gemaakt.
+     *
+     * Standaardwaarde, dus standpunten van vóór dit veld blijven geldig en
+     * openen zoals ze altijd deden: overdag.
+     */
+    light: z.enum(["day", "evening"]).default("day"),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.eye.x === value.target.x &&
+      value.eye.y === value.target.y &&
+      value.eye.z === value.target.z
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "Een camera kan niet naar zijn eigen positie kijken.",
+      });
+  });
+export type Camera = z.infer<typeof cameraSchema>;
 export const sceneSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -380,6 +543,12 @@ export const sceneSchema = z
     /** Standaardwaarde, dus scenes van voor fase 4 blijven geldig zonder migratie. */
     ledPaths: z.array(ledPathSchema).max(200).default([]),
     underlay: underlaySchema.nullable().default(null),
+    /**
+     * Bewaarde camerastandpunten. Standaardwaarde, dus scenes van voor fase 7
+     * blijven geldig zonder migratie. Het maximum is een rem op een document
+     * dat ongemerkt volloopt, niet een uitspraak over wat genoeg is.
+     */
+    cameras: z.array(cameraSchema).max(24).default([]),
   })
   .strict();
 export type Scene = z.infer<typeof sceneSchema>;
@@ -493,6 +662,13 @@ export const operationSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   z.object({ type: z.literal("AddLedPath"), path: ledPathSchema }).strict(),
+  /*
+   * Een standpunt bewaren is een gewone ontwerpopdracht: hij gaat door dezelfde
+   * revisie- en conflictcontrole als een muur, want hij hoort bij het ontwerp en
+   * niet bij de browser waarin hij toevallig is ingesteld.
+   */
+  z.object({ type: z.literal("SaveCamera"), camera: cameraSchema }).strict(),
+  z.object({ type: z.literal("DeleteCamera"), id }).strict(),
   /** Elektra- en armatuurvelden van een bestaand punt bijwerken. */
   z
     .object({ type: z.literal("SetFixture"), id, fixture: fixtureSchema })
@@ -578,6 +754,8 @@ export const libraryDefinitionSchema = itemSchema.pick({
   depth: true,
   height: true,
   color: true,
+  anchor: true,
+  scaleMode: true,
 });
 export const libraryPublishSchema = z
   .object({

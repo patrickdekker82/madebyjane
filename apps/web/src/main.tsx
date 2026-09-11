@@ -1,4 +1,5 @@
 import { Materials } from "./Materials";
+import type { MaterialVersion } from "../../../packages/contracts/src/materials";
 import { Quotes } from "./Quotes";
 import { Presentations } from "./Presentations";
 import { LibraryPanel } from "./LibraryPanel";
@@ -733,7 +734,8 @@ function Editor() {
     [busy, setBusy] = useState(false),
     [lease, setLease] = useState(false),
     [leaseError, setLeaseError] = useState(""),
-    [view, setView] = useState<"2d" | "3d">("2d");
+    [view, setView] = useState<"2d" | "3d">("2d"),
+    [materials, setMaterials] = useState<MaterialVersion[]>([]);
   const [undo, setUndo] = useState<Scene[]>([]),
     [redo, setRedo] = useState<Scene[]>([]);
   /** Twee punten die op de onderlegger zijn aangewezen, in afwachting van de maat. */
@@ -855,6 +857,26 @@ function Editor() {
       select(null);
     }
   }, [query.data, select]);
+  /*
+   * Materiaalkeuzes voor de 3D-weergave. Pas ophalen wanneer die weergave
+   * werkelijk open gaat: wie in 2D tekent heeft ze niet nodig, en het is een
+   * extra verzoek per project. Mislukt het ophalen, dan blijft de weergave
+   * gewoon werken met neutrale vlakken; materiaal is een verrijking van het
+   * beeld en geen voorwaarde ervoor.
+   */
+  useEffect(() => {
+    if (view !== "3d" || !scene) return;
+    let alive = true;
+    api<{ items: MaterialVersion[] }>(
+      `/projects/${scene.projectId}/materials`,
+      org.id,
+    )
+      .then((result) => alive && setMaterials(result.items))
+      .catch(() => alive && setMaterials([]));
+    return () => {
+      alive = false;
+    };
+  }, [view, scene?.projectId, org.id]);
   /**
    * Zoekt bij het openen naar lokaal werk van een eerdere sessie. Er wordt niets
    * automatisch teruggezet: de gebruiker ziet wat er ligt en kiest zelf.
@@ -1741,7 +1763,12 @@ function Editor() {
               <Suspense
                 fallback={<div className="center">3D-weergave openen…</div>}
               >
-                <Viewer scene={scene} />
+                <Viewer
+                  scene={scene}
+                  onCommand={command}
+                  disabled={disabled}
+                  materials={materials}
+                />
               </Suspense>
             </ViewError>
           )}
