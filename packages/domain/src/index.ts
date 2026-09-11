@@ -160,6 +160,7 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
           );
         s.items = s.items.filter((i) => !op.ids.includes(i.id));
         s.annotations = s.annotations.filter((a) => !op.ids.includes(a.id));
+        s.ledPaths = s.ledPaths.filter((l) => !op.ids.includes(l.id));
         s.walls = s.walls.filter((w) => !op.ids.includes(w.id));
         s.openings = s.openings.filter(
           (o) =>
@@ -169,6 +170,31 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
           s.walls.some((w) => w.startId === n.id || w.endId === n.id),
         );
         break;
+      case "SetFixture": {
+        const item = s.items.find((i) => i.id === op.id);
+        if (!item) throw new Error("Dit punt bestaat niet meer.");
+        if (item.locked)
+          throw new Error(
+            "Dit punt is vergrendeld. Ontgrendel het eerst om het te wijzigen.",
+          );
+        if (!item.fixture)
+          throw new Error("Dit object is geen elektra- of verlichtingspunt.");
+        item.fixture = structuredClone(op.fixture);
+        break;
+      }
+      case "AddLedPath":
+        if (s.ledPaths.some((l) => l.id === op.path.id))
+          throw new Error("Deze LED-strip bestaat al.");
+        s.ledPaths.push(structuredClone(op.path));
+        break;
+      case "UpdateLedPath": {
+        const index = s.ledPaths.findIndex((l) => l.id === op.id);
+        if (index < 0) throw new Error("Deze LED-strip bestaat niet meer.");
+        if (op.path.id !== op.id)
+          throw new Error("Een LED-strip kan niet van identiteit wisselen.");
+        s.ledPaths[index] = structuredClone(op.path);
+        break;
+      }
       case "RestoreContent":
         Object.assign(s, structuredClone(op.content));
         break;
@@ -189,9 +215,18 @@ export const contentOf = ({
   openings,
   items,
   annotations,
+  ledPaths,
   underlay,
 }: Scene) =>
-  structuredClone({ nodes, walls, openings, items, annotations, underlay });
+  structuredClone({
+    nodes,
+    walls,
+    openings,
+    items,
+    annotations,
+    ledPaths,
+    underlay,
+  });
 export {
   can,
   permissionsFor,

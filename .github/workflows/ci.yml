@@ -31,6 +31,14 @@ jobs:
       # het planblad ongemerkt verkleinen.
       - run: pip install --disable-pip-version-check pdfplumber==0.11.10
       - run: python3 scripts/verify-quote-pdf.py
+      # Hetzelfde voor de presentatie: papiermaten per blok en een schaalbalk
+      # die op papier werkelijk 100 mm meet.
+      - run: pnpm probe:presentation
+      - run: python3 scripts/verify-presentation-pdf.py
+      # De PowerPoint wordt op diaformaat, echte tabellen en toegestane
+      # lettertypen nagekeken; een ontbrekend lettertype verschuift de opmaak
+      # stilzwijgend op de computer van de klant.
+      - run: python3 scripts/verify-presentation-pptx.py
       - run: pnpm test
       - run: pnpm test:e2e
       - run: pnpm audit --audit-level high

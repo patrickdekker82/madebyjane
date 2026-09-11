@@ -20,7 +20,8 @@
     "setup": "tsx scripts/setup.ts",
     "check": "pnpm build && pnpm test",
     "probe:pdf": "tsx scripts/pdf-probe.ts",
-    "probe:quote": "tsx scripts/quote-pdf-probe.ts"
+    "probe:quote": "tsx scripts/quote-pdf-probe.ts",
+    "probe:presentation": "tsx scripts/presentation-probe.ts"
   },
   "dependencies": {
     "@fastify/rate-limit": "11.2.0",
@@ -39,6 +40,7 @@
     "lucide-react": "1.41.0",
     "pg": "8.23.0",
     "pg-boss": "12.30.0",
+    "pptxgenjs": "4.0.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-konva": "19.2.6",

@@ -1,5 +1,6 @@
 import { Materials } from "./Materials";
 import { Quotes } from "./Quotes";
+import { Presentations } from "./Presentations";
 import { LibraryPanel } from "./LibraryPanel";
 import { Variants, VariantName } from "./Variants";
 import { ProjectMembers } from "./ProjectMembers";
@@ -63,6 +64,12 @@ import {
   X,
   Armchair,
   HardDriveDownload,
+  Zap,
+  Lightbulb,
+  Plug,
+  ToggleLeft,
+  Sun,
+  Lamp,
 } from "lucide-react";
 import { api, login, logout, authRequest, ApiError } from "./api";
 import { Arrange } from "./Arrange";
@@ -70,6 +77,13 @@ import { expandSelection } from "../../../packages/geometry/src/grouping";
 import { LayerPanel } from "./Layers";
 import { UnderlayPanel } from "./Underlay";
 import { DimensionProperties, NoteProperties } from "./DimensionProperties";
+import { LedProperties } from "./LedProperties";
+import { FixtureProperties } from "./FixtureProperties";
+import { LightingPanel } from "./Lighting";
+import { newFixtureItem } from "../../../packages/editor-2d/src/fixture-draft";
+import { newLedPath } from "../../../packages/editor-2d/src/led-draft";
+import { ledLengthMm } from "../../../packages/geometry/src/index";
+import { formatMm } from "../../../packages/geometry/src/index";
 import { PlanCanvas } from "../../../packages/editor-2d/src/Canvas";
 import { useEditor, type Tool } from "../../../packages/editor-2d/src/store";
 import {
@@ -828,6 +842,10 @@ function Editor() {
     toggleObjectSnap,
     toggleSelected,
     selectMany,
+    ledDraft,
+    setLedDraft,
+    beams,
+    toggleBeams,
   } = useEditor();
   useEffect(() => {
     if (query.data) {
@@ -1161,9 +1179,15 @@ function Editor() {
   const download = async () => {
     setError("");
     try {
-      const r = await fetch("/api/v1/variants/" + variantId + "/plan.svg", {
-        headers: { "x-organization-id": org.id },
-      });
+      const r = await fetch(
+        "/api/v1/variants/" +
+          variantId +
+          "/plan.svg?beams=" +
+          (beams ? "1" : "0"),
+        {
+          headers: { "x-organization-id": org.id },
+        },
+      );
       if (!r.ok) throw new Error((await r.json()).message);
       saveBlob(await r.blob(), "ontwerpblad-1-50.svg");
     } catch (e) {
@@ -1189,6 +1213,7 @@ function Editor() {
   const dimension = annotation?.type === "dimension" ? annotation : undefined;
   const note = annotation?.type === "note" ? annotation : undefined;
   const item = single ? scene.items.find((i) => i.id === single) : undefined;
+  const led = single ? scene.ledPaths.find((l) => l.id === single) : undefined;
   const selectedItems = scene.items.filter((i) => selected.includes(i.id));
   const disabled = busy || !!pending.current || !lease || !canWrite(org.role);
   const state = saveState({
@@ -1258,6 +1283,7 @@ function Editor() {
               { id: "window", icon: AppWindow, label: "Raam" },
               { id: "measure", icon: Ruler, label: "Maat" },
               { id: "note", icon: StickyNote, label: "Notitie" },
+              { id: "led", icon: Zap, label: "LED-strip" },
             ] as const
           ).map((t) => (
             <button
@@ -1293,6 +1319,13 @@ function Editor() {
           projectId={scene.projectId}
           variantId={variantId}
           canEdit={canWrite(org.role)}
+        />
+        <Presentations
+          organizationId={org.id}
+          organizationName={org.name}
+          projectId={scene.projectId}
+          variantId={variantId}
+          disabled={!canWrite(org.role)}
         />
         {["owner", "admin", "finance"].includes(org.role) && (
           <Quotes
@@ -1380,6 +1413,35 @@ function Editor() {
           </button>
         </div>
       )}
+      {tool === "led" && (
+        <div className="editor-message" role="status">
+          <span>
+            {ledDraft.length === 0
+              ? "Klik de hoekpunten van de strip aan. Twee keer op hetzelfde punt klikken rondt hem af."
+              : `${ledDraft.length} ${ledDraft.length === 1 ? "punt" : "punten"} · ${formatMm(Math.round(ledLengthMm(ledDraft)))}`}
+          </span>
+          <button
+            disabled={disabled || ledDraft.length < 2}
+            onClick={() => {
+              const path = newLedPath(ledDraft);
+              command([{ type: "AddLedPath", path }]);
+              setLedDraft([]);
+              setTool("select");
+              select(path.id);
+            }}
+          >
+            Strip afronden
+          </button>
+          <button
+            onClick={() => {
+              setLedDraft([]);
+              setTool("select");
+            }}
+          >
+            Annuleren
+          </button>
+        </div>
+      )}
       {(error || leaseError || notice || recoveryNote) && (
         <div
           className={
@@ -1454,6 +1516,40 @@ function Editor() {
               select(id);
             }}
           />
+          <span className="eyebrow">ELEKTRA EN VERLICHTING</span>
+          <div className="library-grid">
+            {(
+              [
+                { kind: "socket", label: "Wandcontact", icon: Plug },
+                { kind: "switch", label: "Schakelaar", icon: ToggleLeft },
+                { kind: "ceiling", label: "Lichtpunt", icon: Lightbulb },
+                { kind: "spot", label: "Spot", icon: Sun },
+                { kind: "wall", label: "Wandarmatuur", icon: Lamp },
+                { kind: "pendant", label: "Hanglamp", icon: Lightbulb },
+              ] as const
+            ).map((x) => (
+              <button
+                key={x.kind}
+                disabled={disabled}
+                onClick={() => {
+                  // Elk volgend punt komt een halve meter verderop, anders
+                  // stapelen ze precies op elkaar en lijkt er niets te gebeuren.
+                  const step = scene.items.filter((i) => i.fixture).length % 8;
+                  const point = newFixtureItem(
+                    x.kind,
+                    1500 + step * 500,
+                    1500 + step * 300,
+                  );
+                  command([{ type: "PlaceItem", item: point }]);
+                  select(point.id);
+                }}
+              >
+                <x.icon size={22} strokeWidth={1.2} />
+                <span>{x.label}</span>
+                <small>Symbool op papier</small>
+              </button>
+            ))}
+          </div>
           <span className="eyebrow">MEUBELS TOEVOEGEN</span>
           <div className="library-grid">
             {(
@@ -1491,13 +1587,19 @@ function Editor() {
             disabled={disabled}
             onCommand={command}
           />
+          <LightingPanel
+            scene={scene}
+            disabled={disabled}
+            onCommand={command}
+          />
           <div className="objects-heading">
             <span className="eyebrow">OBJECTEN</span>
             <span>
               {scene.walls.length +
                 scene.items.length +
                 scene.openings.length +
-                scene.annotations.length}
+                scene.annotations.length +
+                scene.ledPaths.length}
             </span>
           </div>
           <div className="object-list">
@@ -1542,6 +1644,17 @@ function Editor() {
               >
                 <DoorOpen size={14} />
                 {o.kind === "door" ? "Deur" : "Raam"} {i + 1}
+              </button>
+            ))}
+            {scene.ledPaths.map((l) => (
+              <button
+                key={l.id}
+                className={selected.includes(l.id) ? "selected" : ""}
+                onClick={() => select(l.id)}
+              >
+                <span className="color-dot" style={{ background: l.color }} />
+                {l.name}
+                {l.hidden && <EyeOff size={12} />}
               </button>
             ))}
             {scene.annotations.map((a, i) => {
@@ -1589,7 +1702,14 @@ function Editor() {
             <h2>Eigenschappen</h2>
             <MousePointer2 size={15} />
           </div>
-          {item ? (
+          {item?.fixture ? (
+            <FixtureProperties
+              key={item.id + ":" + scene.revision}
+              item={{ ...item, fixture: item.fixture }}
+              disabled={disabled}
+              onCommand={command}
+            />
+          ) : item ? (
             <ItemProperties
               key={
                 item.id +
@@ -1610,6 +1730,13 @@ function Editor() {
             <NoteProperties
               key={note.id + ":" + scene.revision}
               annotation={note}
+              disabled={disabled}
+              onCommand={command}
+            />
+          ) : led ? (
+            <LedProperties
+              key={led.id + ":" + scene.revision}
+              led={led}
               disabled={disabled}
               onCommand={command}
             />
@@ -1698,6 +1825,14 @@ function Editor() {
           >
             <Magnet size={13} />
             {objectSnap ? "Vangen aan objecten" : "Vangen uit"}
+          </button>
+          <button
+            className={beams ? "active" : ""}
+            onClick={toggleBeams}
+            title="Toont waar het licht ongeveer op de vloer valt. Een visuele benadering, geen lichtberekening."
+          >
+            <Lightbulb size={13} />
+            {beams ? "Lichtbundels aan" : "Lichtbundels uit"}
           </button>
           <button
             className={localRecovery ? "active" : ""}
@@ -1982,4 +2117,3 @@ createRoot(document.getElementById("root")!).render(
     <RouterProvider router={router} />
   </QueryClientProvider>,
 );
-

@@ -13,7 +13,7 @@ import {
 } from "../../../packages/geometry/src/index";
 import type { Operation, Scene } from "../../../packages/contracts/src/index";
 import { useEditor } from "../../../packages/editor-2d/src/store";
-import { ApiError } from "./api";
+import { uploadImage } from "./Images";
 
 type Pending = { from: { x: number; y: number }; to: { x: number; y: number } };
 
@@ -48,26 +48,14 @@ export function UnderlayPanel({
     setBusy(true);
     setError("");
     try {
-      const assetId = crypto.randomUUID();
-      const response = await fetch("/api/v1/underlay-assets/" + assetId, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: {
-          "x-organization-id": organizationId,
-          "Content-Type": "application/octet-stream",
-        },
-        body: await chosen.arrayBuffer(),
-      });
-      const body = await response.json();
-      if (!response.ok)
-        throw new ApiError(body.code, body.message, response.status);
+      const uploaded = await uploadImage(chosen, organizationId);
       onCommand([
         {
           type: "SetUnderlay",
           underlay: {
-            assetId,
-            widthPx: body.widthPx,
-            heightPx: body.heightPx,
+            assetId: uploaded.id,
+            widthPx: uploaded.widthPx,
+            heightPx: uploaded.heightPx,
             x: 0,
             y: 0,
             rotation: 0,

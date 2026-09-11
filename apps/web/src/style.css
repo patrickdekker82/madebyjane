@@ -512,6 +512,227 @@ form {
   color: #7c8475;
   margin-bottom: 24px;
 }
+.dialog.wide {
+  width: min(760px, 94vw);
+}
+.presentation-new {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.presentation-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+}
+.presentation-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+}
+.presentation-list li.empty {
+  color: #a1a897;
+  font-style: italic;
+}
+.presentation-list li > button:first-child,
+.presentation-list li > span:first-child {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 0;
+}
+.presentation-list small {
+  color: #839078;
+  font-size: 9px;
+}
+.block-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.block-list > li {
+  border-top: 1px solid var(--line);
+  padding: 8px 0;
+}
+.block-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 5px;
+}
+.block-head strong {
+  flex: 1;
+  font-size: 11px;
+}
+.block-head button {
+  border: 0;
+  background: none;
+  padding: 3px 4px;
+}
+.moodboard-editor ul {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 6px;
+  display: grid;
+  gap: 6px;
+}
+.moodboard-editor li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+}
+.moodboard-editor li.empty {
+  color: #a1a897;
+  font-style: italic;
+  font-size: 11px;
+}
+.moodboard-editor li input {
+  flex: 1;
+}
+.moodboard-editor img,
+.moodboard-editor .image-loading,
+.moodboard-editor .image-missing {
+  width: 56px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #eceee8;
+  display: block;
+  flex: none;
+}
+.moodboard-editor .image-missing {
+  font-size: 8px;
+  color: #8a9280;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+.moodboard-buttons {
+  display: flex;
+  gap: 2px;
+}
+.moodboard-buttons button {
+  border: 0;
+  background: none;
+  padding: 3px 4px;
+}
+.moodboard-add {
+  display: flex;
+  gap: 6px;
+}
+.image-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.image-picker button {
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: none;
+  line-height: 0;
+}
+.image-picker img,
+.image-picker .image-loading,
+.image-picker .image-missing {
+  width: 72px;
+  height: 54px;
+  object-fit: cover;
+  display: block;
+  background: #eceee8;
+}
+.dialog.presentation-viewer {
+  width: min(1100px, 96vw);
+}
+.viewer-frame {
+  width: 100%;
+  height: 70vh;
+  border: 1px solid var(--line);
+  background: #4a4c48;
+}
+.notice {
+  background: #eef2e7;
+  padding: 8px 10px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+.lighting {
+  margin: 18px 0 4px;
+}
+.lighting h4 {
+  font-size: 11px;
+  margin: 0 0 8px;
+}
+.lighting-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px;
+}
+.lighting-list li {
+  padding: 5px 0;
+  font-size: 11px;
+  border-top: 1px solid var(--line);
+}
+.lighting-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lighting-list li span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lighting-list li span.muted {
+  color: #a1a897;
+}
+.lighting-list li small {
+  display: block;
+  margin-left: 18px;
+  color: #839078;
+  font-size: 9px;
+}
+.lighting-list li button {
+  padding: 2px 5px;
+  border: 0;
+  background: none;
+}
+.led-readout {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 10px 0 8px;
+}
+.led-readout div {
+  min-width: 62px;
+}
+.led-readout dt {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #a1a897;
+}
+.led-readout dd {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #27392f;
+}
 .draft-list {
   list-style: none;
   padding: 0;

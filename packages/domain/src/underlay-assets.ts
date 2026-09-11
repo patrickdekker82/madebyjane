@@ -64,7 +64,10 @@ export class UnderlayAssetService {
           "SELECT count(*)::int AS count, coalesce(sum(octet_length(bytes)),0)::bigint AS bytes FROM underlay_assets",
         )
       ).rows[0];
-      if (quota.count >= 50 || Number(quota.bytes) + bytes.length > 200 * 1024 * 1024)
+      if (
+        quota.count >= 50 ||
+        Number(quota.bytes) + bytes.length > 200 * 1024 * 1024
+      )
         throw new DomainError(
           "UNDERLAY_QUOTA",
           "De onderleggeropslag is vol (50 afbeeldingen of 200 MiB per werkruimte).",
@@ -98,12 +101,36 @@ export class UnderlayAssetService {
       };
     });
   }
+  /**
+   * De beeldbank van de werkruimte. Dit is dezelfde opslag als die van de
+   * onderleggers: wat je onder een tekening kunt leggen, kun je ook op een
+   * moodboard zetten. De bytes blijven hier buiten; die worden per afbeelding
+   * opgehaald.
+   */
+  list(ctx: Context) {
+    return inTenant(this.pool, ctx.organizationId, async (c) => ({
+      items: (
+        await c.query(
+          "SELECT id,mime,width_px,height_px,created_at FROM underlay_assets ORDER BY created_at DESC LIMIT 50",
+        )
+      ).rows.map((r) => ({
+        id: r.id as string,
+        mime: r.mime as string,
+        widthPx: r.width_px as number,
+        heightPx: r.height_px as number,
+        createdAt: r.created_at as string,
+      })),
+    }));
+  }
   get(ctx: Context, id: string) {
     return inTenant(this.pool, ctx.organizationId, async (c) => {
       const row = (
-        await c.query("SELECT bytes,mime FROM underlay_assets WHERE id=$1", [id])
+        await c.query("SELECT bytes,mime FROM underlay_assets WHERE id=$1", [
+          id,
+        ])
       ).rows[0];
-      if (!row) throw new DomainError("NOT_FOUND", "Onderlegger niet gevonden.", 404);
+      if (!row)
+        throw new DomainError("NOT_FOUND", "Onderlegger niet gevonden.", 404);
       return row as { bytes: Buffer; mime: "image/png" | "image/jpeg" };
     });
   }

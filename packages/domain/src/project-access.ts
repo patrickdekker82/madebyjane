@@ -86,6 +86,55 @@ export class ProjectAccessService {
     });
   }
 
+  /**
+   * Contexten voor dingen die bij een project horen maar het projectnummer
+   * niet in hun pad dragen. Ze lopen allemaal langs dezelfde projectrol, zodat
+   * een presentatie, een exporttaak of een deellink nooit een zijingang wordt
+   * naar een project waar iemand niet bij hoort.
+   */
+  private viaProject(
+    ctx: Context,
+    sql: string,
+    value: string,
+    missing: string,
+  ): Promise<Context> {
+    return inTenant(this.pool, ctx.organizationId, async (c) => {
+      const row = (await c.query(sql, [value])).rows[0];
+      if (!row) throw new DomainError("NOT_FOUND", missing, 404);
+      return {
+        ...ctx,
+        role: (await resolveProjectRole(c, ctx, row.project_id)).role,
+      };
+    });
+  }
+
+  forPresentation(ctx: Context, presentation: string) {
+    return this.viaProject(
+      ctx,
+      "SELECT project_id FROM presentations WHERE id=$1",
+      presentation,
+      "Presentatie niet gevonden.",
+    );
+  }
+
+  forExportJob(ctx: Context, job: string) {
+    return this.viaProject(
+      ctx,
+      "SELECT p.project_id FROM export_jobs j JOIN presentations p ON p.id=j.presentation_id WHERE j.id=$1",
+      job,
+      "Taak niet gevonden.",
+    );
+  }
+
+  forPresentationShare(ctx: Context, share: string) {
+    return this.viaProject(
+      ctx,
+      "SELECT p.project_id FROM presentation_shares s JOIN presentations p ON p.id=s.presentation_id WHERE s.id=$1",
+      share,
+      "Link niet gevonden.",
+    );
+  }
+
   list(ctx: Context, project: string) {
     // Eerst het recht, dan het project: alle ledenroutes antwoorden zo gelijk,
     // en een bestaand project is niet te onderscheiden van een verzonnen ID.

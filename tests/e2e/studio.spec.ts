@@ -2629,3 +2629,474 @@ test("lokaal herstel: mislukt opslaan → herladen → terughalen → conflict �
   ).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("LED-strip tekenen → lengte uit de tekening → bestellengte → planblad", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) await page.context().addCookies(ownerCookies);
+  await page.goto("/");
+  // De herstelroute meldt zich af, dus een bewaarde sessie kan verlopen zijn.
+  // Eerst wachten tot de app iets laat zien: het aanmeldscherm of de projecten.
+  await expect(
+    page
+      .getByLabel("E-mailadres")
+      .or(page.getByRole("button", { name: "Nieuw project", exact: true }))
+      .first(),
+  ).toBeVisible();
+  if (await page.getByLabel("E-mailadres").isVisible()) {
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+    ownerCookies = await page.context().cookies();
+  }
+  await page
+    .getByRole("button", { name: "Nieuw project", exact: true })
+    .click();
+  await page.getByLabel("Projectnaam").fill("Lichtstudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  const canvas = page.locator(".canvas-wrap canvas").first();
+  const box = (await canvas.boundingBox())!;
+  const at = (x: number, y: number) => ({ x: box.x + x, y: box.y + y });
+
+  // Een strip met een hoek: drie punten, daarna afronden.
+  await page.getByRole("button", { name: "LED-strip", exact: true }).click();
+  await expect(
+    page.getByText("Klik de hoekpunten van de strip aan"),
+  ).toBeVisible();
+  for (const [x, y] of [
+    [160, 160],
+    [420, 160],
+    [420, 300],
+  ] as const) {
+    const p = at(x, y);
+    await page.mouse.click(p.x, p.y);
+  }
+  await expect(page.getByText("3 punten", { exact: false })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Strip afronden", exact: true })
+    .click();
+  await saved();
+
+  // De gemeten lengte komt uit de tekening; het paneel toont hem als uitkomst.
+  const readout = page.locator(".led-readout div");
+  const measured = async () =>
+    (await readout.nth(0).locator("dd").innerText()).replace(" m", "").trim();
+  expect(Number((await measured()).replace(",", "."))).toBeGreaterThan(0);
+  await expect(readout.nth(1).locator("dd")).toHaveText("1");
+
+  // Het planblad moet dezelfde strip tekenen, met dezelfde lengte.
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Planblad SVG", exact: true }).click();
+  await (await download).saveAs("outputs/lichtstudio.svg");
+  const svg = await readFile("outputs/lichtstudio.svg", "utf8");
+  const points = /<polyline points="([^"]+)"/.exec(svg)?.[1];
+  if (!points) throw new Error("Geen LED-strip op het planblad gevonden");
+  const parsed = points.split(" ").map((pair) => {
+    const [x, y] = pair.split(",").map(Number);
+    return { x: x!, y: y! };
+  });
+  expect(parsed).toHaveLength(3);
+  let fromSheet = 0;
+  for (let i = 1; i < parsed.length; i++)
+    fromSheet += Math.hypot(
+      parsed[i]!.x - parsed[i - 1]!.x,
+      parsed[i]!.y - parsed[i - 1]!.y,
+    );
+  // Wat het paneel zegt en wat er op papier staat is dezelfde meting.
+  expect(Number((await measured()).replace(",", "."))).toBeCloseTo(
+    fromSheet / 1000,
+    3,
+  );
+  // De legenda noemt de strip, de meters en de hoek.
+  expect(svg).toContain("LED-strips: 1 ·");
+  expect(svg).toContain("1 hoek");
+
+  // De bestellengte staat los van de meting en toont het verschil beide kanten op.
+  const metres = Number((await measured()).replace(",", "."));
+  await page
+    .getByLabel("LED bestellengte", { exact: true })
+    .fill(String(metres + 1.5).replace(".", ","));
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  await expect(
+    page.getByText("blijft 1,500 m over", { exact: false }),
+  ).toBeVisible();
+  await page
+    .getByLabel("LED bestellengte", { exact: true })
+    .fill(String(metres - 0.5).replace(".", ","));
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  await expect(
+    page.getByText("0,500 m te weinig besteld", { exact: false }),
+  ).toBeVisible();
+
+  // Naam en vermogen invullen; het vermogen is lengte maal watt per meter.
+  await page.getByLabel("LED naam", { exact: true }).fill("Keukenlijst");
+  await page.getByLabel("LED vermogen per meter", { exact: true }).fill("12");
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  await expect(readout.nth(2).locator("dd")).toHaveText(
+    (metres * 12).toFixed(3).replace(".", ",") + " W",
+  );
+  // De maat op het planblad staat er maar een keer, met een eenheid.
+  expect(svg).not.toContain("mm mm");
+  await page.screenshot({ path: "outputs/qa/led-strip.png" });
+
+  // Herladen: de strip staat op de server, met naam en alles erop.
+  await page.reload();
+  await saved();
+  await page.getByRole("button", { name: "Keukenlijst", exact: true }).click();
+  expect(await measured()).toBe(metres.toFixed(3).replace(".", ","));
+  expect(errors).toEqual([]);
+});
+
+test("spot en wandcontact plaatsen → bundel tonen → symbolenlegenda op het blad", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) await page.context().addCookies(ownerCookies);
+  await page.goto("/");
+  // Wachten tot de app iets toont, anders is niet te zien of aanmelden nodig is.
+  await expect(
+    page
+      .getByLabel("E-mailadres")
+      .or(page.getByRole("button", { name: "Nieuw project", exact: true }))
+      .first(),
+  ).toBeVisible();
+  if (await page.getByLabel("E-mailadres").isVisible()) {
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+    ownerCookies = await page.context().cookies();
+  }
+  await page
+    .getByRole("button", { name: "Nieuw project", exact: true })
+    .click();
+  await page.getByLabel("Projectnaam").fill("Elektrastudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+
+  // Een spot: verlichting, met een bundel die uit hoogte en hoek volgt.
+  // De knop draagt ook zijn ondertitel, dus hier geen exacte naam.
+  await page.getByRole("button", { name: "Spot" }).click();
+  await saved();
+  await expect(page.getByRole("heading", { name: "Inbouwspot" })).toBeVisible();
+  await expect(page.getByLabel("Montagehoogte", { exact: true })).toHaveValue(
+    "2700",
+  );
+  await expect(page.getByLabel("Bundelhoek", { exact: true })).toHaveValue(
+    "36",
+  );
+  // Papiermaat en fysieke maat zijn verschillende dingen en staan er allebei.
+  await expect(page.locator(".properties")).toContainText(
+    "Symbool 300 mm op papier",
+  );
+  await expect(page.locator(".properties")).toContainText(
+    "90 × 90 mm in het echt",
+  );
+  // 2 x 2700 x tan(18 graden) = 1755 mm.
+  await expect(page.locator(".properties")).toContainText("1755 mm doorsnede");
+  await expect(page.locator(".properties")).toContainText(
+    "Geen lux, geen lichtberekening",
+  );
+
+  // Hoger hangen maakt de bundel groter; de formule staat erbij.
+  await page.getByLabel("Montagehoogte", { exact: true }).fill("3000");
+  await page.getByLabel("Groep", { exact: true }).fill("Groep 2");
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  await expect(page.locator(".properties")).toContainText("1950 mm doorsnede");
+  await expect(page.getByLabel("Groep", { exact: true })).toHaveValue(
+    "Groep 2",
+  );
+
+  // Elektra straalt niet en heeft dus geen bundelvelden.
+  await page.getByRole("button", { name: "Wandcontact" }).click();
+  await saved();
+  await expect(
+    page.getByRole("heading", { name: "Wandcontactdoos" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Bundelhoek", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".properties")).not.toContainText(
+    "Bundel op de vloer",
+  );
+
+  // De bundels aanzetten en het blad ophalen: alleen dan staan ze erop.
+  const sheet = async (name: string) => {
+    const download = page.waitForEvent("download");
+    await page
+      .getByRole("button", { name: "Planblad SVG", exact: true })
+      .click();
+    await (await download).saveAs(name);
+    return readFile(name, "utf8");
+  };
+  const zonder = await sheet("outputs/elektra-zonder-bundel.svg");
+  expect(zonder).not.toContain("Lichtbundels getoond");
+  expect(zonder).toContain("SYMBOLEN");
+  expect(zonder).toContain("Inbouwspot × 1");
+  expect(zonder).toContain("Wandcontactdoos × 1");
+
+  await page
+    .getByRole("button", { name: "Lichtbundels uit", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Lichtbundels aan", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Passend", exact: true }).click();
+  await page.screenshot({ path: "outputs/qa/lichtbundel.png" });
+  const met = await sheet("outputs/elektra-met-bundel.svg");
+  expect(met).toContain("Lichtbundels getoond");
+  expect(met).toContain("visuele benadering, geen lichtberekening");
+  // De bundel is een cirkel met de straal die het paneel noemt.
+  const circle = /<circle cx="([-\d.]+)" cy="([-\d.]+)" r="([\d.]+)"/.exec(met);
+  if (!circle) throw new Error("Geen lichtbundel op het planblad gevonden");
+  expect(Number(circle[3])).toBeCloseTo(
+    3000 * Math.tan((18 * Math.PI) / 180),
+    3,
+  );
+
+  // Het overzicht telt de groepen en zegt erbij wat er niet is ingevuld.
+  const overzicht = page.locator(".lighting");
+  await expect(overzicht).toContainText("Groep 2");
+  await expect(overzicht).toContainText("Niet toegewezen");
+  await expect(overzicht).toContainText("geen vermogen opgegeven");
+  await expect(overzicht).toContainText("geen groeps- of belastingberekening");
+
+  // Twee lichtscenes maken en er een van tonen.
+  await page.getByRole("button", { name: "Inbouwspot", exact: true }).click();
+  await page.getByLabel("Lichtscene", { exact: true }).fill("Avond");
+  await page.getByLabel("Opgenomen vermogen", { exact: true }).fill("7,5");
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  await page.getByRole("button", { name: "Hanglamp" }).click();
+  await saved();
+  await page.getByLabel("Lichtscene", { exact: true }).fill("Ochtend");
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await saved();
+  await expect(overzicht).toContainText("Avond");
+  await expect(overzicht).toContainText("Ochtend");
+  await expect(overzicht).toContainText("7,500 W opgegeven");
+
+  await page.getByRole("button", { name: "Alleen Avond tonen" }).click();
+  await saved();
+  // Wat je op het scherm ziet, komt op het blad: de hanglamp is er nu af.
+  const alleenAvond = await sheet("outputs/elektra-avond.svg");
+  expect(alleenAvond).toContain("Inbouwspot × 1");
+  expect(alleenAvond).not.toContain("Hanglamp ×");
+  await page
+    .getByRole("button", { name: "Alle armaturen tonen", exact: true })
+    .click();
+  await saved();
+  const alles = await sheet("outputs/elektra-alles.svg");
+  expect(alles).toContain("Hanglamp × 1");
+  await page.screenshot({ path: "outputs/qa/lichtscenes.png" });
+  // Herladen: het punt en zijn groep staan op de server.
+  await page.reload();
+  await saved();
+  await page.getByRole("button", { name: "Inbouwspot", exact: true }).click();
+  await expect(page.getByLabel("Groep", { exact: true })).toHaveValue(
+    "Groep 2",
+  );
+  await expect(page.getByLabel("Lichtscene", { exact: true })).toHaveValue(
+    "Avond",
+  );
+  await expect(page.getByLabel("Montagehoogte", { exact: true })).toHaveValue(
+    "3000",
+  );
+  expect(errors).toEqual([]);
+});
+
+test("presentatie samenstellen → publiceren → PDF → deellink intrekken", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  await mkdir("outputs/qa", { recursive: true });
+  if (ownerCookies.length) await page.context().addCookies(ownerCookies);
+  await page.goto("/");
+  await expect(
+    page
+      .getByLabel("E-mailadres")
+      .or(page.getByRole("button", { name: "Nieuw project", exact: true }))
+      .first(),
+  ).toBeVisible();
+  if (await page.getByLabel("E-mailadres").isVisible()) {
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+    ownerCookies = await page.context().cookies();
+  }
+  await page
+    .getByRole("button", { name: "Nieuw project", exact: true })
+    .click();
+  await page.getByLabel("Projectnaam").fill("Presentatiestudio");
+  await page.getByLabel("Start met de fictieve woonkamer").check();
+  await page
+    .getByRole("button", { name: "Project aanmaken", exact: true })
+    .click();
+  const saved = () =>
+    expect(page.getByText("Server opgeslagen", { exact: false })).toBeVisible();
+  await saved();
+
+  await page.getByRole("button", { name: "Presentaties", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Publiceren legt een versie vast");
+  await dialog
+    .getByRole("button", { name: "Uitgebreid interieurplan", exact: true })
+    .click();
+
+  // Het concept is te bewerken: kop en tekst.
+  await dialog
+    .getByLabel("Presentatieklant", { exact: true })
+    .fill("Familie Voorbeeld");
+  await dialog
+    .getByLabel("Tekst blok 2", { exact: true })
+    .fill("Een rustige basis.");
+  await dialog.getByLabel("Kop blok 2", { exact: true }).blur();
+  await expect(dialog.getByText("Nog niets gepubliceerd.")).toBeVisible();
+
+  // Het moodboard vullen met een echte afbeelding uit de beeldbank.
+  const { makePng: png } = await import("../helpers/image");
+  await dialog
+    .getByLabel("Moodboardafbeelding kiezen blok 3", { exact: true })
+    .setInputFiles({
+      name: "sfeer.png",
+      mimeType: "image/png",
+      buffer: png(600, 400),
+    });
+  const chosen = dialog.locator(".moodboard-editor > ul img");
+  await expect(chosen.first()).toBeVisible();
+  // Weghalen laat de afbeelding in de beeldbank staan; ze is daarna opnieuw te
+  // kiezen zonder opnieuw te uploaden. De nieuwste staat vooraan.
+  await dialog
+    .getByRole("button", {
+      name: "Afbeelding 1 verwijderen blok 3",
+      exact: true,
+    })
+    .click();
+  await expect(chosen).toHaveCount(0);
+  await dialog
+    .getByRole("button", { name: "Uit beeldbank kiezen blok 3", exact: true })
+    .click();
+  await dialog.locator(".image-picker button").first().click();
+  await expect(chosen).toHaveCount(1);
+  await dialog
+    .getByLabel("Onderschrift afbeelding 1 blok 3", { exact: true })
+    .fill("Rustige tinten");
+  await dialog.getByLabel("Kop blok 3", { exact: true }).blur();
+
+  // Blokken herschikken: het tweede blok omlaag.
+  const secondBefore = await dialog
+    .locator(".block-list > li")
+    .nth(1)
+    .locator("strong")
+    .innerText();
+  await dialog.getByRole("button", { name: "Blok 2 omlaag" }).click();
+  await expect(
+    dialog.locator(".block-list > li").nth(2).locator("strong"),
+  ).toHaveText(secondBefore);
+
+  // Publiceren legt een versie vast.
+  await dialog.getByRole("button", { name: "Publiceren", exact: true }).click();
+  await expect(dialog.getByText("Versie 1", { exact: false })).toBeVisible();
+  await page.screenshot({ path: "outputs/qa/presentaties.png" });
+
+  // De webviewer toont dezelfde versie in de browser. Het venster draait
+  // afgeschermd, dus wat er staat komt uit het document zelf.
+  await dialog.getByRole("button", { name: "Bekijken", exact: true }).click();
+  const viewer = page.frameLocator(".viewer-frame");
+  await expect(viewer.locator("h1")).toHaveText("Uitgebreid interieurplan");
+  await expect(viewer.locator("figcaption")).toHaveText("Rustige tinten");
+  await expect(viewer.locator("section.sheet svg")).toBeVisible();
+  await expect(viewer.locator(".viewer-bar")).toContainText(
+    "Alleen de PDF is maatvast",
+  );
+  await page.screenshot({ path: "outputs/qa/presentatie-webviewer.png" });
+  // Het planblad past op het scherm in plaats van buiten beeld te lopen.
+  await viewer.locator("section.sheet svg").scrollIntoViewIfNeeded();
+  const sheet = await viewer.locator("section.sheet svg").boundingBox();
+  const frame = await page.locator(".viewer-frame").boundingBox();
+  expect(sheet!.width).toBeLessThanOrEqual(frame!.width);
+  expect(sheet!.width).toBeGreaterThan(frame!.width * 0.5);
+  await page.screenshot({ path: "outputs/qa/presentatie-webviewer-plan.png" });
+  await page
+    .getByRole("dialog")
+    .filter({ hasText: "Presentatie bekijken" })
+    .getByRole("button", { name: "Sluiten", exact: true })
+    .click();
+
+  const download = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "PDF", exact: true }).click();
+  const pdf = await download;
+  await pdf.saveAs("outputs/qa/presentatie-browser.pdf");
+
+  // Een deellink wijst naar precies die versie en is in te trekken.
+  await dialog.getByRole("button", { name: "Deellink", exact: true }).click();
+  const link = await dialog
+    .getByLabel("Deellink presentatie", { exact: true })
+    .inputValue();
+  expect(link).toContain("/view");
+  const shared = await page.request.get(link);
+  expect(shared.status()).toBe(200);
+  expect(await shared.text()).toContain("Rustige tinten");
+  // De maatvaste PDF hangt aan diezelfde link.
+  expect((await page.request.get(link.replace(/\/view$/, ""))).status()).toBe(
+    200,
+  );
+  await dialog
+    .getByRole("button", { name: "Link intrekken", exact: true })
+    .click();
+  await expect(
+    dialog.getByRole("button", { name: "Link intrekken", exact: true }),
+  ).toHaveCount(0);
+  expect((await page.request.get(link)).status()).toBe(404);
+
+  // Het ontwerp wijzigen: de gepubliceerde versie blijft, het paneel meldt het.
+  await dialog.getByRole("button", { name: "Sluiten", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Bank · linnen naturel", exact: true })
+    .click();
+  await page.getByRole("button", { name: "90° draaien", exact: true }).click();
+  await saved();
+  await page.getByRole("button", { name: "Presentaties", exact: true }).click();
+  // Het paneel opent op dezelfde presentatie en haalt hem opnieuw op.
+  await expect(
+    page.getByText("nieuwe ontwerpwijzigingen beschikbaar", { exact: false }),
+  ).toBeVisible();
+  // De gepubliceerde versie blijft staan zoals hij was.
+  await expect(page.getByRole("dialog")).toContainText("Versie 1");
+  expect(errors).toEqual([]);
+});

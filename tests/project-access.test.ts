@@ -17,7 +17,7 @@ let open = { id: "", variantId: "" },
   closed = { id: "", variantId: "" };
 
 const call = (
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "PUT",
   url: string,
   payload?: unknown,
   role = "owner",
@@ -397,4 +397,117 @@ test("een andere organisatie bereikt project noch ledenbeheer", async () => {
     (await call("GET", "/api/v1/projects", undefined, "outsider", org))
       .statusCode,
   ).toBe(404);
+});
+
+test("een presentatie erft de projecttoegang, ook via haar eigen ID", async () => {
+  // Een presentatie draagt het projectnummer niet in haar pad. Zonder eigen
+  // controle zou het presentatie-ID een zijingang zijn naar een beperkt
+  // project; dat is precies wat deze route uitsluit.
+  const project = await newProject("Project met presentatie");
+  const presentation = {
+    id: randomUUID(),
+    template: "compact",
+    title: "Voorstel",
+    customer: "Fictieve klant",
+    date: "2026-09-11",
+    variantId: project.variantId,
+    companyName: "Studio",
+  };
+  expect(
+    (
+      await call(
+        "POST",
+        `/api/v1/projects/${project.id}/presentations`,
+        presentation,
+      )
+    ).statusCode,
+  ).toBe(200);
+  const published = await call(
+    "POST",
+    `/api/v1/presentations/${presentation.id}/versions`,
+    { requestId: randomUUID() },
+  );
+  expect(published.statusCode, published.body).toBe(200);
+  const shareId = randomUUID();
+  const share = await call(
+    "POST",
+    `/api/v1/presentations/${presentation.id}/versions/1/shares`,
+    { id: shareId, days: 7 },
+  );
+  expect(share.statusCode, share.body).toBe(200);
+  const job = await call(
+    "POST",
+    `/api/v1/presentations/${presentation.id}/versions/1/exports`,
+    { id: randomUUID(), format: "pdf" },
+  );
+  expect(job.statusCode, job.body).toBe(200);
+
+  // Zolang het project open is, ziet een ontwerper de presentatie gewoon.
+  expect(
+    (
+      await call(
+        "GET",
+        `/api/v1/presentations/${presentation.id}`,
+        undefined,
+        "designer",
+      )
+    ).statusCode,
+  ).toBe(200);
+
+  expect(
+    (
+      await call("POST", `/api/v1/projects/${project.id}/access`, {
+        access: "restricted",
+      })
+    ).json(),
+  ).toEqual({ access: "restricted" });
+
+  for (const role of ["designer", "finance", "viewer"]) {
+    for (const url of [
+      `/api/v1/projects/${project.id}/presentations`,
+      `/api/v1/presentations/${presentation.id}`,
+      `/api/v1/presentations/${presentation.id}/versions`,
+      `/api/v1/presentations/${presentation.id}/outdated`,
+      `/api/v1/presentations/${presentation.id}/exports`,
+      `/api/v1/presentations/${presentation.id}/versions/1/pdf`,
+      `/api/v1/presentations/${presentation.id}/versions/1/view`,
+      `/api/v1/presentations/${presentation.id}/versions/1/shares`,
+      `/api/v1/export-jobs/${job.json().id}`,
+    ])
+      expect(
+        (await call("GET", url, undefined, role)).statusCode,
+        `${role} ${url}`,
+      ).toBe(404);
+    // En schrijven evenmin: het concept, publiceren en de link intrekken.
+    expect(
+      (
+        await call(
+          "POST",
+          `/api/v1/presentation-shares/${shareId}/revoke`,
+          {},
+          role,
+        )
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await call(
+          "POST",
+          `/api/v1/presentations/${presentation.id}/versions`,
+          { requestId: randomUUID() },
+          role,
+        )
+      ).statusCode,
+    ).toBe(404);
+  }
+  // De owner houdt toegang, en de deellink zelf blijft werken: die hangt aan
+  // het token en niet aan een sessie.
+  expect(
+    (await call("GET", `/api/v1/presentations/${presentation.id}`)).statusCode,
+  ).toBe(200);
+  const open = await server.app.inject({
+    method: "GET",
+    url: `/api/v1/presentation-shares/${org}/${share.json().token}/view`,
+  });
+  expect(open.statusCode, open.body.slice(0, 120)).toBe(200);
 });
