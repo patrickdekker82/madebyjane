@@ -347,7 +347,7 @@ export function createServer(config: {
   const materials = new MaterialService(config.runtime);
   const quotes = new QuoteService(config.runtime);
   const resources = new QuoteResources(config.runtime),
-    delivery = new QuoteDelivery(config.runtime, config.secret);
+    delivery = new QuoteDelivery(config.runtime, config.secret, storage);
   const versionParams = (params: unknown) =>
     z
       .object({
@@ -589,7 +589,7 @@ export function createServer(config: {
     ),
   );
   const presentations = new PresentationService(config.runtime, config.secret, storage);
-  const exports = new ExportJobs(config.runtime);
+  const exports = new ExportJobs(config.runtime, storage);
   const presentationVersionParams = (params: unknown) =>
     z
       .object({
@@ -703,7 +703,9 @@ export function createServer(config: {
        * de database, dus een aparte werker kan ze later zonder wijziging
        * oppakken. Het verzoek wacht er niet op.
        */
-      void drainExports(config.runtime, ctx.organizationId).catch(() => {});
+      void drainExports(config.runtime, ctx.organizationId, storage).catch(
+        () => {},
+      );
       return job;
     },
   );

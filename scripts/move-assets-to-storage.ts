@@ -1,5 +1,5 @@
 /**
- * Verplaatst onderleggerbytes van de database naar de opslagprovider.
+ * Verplaatst assetbytes van de database naar de opslagprovider.
  *
  * Migration 0018 laat bestaande rijen met rust: die houden hun bytes in de
  * kolom tot een beheerder ze bewust verplaatst. Dit script doet dat, en toont
@@ -95,6 +95,92 @@ export async function moveUnderlaysToStorage(
   return report;
 }
 
+/**
+ * De documenttabellen: offerte-PDF's, presentatie-PDF's en PowerPoint-exports.
+ * Deze dragen de grootste bestanden — tot 40 MB per stuk — en hebben sinds
+ * migration 0019 elk een eigen opaque `asset_id`.
+ */
+const DOCUMENTEN = [
+  { tabel: "quote_exports", kolom: "pdf" },
+  { tabel: "presentation_exports", kolom: "pdf" },
+  { tabel: "presentation_decks", kolom: "pptx" },
+] as const;
+
+/**
+ * Zelfde belofte als bij de onderleggers: per rij, in een eigen transactie, en
+ * de kolom gaat pas leeg nadat het object is teruggelezen en gelijk bevonden.
+ * De sleutel is hier de `asset_id` die de rij al draagt.
+ */
+export async function moveDocumentsToStorage(
+  pool: Pool,
+  storage: StorageProvider,
+  { uitvoeren = false }: { uitvoeren?: boolean } = {},
+): Promise<MoveReport> {
+  const report: MoveReport = {
+    bekeken: 0,
+    verplaatst: 0,
+    overgeslagen: 0,
+    mislukt: [],
+  };
+  for (const { tabel, kolom } of DOCUMENTEN) {
+    const openstaand = await pool.query(
+      `SELECT organization_id,asset_id FROM ${tabel} WHERE stored=false ORDER BY created_at`,
+    );
+    report.bekeken += openstaand.rowCount ?? 0;
+    for (const rij of openstaand.rows as {
+      organization_id: string;
+      asset_id: string;
+    }[]) {
+      if (!uitvoeren) {
+        report.overgeslagen++;
+        continue;
+      }
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const huidig = (
+          await client.query(
+            `SELECT ${kolom} AS bytes FROM ${tabel} WHERE organization_id=$1 AND asset_id=$2 AND stored=false FOR UPDATE`,
+            [rij.organization_id, rij.asset_id],
+          )
+        ).rows[0];
+        if (!huidig) {
+          await client.query("ROLLBACK");
+          report.overgeslagen++;
+          continue;
+        }
+        const bytes = huidig.bytes as Buffer;
+        const key = {
+          organizationId: rij.organization_id,
+          assetId: rij.asset_id,
+        };
+        await storage.put(key, bytes);
+        const terug = Buffer.from(await storage.get(key));
+        if (
+          createHash("sha256").update(terug).digest("hex") !==
+          createHash("sha256").update(bytes).digest("hex")
+        )
+          throw new Error("teruggelezen object wijkt af");
+        await client.query(
+          `UPDATE ${tabel} SET ${kolom}=NULL,stored=true,byte_size=$3 WHERE organization_id=$1 AND asset_id=$2`,
+          [rij.organization_id, rij.asset_id, bytes.length],
+        );
+        await client.query("COMMIT");
+        report.verplaatst++;
+      } catch (e) {
+        await client.query("ROLLBACK").catch(() => {});
+        report.mislukt.push({
+          id: `${tabel}:${rij.asset_id}`,
+          reden: e instanceof Error ? e.message : String(e),
+        });
+      } finally {
+        client.release();
+      }
+    }
+  }
+  return report;
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const uitvoeren = process.argv.includes("--uitvoeren");
   const url = process.env.DATABASE_URL;
@@ -117,14 +203,23 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       : "Modus    : tonen — er wordt niets gewijzigd (geef --uitvoeren om te verplaatsen)",
   );
   try {
-    const report = await moveUnderlaysToStorage(pool, new LocalStorage(root), {
+    const opslag = new LocalStorage(root);
+    const onderleggers = await moveUnderlaysToStorage(pool, opslag, {
       uitvoeren,
     });
-    console.log(
-      `Bekeken ${report.bekeken}, verplaatst ${report.verplaatst}, overgeslagen ${report.overgeslagen}, mislukt ${report.mislukt.length}.`,
-    );
-    for (const f of report.mislukt) console.error(`  ${f.id}: ${f.reden}`);
-    process.exit(report.mislukt.length ? 1 : 0);
+    const documenten = await moveDocumentsToStorage(pool, opslag, {
+      uitvoeren,
+    });
+    for (const [wat, r] of [
+      ["Onderleggers", onderleggers],
+      ["Documenten  ", documenten],
+    ] as const)
+      console.log(
+        `${wat}: bekeken ${r.bekeken}, verplaatst ${r.verplaatst}, overgeslagen ${r.overgeslagen}, mislukt ${r.mislukt.length}.`,
+      );
+    const mislukt = [...onderleggers.mislukt, ...documenten.mislukt];
+    for (const f of mislukt) console.error(`  ${f.id}: ${f.reden}`);
+    process.exit(mislukt.length ? 1 : 0);
   } finally {
     await pool.end();
   }

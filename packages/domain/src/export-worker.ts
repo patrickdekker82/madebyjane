@@ -8,6 +8,7 @@ import { presentationHtml } from "../../documents/src/presentation";
 import { presentationPptx } from "../../documents/src/presentation-pptx";
 import { renderQuotePdf } from "../../documents/src/quote-pdf";
 import { renderSvgPng } from "../../documents/src/raster";
+import type { StorageProvider } from "../../storage/src/index";
 import { ExportJobs } from "./export-jobs";
 
 /**
@@ -35,9 +36,10 @@ export type WorkerDeps = {
 export async function runOneExport(
   pool: Pool,
   organizationId: string,
+  storage: StorageProvider,
   deps: WorkerDeps = {},
 ) {
-  const jobs = new ExportJobs(pool);
+  const jobs = new ExportJobs(pool, storage);
   const job = await jobs.claim(organizationId);
   if (!job) return null;
   try {
@@ -101,12 +103,13 @@ async function deck(
 export async function drainExports(
   pool: Pool,
   organizationId: string,
+  storage: StorageProvider,
   deps: WorkerDeps = {},
   max = 20,
 ) {
   let done = 0;
   for (let i = 0; i < max; i++) {
-    const result = await runOneExport(pool, organizationId, deps);
+    const result = await runOneExport(pool, organizationId, storage, deps);
     if (!result) break;
     done++;
   }

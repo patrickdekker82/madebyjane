@@ -15,6 +15,11 @@ import { presentationHtml } from "../../documents/src/presentation";
 import { renderQuotePdf } from "../../documents/src/quote-pdf";
 import { DomainError, canWrite } from "./index";
 import { readUnderlayBytes } from "./underlay-assets";
+import {
+  documentBytes,
+  storeDocument,
+  discardDocument,
+} from "./document-storage";
 import type { StorageProvider } from "../../storage/src/index";
 import type { Context } from "./projects";
 import {
@@ -374,12 +379,21 @@ export class PresentationService {
       async (c) =>
         (
           await c.query(
-            "SELECT pdf,pdf_hash FROM presentation_exports WHERE presentation_id=$1 AND version=$2",
+            "SELECT pdf,pdf_hash,stored,asset_id FROM presentation_exports WHERE presentation_id=$1 AND version=$2",
             [presentationId, version],
           )
         ).rows[0],
     );
-    if (stored) return stored as { pdf: Buffer; pdf_hash: string };
+    if (stored)
+      return {
+        pdf: await documentBytes(
+          this.storage,
+          ctx.organizationId,
+          stored,
+          stored.pdf,
+        ),
+        pdf_hash: stored.pdf_hash as string,
+      };
     const v = await this.version(ctx, presentationId, version);
     const pdf = await this.render(presentationHtml(v.definition, v.content));
     const pdfHash = createHash("sha256").update(pdf).digest("hex");
@@ -387,23 +401,53 @@ export class PresentationService {
       await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
         ctx.organizationId + ":presentations",
       ]);
-      await c.query(
-        "INSERT INTO presentation_exports(organization_id,presentation_id,version,content_hash,pdf,pdf_hash) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING",
-        [
-          ctx.organizationId,
-          presentationId,
-          version,
-          v.content_hash,
-          pdf,
-          pdfHash,
-        ],
+      const bewaard = await storeDocument(
+        this.storage,
+        ctx.organizationId,
+        pdf,
       );
-      return (
+      try {
         await c.query(
-          "SELECT pdf,pdf_hash FROM presentation_exports WHERE presentation_id=$1 AND version=$2",
+          "INSERT INTO presentation_exports(organization_id,presentation_id,version,content_hash,pdf,pdf_hash,asset_id,stored,byte_size) VALUES($1,$2,$3,$4,NULL,$5,$6,true,$7) ON CONFLICT DO NOTHING",
+          [
+            ctx.organizationId,
+            presentationId,
+            version,
+            v.content_hash,
+            pdfHash,
+            bewaard.assetId,
+            bewaard.size,
+          ],
+        );
+      } catch (e) {
+        await discardDocument(
+          this.storage,
+          ctx.organizationId,
+          bewaard.assetId,
+        );
+        throw e;
+      }
+      const row = (
+        await c.query(
+          "SELECT pdf,pdf_hash,stored,asset_id FROM presentation_exports WHERE presentation_id=$1 AND version=$2",
           [presentationId, version],
         )
-      ).rows[0] as { pdf: Buffer; pdf_hash: string };
+      ).rows[0];
+      if (row.asset_id !== bewaard.assetId)
+        await discardDocument(
+          this.storage,
+          ctx.organizationId,
+          bewaard.assetId,
+        );
+      return {
+        pdf: await documentBytes(
+          this.storage,
+          ctx.organizationId,
+          row,
+          row.pdf,
+        ),
+        pdf_hash: row.pdf_hash as string,
+      };
     });
   }
 
@@ -412,7 +456,7 @@ export class PresentationService {
     return inTenant(this.pool, ctx.organizationId, async (c) => {
       const row = (
         await c.query(
-          "SELECT pptx,pptx_hash FROM presentation_decks WHERE presentation_id=$1 AND version=$2",
+          "SELECT pptx,pptx_hash,stored,asset_id FROM presentation_decks WHERE presentation_id=$1 AND version=$2",
           [presentationId, version],
         )
       ).rows[0];
@@ -422,7 +466,15 @@ export class PresentationService {
           "Deze PowerPoint is nog niet gemaakt. Vraag de export aan en probeer het zo opnieuw.",
           409,
         );
-      return row as { pptx: Buffer; pptx_hash: string };
+      return {
+        pptx: await documentBytes(
+          this.storage,
+          ctx.organizationId,
+          row,
+          row.pptx,
+        ),
+        pptx_hash: row.pptx_hash as string,
+      };
     });
   }
 

@@ -5,6 +5,8 @@ import { inTenant } from "../../db/src/index";
 import { id } from "../../contracts/src/index";
 import { DomainError } from "./index";
 import type { Context } from "./projects";
+import { storeDocument, discardDocument } from "./document-storage";
+import type { StorageProvider } from "../../storage/src/index";
 
 /**
  * Exporttaken voor presentaties.
@@ -40,7 +42,10 @@ export type ExportJob = {
 };
 
 export class ExportJobs {
-  constructor(private pool: Pool) {}
+  constructor(
+    private pool: Pool,
+    private storage: StorageProvider,
+  ) {}
 
   /**
    * Een taak aanvragen. Bestaat hij al, dan komt die terug: een mislukte taak
@@ -161,27 +166,31 @@ export class ExportJobs {
    * Het resultaat vastleggen. Bestand en status gaan in één transactie, zodat
    * een onvolledig bestand nooit als klaar wordt getoond.
    */
-  finish(
+  async finish(
     organizationId: string,
     job: ExportJob,
     bytes: Buffer,
     contentHash: string,
   ) {
     const hash = createHash("sha256").update(bytes).digest("hex");
+    // Het bestand gaat naar de opslag vóór de transactie; de rij verwijst
+    // ernaar. Wint een gelijktijdige taak, dan ruimen we ons object weer op.
+    const bewaard = await storeDocument(this.storage, organizationId, bytes);
     return inTenant(this.pool, organizationId, async (c) => {
       await c.query("BEGIN");
       try {
         await c.query(
           job.format === "pdf"
-            ? "INSERT INTO presentation_exports(organization_id,presentation_id,version,content_hash,pdf,pdf_hash) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING"
-            : "INSERT INTO presentation_decks(organization_id,presentation_id,version,content_hash,pptx,pptx_hash) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING",
+            ? "INSERT INTO presentation_exports(organization_id,presentation_id,version,content_hash,pdf,pdf_hash,asset_id,stored,byte_size) VALUES($1,$2,$3,$4,NULL,$5,$6,true,$7) ON CONFLICT DO NOTHING"
+            : "INSERT INTO presentation_decks(organization_id,presentation_id,version,content_hash,pptx,pptx_hash,asset_id,stored,byte_size) VALUES($1,$2,$3,$4,NULL,$5,$6,true,$7) ON CONFLICT DO NOTHING",
           [
             organizationId,
             job.presentation_id,
             job.version,
             contentHash,
-            bytes,
             hash,
+            bewaard.assetId,
+            bewaard.size,
           ],
         );
         // Bestond het bestand al, dan telt die hash: het resultaat moet
@@ -189,11 +198,13 @@ export class ExportJobs {
         const stored = (
           await c.query(
             job.format === "pdf"
-              ? "SELECT pdf_hash AS hash FROM presentation_exports WHERE presentation_id=$1 AND version=$2"
-              : "SELECT pptx_hash AS hash FROM presentation_decks WHERE presentation_id=$1 AND version=$2",
+              ? "SELECT pdf_hash AS hash,asset_id FROM presentation_exports WHERE presentation_id=$1 AND version=$2"
+              : "SELECT pptx_hash AS hash,asset_id FROM presentation_decks WHERE presentation_id=$1 AND version=$2",
             [job.presentation_id, job.version],
           )
         ).rows[0];
+        if (stored && stored.asset_id !== bewaard.assetId)
+          await discardDocument(this.storage, organizationId, bewaard.assetId);
         await c.query(
           "UPDATE export_jobs SET status='done',result_hash=$1,error=NULL,finished_at=now() WHERE id=$2",
           [stored?.hash ?? hash, job.id],

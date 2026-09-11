@@ -1,5 +1,31 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — ook de documenten de database uit
+
+Bij het nalopen van de vorige stap bleek dat ik de **kleinste** assetsoort eerst had verhuisd. De caps naast elkaar: een onderlegger mag 16 MB zijn met 200 MB per werkruimte, maar een offerte-PDF mag 20 MB en er passen er 2000 per werkruimte, en een presentatie-PDF en PowerPoint mogen elk 40 MB. De documenten zijn dus veruit de grootste last in de database.
+
+Migration 0019 doet voor `quote_exports`, `presentation_exports` en `presentation_decks` hetzelfde als 0018 voor de onderleggers: blobkolom nullable, `stored` en `byte_size` erbij, en een constraint die een rij zonder bytes én zonder opslag weigert. Elke rij krijgt daarnaast een eigen opaque `asset_id`; de opslag kent geen tabelnamen of volgnummers.
+
+`packages/domain/src/document-storage.ts` is de gedeelde laag: `storeDocument` schrijft weg, `documentBytes` leest op — uit de kolom bij oude rijen, uit de opslag bij nieuwe — en `discardDocument` ruimt op als het vastleggen alsnog mislukt. Alle vier de schrijfplekken (offerte-export, presentatie-PDF, PowerPoint via de exportwerker) gebruiken die laag. Wint een gelijktijdige export de race, dan wordt het eigen object opgeruimd in plaats van als wees achter te blijven.
+
+Het verhuisscript dekt nu alle vier de soorten en houdt dezelfde belofte: eerst tonen, pas met `--uitvoeren` verplaatsen, per rij in een eigen transactie, en de kolom gaat pas leeg nadat het object is teruggelezen en byte voor byte gelijk bevonden.
+
+### Het exportpad is nu ook zonder renderer te toetsen
+
+De zes proeven die het documentpad dekken hebben Chromium nodig en vallen in deze container om. Een wijziging aan datzelfde pad zonder bewijs is precies wat de opdracht verbiedt, dus `tests/document-storage.test.ts` toetst de laag eronder rechtstreeks: de gedeelde helper in beide richtingen, een rij die naar de opslag wijst zonder object (een fout, geen leeg bestand), het opruimen, de databaseconstraint per tabel, het verhuizen van alle drie de soorten met byte-voor-byte-vergelijking, en dat elke sleutel een unieke UUID is. Wat daar slaagt zegt niets over het renderen zelf; dat houdt zijn eigen tests in de bouwstraat.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+- TypeScript strict en productiebuild geslaagd (9,35 s).
+- Vitest: **263 van 269 tests geslaagd**; zes nieuwe proeven op het documentpad.
+- Playwright: **18 van 22 routes geslaagd** — gelijk aan vóór deze wijziging.
+- De 6 + 4 afwijkingen zijn onveranderd dezelfde Chromium-sandboxfouten van deze container.
+
+### Eerstvolgende stap
+
+Alle vier de assetsoorten staan nu buiten de database voor nieuwe rijen; bestaande rijen verhuizen met het script. Wat blijft liggen: een opruimpad wanneer een project of presentatie verdwijnt — de objecten blijven dan achter, en dat is een gevolg van deze verhuizing dat nog geen eigenaar heeft. Daarna productie-Compose en operationele back-up/restore, die in deze container niet te bewijzen zijn (geen Docker-daemon; `pg_dump` 16 tegenover server 18.4).
+
+
 ## Aanvulling 11 september 2026 — fase 1: assets de database uit, en een geteste S3-adapter
 
 Bij het oppakken van het laatste fase-1-punt bleek de `StorageProvider` **dood te liggen**: de interface en de lokale adapter bestonden, maar werden door niets gebruikt behalve hun eigen test. Alle binaire data — GLB-geometrie, onderleggers, offerte-PDF's, presentatie-exports — stond als `bytea` in PostgreSQL. Dat maakt elke toekomstige back-up zo groot als alle klantbeelden bij elkaar.
