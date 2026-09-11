@@ -482,6 +482,42 @@ export const ledPathSchema = z
         });
   });
 export type LedPath = z.infer<typeof ledPathSchema>;
+/**
+ * Een bewaard camerastandpunt.
+ *
+ * Alles in millimeter en in de assen van het plan, net als de rest van het
+ * ontwerp; de 3D-weergave deelt zelf door duizend. Zo blijft er één
+ * maatvoering in het document en is een standpunt ook buiten de viewer te
+ * lezen. `z` is de hoogte boven de vloer.
+ *
+ * Het standpunt hoort bij het ontwerp en niet bij de browser: het reist mee met
+ * revisies en varianten, en een collega die het project opent ziet hetzelfde
+ * beeld als degene die het bewaarde.
+ */
+export const cameraSchema = z
+  .object({
+    id,
+    name: z.string().trim().min(1).max(80),
+    /** Waar de camera staat. */
+    eye: z.object({ x: mm, y: mm, z: mm }).strict(),
+    /** Waar hij naar kijkt. */
+    target: z.object({ x: mm, y: mm, z: mm }).strict(),
+    /** Beeldhoek in graden; smal is een telelens, breed vertekent. */
+    fov: z.number().int().min(10).max(120),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.eye.x === value.target.x &&
+      value.eye.y === value.target.y &&
+      value.eye.z === value.target.z
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "Een camera kan niet naar zijn eigen positie kijken.",
+      });
+  });
+export type Camera = z.infer<typeof cameraSchema>;
 export const sceneSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -498,6 +534,12 @@ export const sceneSchema = z
     /** Standaardwaarde, dus scenes van voor fase 4 blijven geldig zonder migratie. */
     ledPaths: z.array(ledPathSchema).max(200).default([]),
     underlay: underlaySchema.nullable().default(null),
+    /**
+     * Bewaarde camerastandpunten. Standaardwaarde, dus scenes van voor fase 7
+     * blijven geldig zonder migratie. Het maximum is een rem op een document
+     * dat ongemerkt volloopt, niet een uitspraak over wat genoeg is.
+     */
+    cameras: z.array(cameraSchema).max(24).default([]),
   })
   .strict();
 export type Scene = z.infer<typeof sceneSchema>;
@@ -611,6 +653,13 @@ export const operationSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   z.object({ type: z.literal("AddLedPath"), path: ledPathSchema }).strict(),
+  /*
+   * Een standpunt bewaren is een gewone ontwerpopdracht: hij gaat door dezelfde
+   * revisie- en conflictcontrole als een muur, want hij hoort bij het ontwerp en
+   * niet bij de browser waarin hij toevallig is ingesteld.
+   */
+  z.object({ type: z.literal("SaveCamera"), camera: cameraSchema }).strict(),
+  z.object({ type: z.literal("DeleteCamera"), id }).strict(),
   /** Elektra- en armatuurvelden van een bestaand punt bijwerken. */
   z
     .object({ type: z.literal("SetFixture"), id, fixture: fixtureSchema })

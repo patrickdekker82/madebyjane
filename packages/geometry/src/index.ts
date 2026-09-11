@@ -8,6 +8,16 @@ export const toThree = (
 ): [number, number, number] => [x / 1000, height / 1000, y / 1000];
 export const toThreeRotation = (degrees: number) => (-degrees * Math.PI) / 180;
 /**
+ * De weg terug uit de 3D-weergave: van meters naar hele millimeters in de assen
+ * van het plan. Het ontwerp kent maar één maatvoering, en een bewaard
+ * camerastandpunt hoort daar net zo goed in te staan als een muur.
+ */
+export const fromThree = (x: number, y: number, z: number) => ({
+  x: Math.round(x * 1000),
+  y: Math.round(z * 1000),
+  z: Math.round(y * 1000),
+});
+/**
  * Van ankerpunt naar hart van het object.
  *
  * Een object wordt met zijn hart bewaard — dat is overal in de app zo en dat
@@ -125,6 +135,7 @@ export function validateGeometry(scene: Scene) {
     ...scene.openings,
     ...scene.items,
     ...scene.annotations,
+    ...scene.cameras,
   ].map((x) => x.id);
   if (new Set(all).size !== all.length) throw new Error("Dubbele object-ID.");
   for (const wall of scene.walls) {
