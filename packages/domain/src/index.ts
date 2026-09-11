@@ -143,6 +143,32 @@ export function applyOperations(before: Scene, operations: Operation[]): Scene {
           );
         if (!op.custom && (item.width !== op.width || item.depth !== op.depth))
           throw new Error("Kies eerst maatwerk om handelsmaten te wijzigen.");
+        /*
+         * De schaalmodus komt uit de bibliotheek en staat boven maatwerk: een
+         * vaste handelsmaat blijft ook met maatwerk aan wat de fabrikant
+         * levert. Ontbreekt de modus, dan is het item van vóór dit veld en
+         * blijft het vrij — zoals het altijd was.
+         */
+        if (item.width !== op.width || item.depth !== op.depth) {
+          if (item.scaleMode === "fixed")
+            throw new Error(
+              "Dit item heeft een vaste handelsmaat en is niet te schalen. Maak een eigen bibliotheekversie met de gewenste maat.",
+            );
+          /*
+           * Gelijkmatig schalen toetsen we op de verhouding, niet op een
+           * factor: breedte en diepte zijn hele millimeters, dus een factor
+           * levert per as een afronding op. De marge hieronder is precies die
+           * afronding — een halve millimeter per as — en niet meer.
+           */
+          if (
+            item.scaleMode === "uniform" &&
+            Math.abs(op.width * item.depth - op.depth * item.width) >
+              (item.width + item.depth) / 2 + 1
+          )
+            throw new Error(
+              "Dit item schaalt alleen gelijkmatig. Houd breedte en diepte in verhouding.",
+            );
+        }
         Object.assign(item, {
           x: op.x,
           y: op.y,

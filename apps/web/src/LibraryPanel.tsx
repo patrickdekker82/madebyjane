@@ -1,6 +1,10 @@
 import { SymbolEditor } from "./SymbolEditor";
 import type { SymbolShape } from "../../../packages/contracts/src/index";
-import { libraryPublishSchema } from "../../../packages/contracts/src/index";
+import {
+  anchorModes,
+  libraryPublishSchema,
+  scaleModes,
+} from "../../../packages/contracts/src/index";
 import { useState, useRef, lazy, Suspense } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import type {
@@ -318,7 +322,32 @@ export function LibraryPanel({
                             .filter(Boolean),
                           supplier: String(data.get("supplier") ?? ""),
                           sku: String(data.get("sku") ?? ""),
+                          /*
+                           * Leeg is hier echt leeg en niet nul: een prijs van
+                           * "0,00" is een bewering, en die hoort de gebruiker
+                           * zelf te doen. Het bedrag gaat als tekst mee, zodat
+                           * er onderweg niets wordt afgerond.
+                           */
+                          priceSource: String(data.get("priceSource") ?? ""),
+                          priceDate:
+                            String(data.get("priceDate") ?? "") || null,
+                          unitPrice:
+                            String(data.get("unitPrice") ?? "")
+                              .trim()
+                              .replace(",", ".") || null,
+                          rights: {
+                            licence: String(data.get("licence") ?? ""),
+                            holder: String(data.get("holder") ?? ""),
+                            attribution: String(data.get("attribution") ?? ""),
+                            exportAllowed: data.get("exportAllowed") === "on",
+                          },
                         },
+                        anchor: String(
+                          data.get("anchor") ?? "center",
+                        ) as LibraryDefinition["anchor"],
+                        scaleMode: String(
+                          data.get("scaleMode") ?? "free",
+                        ) as LibraryDefinition["scaleMode"],
                         name: String(data.get("name")),
                         kind: String(
                           data.get("kind"),
@@ -469,6 +498,136 @@ export function LibraryPanel({
                     defaultValue={editing?.definition.color ?? "#c4b39d"}
                   />
                 </label>
+                <label>
+                  Anker bij plaatsen
+                  <select
+                    name="anchor"
+                    aria-label="Bibliotheekanker"
+                    defaultValue={editing?.definition.anchor ?? "center"}
+                  >
+                    {Object.entries(anchorModes).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="small">
+                  Het punt waarop je klikt. Een kast met “Achterzijde” komt met
+                  zijn rug op dat punt te staan in plaats van met zijn hart.
+                </p>
+                <label>
+                  Schalen
+                  <select
+                    name="scaleMode"
+                    aria-label="Bibliotheekschaalmodus"
+                    defaultValue={editing?.definition.scaleMode ?? "free"}
+                  >
+                    {Object.entries(scaleModes).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="small">
+                  Een vaste handelsmaat is in het ontwerp niet te rekken, ook
+                  niet met maatwerk. Bestaande plaatsingen veranderen hier niet
+                  van: die houden de regel van hun eigen versie.
+                </p>
+                <h4>Prijs</h4>
+                <p className="small">
+                  De inkoop- of lijstprijs zoals hij bij dit item hoort. Vul je
+                  een bedrag in, noteer dan ook waar het vandaan komt en van
+                  wanneer het is. Wat de klant betaalt blijft een aparte keuze
+                  per project.
+                </p>
+                <label>
+                  Bedrag per stuk (EUR)
+                  <input
+                    name="unitPrice"
+                    aria-label="Item prijs"
+                    inputMode="decimal"
+                    maxLength={12}
+                    defaultValue={editing?.definition.catalog?.unitPrice ?? ""}
+                  />
+                </label>
+                <label>
+                  Prijsbron
+                  <input
+                    name="priceSource"
+                    aria-label="Item prijsbron"
+                    maxLength={160}
+                    placeholder="Bijvoorbeeld: prijslijst leverancier 2026-1"
+                    defaultValue={
+                      editing?.definition.catalog?.priceSource ?? ""
+                    }
+                  />
+                </label>
+                <label>
+                  Prijsdatum
+                  <input
+                    type="date"
+                    name="priceDate"
+                    aria-label="Item prijsdatum"
+                    defaultValue={editing?.definition.catalog?.priceDate ?? ""}
+                  />
+                </label>
+                <h4>Rechten</h4>
+                <p className="small">
+                  Van wie het materiaal is en wat ermee mag. Dit staat bij het
+                  item omdat het er over een jaar niet meer bij te bedenken is.
+                </p>
+                <label>
+                  Licentie of voorwaarde
+                  <input
+                    name="licence"
+                    aria-label="Item licentie"
+                    maxLength={160}
+                    defaultValue={
+                      editing?.definition.catalog?.rights?.licence ?? ""
+                    }
+                  />
+                </label>
+                <label>
+                  Rechthebbende
+                  <input
+                    name="holder"
+                    aria-label="Item rechthebbende"
+                    maxLength={160}
+                    defaultValue={
+                      editing?.definition.catalog?.rights?.holder ?? ""
+                    }
+                  />
+                </label>
+                <label>
+                  Verplichte vermelding
+                  <input
+                    name="attribution"
+                    aria-label="Item vermelding"
+                    maxLength={300}
+                    defaultValue={
+                      editing?.definition.catalog?.rights?.attribution ?? ""
+                    }
+                  />
+                </label>
+                <label className="row">
+                  <input
+                    type="checkbox"
+                    name="exportAllowed"
+                    aria-label="Item mag mee in exports"
+                    defaultChecked={
+                      editing?.definition.catalog?.rights?.exportAllowed ?? true
+                    }
+                  />
+                  Leveranciersgegevens mogen mee in presentaties en exports
+                </label>
+                <p className="small">
+                  Staat dit uit, dan blijft het meubel gewoon in de tekening en
+                  in de lijst staan, maar gaan leverancier en artikelnummer niet
+                  mee naar buiten. Een verplichte vermelding wordt juist wél
+                  afgedrukt.
+                </p>
               </fieldset>
               <SymbolEditor
                 shapes={shapes}

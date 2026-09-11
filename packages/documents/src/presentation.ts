@@ -187,7 +187,14 @@ function renderResolved(block: ResolvedBlock): string {
               r.supplier || "—",
               r.sku || "—",
             ]),
-          )
+          ) +
+            // Wat is weggelaten en waarom, en de vermeldingen die verplicht zijn.
+            (block.withheld
+              ? `<p class="note">Van ${block.withheld} product${block.withheld === 1 ? "" : "en"} zijn de leveranciersgegevens niet opgenomen: de rechten staan dat buiten de werkruimte niet toe.</p>`
+              : "") +
+            (block.attributions.length
+              ? `<p class="note">${block.attributions.map(e).join(" · ")}</p>`
+              : "")
         : `<p class="empty">Nog geen producten in dit ontwerp.</p>`;
     case "lighting":
       return `${
