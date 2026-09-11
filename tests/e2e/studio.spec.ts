@@ -2635,14 +2635,15 @@ test("lokaal herstel: mislukt opslaan → herladen → terughalen → conflict �
   // Maar weggooien hoeft niet: het werk kan naast het bestaande ontwerp blijven
   // bestaan als eigen variant. Dat is de derde weg naast terugsturen en
   // downloaden, en de enige die bij een conflict niets verliest.
+  const origineel = page.url();
   const bewaren = page.getByRole("button", {
     name: "Bewaren als aparte variant",
     exact: true,
   });
   await expect(bewaren).toBeVisible();
   await bewaren.click();
-  // De editor staat daarna op de nieuwe variant, met het lokale werk erin.
-  await expect(page).toHaveURL(/\/ontwerp\//);
+  // De editor staat daarna op een ánder ontwerp: de zojuist gemaakte variant.
+  await expect(page).not.toHaveURL(origineel);
   await expect(banner).toHaveCount(0);
   const gered = await page.evaluate(async () => {
     const variantId = location.pathname.split("/").pop()!;
@@ -2659,6 +2660,24 @@ test("lokaal herstel: mislukt opslaan → herladen → terughalen → conflict �
   expect(gered.revision).toBe(0);
   expect(gered.items.length).toBeGreaterThan(0);
   await page.screenshot({ path: "outputs/qa/herstel-variant.png" });
+
+  /*
+   * Het klad is hiermee opgeruimd: het staat nu als variant op de server. Voor
+   * het afmeldgedeelte hieronder is opnieuw lokaal werk nodig, dus dat wordt op
+   * het oorspronkelijke ontwerp opnieuw gemaakt — dat is meteen het bewijs dat
+   * het bewaren het klad werkelijk heeft opgeruimd en niet heeft laten staan.
+   */
+  await page.goto(origineel);
+  await saved();
+  await expect(banner).toHaveCount(0);
+  await blockSaving();
+  await page
+    .getByRole("button", { name: "Bank · linnen naturel", exact: true })
+    .click();
+  await page.getByLabel("Positie X", { exact: true }).fill("2700");
+  await page.getByRole("button", { name: "Toepassen", exact: true }).click();
+  await expect(page.getByText("Lokaal bewaard op dit apparaat")).toBeVisible();
+  await allowSaving();
 
   // Afmelden waarschuwt en biedt eerst een export aan.
   await page.getByRole("button", { name: "Afmelden", exact: true }).click();
