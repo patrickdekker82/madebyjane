@@ -14,6 +14,8 @@ import type { QuoteRecord } from "../../contracts/src/quotes";
 import { presentationHtml } from "../../documents/src/presentation";
 import { renderQuotePdf } from "../../documents/src/quote-pdf";
 import { DomainError, canWrite } from "./index";
+import { readUnderlayBytes } from "./underlay-assets";
+import type { StorageProvider } from "../../storage/src/index";
 import type { Context } from "./projects";
 import {
   defaultPresentation,
@@ -41,6 +43,7 @@ export class PresentationService {
   constructor(
     private pool: Pool,
     private secret: string,
+    private storage: StorageProvider,
     private render = renderQuotePdf,
   ) {}
 
@@ -182,6 +185,7 @@ export class PresentationService {
    */
   private async gather(
     c: PoolClient,
+    organizationId: string,
     projectId: string,
     definition: Presentation,
   ): Promise<ResolveInput> {
@@ -201,15 +205,15 @@ export class PresentationService {
       if (block.type === "moodboard")
         for (const image of block.images)
           if (!images[image.assetId]) {
-            const row = (
-              await c.query(
-                "SELECT bytes,mime FROM underlay_assets WHERE id=$1",
-                [image.assetId],
-              )
-            ).rows[0];
-            if (row)
+            const found = await readUnderlayBytes(
+              c,
+              this.storage,
+              organizationId,
+              image.assetId,
+            );
+            if (found)
               images[image.assetId] =
-                `data:${row.mime};base64,${(row.bytes as Buffer).toString("base64")}`;
+                `data:${found.mime};base64,${found.bytes.toString("base64")}`;
           }
       if (block.type === "price" && !quotes[block.quoteId]) {
         // De nieuwste versie van die offerte; een concept heeft geen nummer.
@@ -224,13 +228,14 @@ export class PresentationService {
     }
     let logo: string | null = null;
     if (definition.branding.logoAssetId) {
-      const row = (
-        await c.query("SELECT bytes,mime FROM underlay_assets WHERE id=$1", [
-          definition.branding.logoAssetId,
-        ])
-      ).rows[0];
-      if (row)
-        logo = `data:${row.mime};base64,${(row.bytes as Buffer).toString("base64")}`;
+      const found = await readUnderlayBytes(
+        c,
+        this.storage,
+        organizationId,
+        definition.branding.logoAssetId,
+      );
+      if (found)
+        logo = `data:${found.mime};base64,${found.bytes.toString("base64")}`;
     }
     const materials = (
       await c.query(
@@ -269,7 +274,7 @@ export class PresentationService {
       const definition = presentationSchema.parse(row.definition);
       const content = resolveContent(
         definition,
-        await this.gather(c, row.project_id, definition),
+        await this.gather(c, ctx.organizationId, row.project_id, definition),
       );
       const contentHash = presentationHash(definition, content);
       const inputHash = digest({ presentationId, ...value });

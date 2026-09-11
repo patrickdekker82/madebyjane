@@ -1,5 +1,42 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 1: assets de database uit, en een geteste S3-adapter
+
+Bij het oppakken van het laatste fase-1-punt bleek de `StorageProvider` **dood te liggen**: de interface en de lokale adapter bestonden, maar werden door niets gebruikt behalve hun eigen test. Alle binaire data — GLB-geometrie, onderleggers, offerte-PDF's, presentatie-exports — stond als `bytea` in PostgreSQL. Dat maakt elke toekomstige back-up zo groot als alle klantbeelden bij elkaar.
+
+### Eén contract, twee adapters
+
+`packages/storage/src/s3.ts` implementeert dezelfde `StorageProvider` met SigV4-ondertekening uit `node:crypto`; er komt geen SDK aan te pas voor vier verzoeken, en de sleutel gaat nergens anders heen. Fouten worden op één plek vertaald, zodat de oproeper geen statuscodes kent.
+
+`tests/storage-contract.test.ts` haalt **beide** adapters door dezelfde proeven: bewaren, lezen, meten, streamen, verwijderen, een verzonnen ID, een te groot bestand, een ontbrekend object, overschrijven, en gescheiden sleutelruimte per werkruimte. Verhuizen naar objectopslag is daarmee een configuratiewijziging in plaats van een gedragswijziging.
+
+### Onderleggers gaan als eerste de database uit
+
+Migration 0018 maakt `bytes` nullable, voegt `stored` en `byte_size` toe, en legt vast dat een rij nooit zonder allebei kan bestaan (`underlay_bytes_somewhere`). Nieuwe uploads schrijven eerst naar de opslag en leggen daarna pas de rij vast; lukt dat vastleggen niet, dan wordt het object opgeruimd zodat er geen weesbestand achterblijft. Bestaande rijen houden hun bytes in de kolom en blijven gewoon leesbaar — er is niets stilzwijgend verplaatst.
+
+`scripts/move-assets-to-storage.ts` verplaatst die oude rijen wanneer een beheerder dat wil. Het toont eerst wat het gaat doen en verplaatst pas met `--uitvoeren`; het werkt per rij in een eigen transactie, en leegt de kolom pas nadat het object is teruggelezen en byte voor byte gelijk bevonden.
+
+### Een fout die deze verhuizing blootlegde
+
+`presentations.ts` las de bytes van een moodboardbeeld en een logo met **eigen SQL** rechtstreeks uit `underlay_assets`, buiten de service om. Na de verhuizing leverde dat lege beelden op. Er is nu één gedeelde `readUnderlayBytes`: waar de bytes staan, staat op precies één plek. Dat is de les van dit stuk — de verhuizing brak niets wat via de service liep, alleen wat eromheen greep.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+- TypeScript strict en productiebuild geslaagd (7,88 s); de bestaande chunkwaarschuwing blijft.
+- Vitest: **257 van 263 tests geslaagd**. Nieuw: 8 contractproeven over beide adapters en 6 proeven op de verhuizing (kolom leeg en object aanwezig na upload, oude rij blijft leesbaar, quota telt beide soorten, geen weesobject na een geweigerde upload, de databaseconstraint weigert een rij zonder bytes én zonder opslag, en het verhuisscript toont-verplaatst-herhaalt).
+- Playwright: **18 van 22 routes geslaagd**. De onderleggerroute — uploaden, inmeten, schaal controleren — slaagt, dus de verhuizing werkt ook door de browser heen.
+
+### Niet geverifieerd in deze omgeving
+
+De 6 Vitest- en 4 browserfouten zijn dezelfde die ook vóór deze wijziging omvielen: Chromium kan hier zijn sandbox niet starten, waardoor elke server-side PDF 500 geeft. De bouwstraat staat die sandbox juist toe en draait ze wel.
+
+De S3-adapter is getoetst tegen een **echte HTTP-server die het gebruikte deel van S3 nabootst** en de ondertekening controleert, niet tegen AWS of MinIO. Wat hier slaagt bewijst het contract en het signeren; het bewijst niet dat een echte bucket zich identiek gedraagt. Een proef tegen een echte S3-dienst staat open.
+
+### Eerstvolgende stap
+
+Van fase 1 resteren productie-Compose met geteste installatieprocedure en operationele back-up/restore. Beide zijn in deze container **niet eerlijk te bewijzen**: er is geen Docker-daemon, en `pg_dump` is versie 16 tegenover een server 18.4, wat pg_dump zelf weigert ("server version mismatch"). Ze zijn wel te schrijven, maar dan zonder bewijs. De overige assetsoorten — GLB's, offerte-PDF's en presentatie-exports — kunnen langs hetzelfde pad naar de opslag; onderleggers waren de grootste en de eerste.
+
+
 ## Aanvulling 11 september 2026 — fase 1: accountherstel
 
 Sluit het open punt "account recovery" uit fase 1. De opdracht vraagt dit _met libraryvoorzieningen_; token, vervaltijd, eenmalig gebruik, wachtwoordhashing en het intrekken van sessies komen daarom uit Better Auth. De app voegt alleen toe wie het mag doen, de registratie, en het ongeldig maken van oudere links.

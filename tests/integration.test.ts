@@ -794,7 +794,9 @@ test("onderleggerafbeeldingen: type, maten, herhaling, quota en werkruimtegrens"
   await expect(inTenant(db.runtime, orgA, c => c.query("UPDATE underlay_assets SET width_px=1"))).rejects.toThrow(/permission denied/);
 
   // Quota per werkruimte.
-  await db.admin.query("INSERT INTO underlay_assets(organization_id,id,source_hash,mime,bytes,width_px,height_px,user_id) SELECT organization_id,gen_random_uuid(),source_hash,mime,bytes,width_px,height_px,user_id FROM underlay_assets CROSS JOIN generate_series(1,60) WHERE organization_id=$1 AND id=$2", [orgA, assetId]);
+  // Kopieer ook stored en byte_size: sinds migration 0018 staan de bytes in de
+  // opslag, en een rij zonder allebei is terecht ongeldig.
+  await db.admin.query("INSERT INTO underlay_assets(organization_id,id,source_hash,mime,bytes,stored,byte_size,width_px,height_px,user_id) SELECT organization_id,gen_random_uuid(),source_hash,mime,bytes,stored,byte_size,width_px,height_px,user_id FROM underlay_assets CROSS JOIN generate_series(1,60) WHERE organization_id=$1 AND id=$2", [orgA, assetId]);
   expect((await upload(randomUUID(), makePng(50, 50))).statusCode).toBe(409);
 });
 test("de API overleeft het wegvallen van inactieve databaseverbindingen", async () => {

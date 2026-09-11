@@ -31,6 +31,11 @@ import {
   commandSchema,
 } from "../../../packages/contracts/src/index";
 import { planSvg } from "../../../packages/documents/src/plan";
+import {
+  LocalStorage,
+  type StorageProvider,
+} from "../../../packages/storage/src/index";
+import { resolve } from "node:path";
 import { PresentationService } from "../../../packages/domain/src/presentations";
 import { presentationHtml } from "../../../packages/documents/src/presentation";
 import { ExportJobs } from "../../../packages/domain/src/export-jobs";
@@ -40,7 +45,10 @@ export function createServer(config: {
   identity: Pool;
   baseURL: string;
   secret: string;
+  /** Waar assetbytes heen gaan. Zonder opgave: een private map naast de app. */
+  storage?: StorageProvider;
 }) {
+  const storage = config.storage ?? new LocalStorage(resolve("work/assets"));
   const app = Fastify({
     logger: false,
     bodyLimit: 2_000_000,
@@ -291,7 +299,7 @@ export function createServer(config: {
       .header("Content-Disposition", 'attachment; filename="geometry.bin"')
       .send(model.positions);
   });
-  const underlays = new UnderlayAssetService(config.runtime);
+  const underlays = new UnderlayAssetService(config.runtime, storage);
   app.post(
     "/api/v1/underlay-assets/:id",
     {
@@ -580,7 +588,7 @@ export function createServer(config: {
       req.body,
     ),
   );
-  const presentations = new PresentationService(config.runtime, config.secret);
+  const presentations = new PresentationService(config.runtime, config.secret, storage);
   const exports = new ExportJobs(config.runtime);
   const presentationVersionParams = (params: unknown) =>
     z
