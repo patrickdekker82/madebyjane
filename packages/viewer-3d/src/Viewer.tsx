@@ -5,10 +5,12 @@ import { Shape, Path, Vector2, Vector3, Quaternion, DoubleSide } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { Camera, Operation, Scene } from "../../contracts/src/index";
 import type { PlannedLight } from "../../geometry/src/index";
+import type { MaterialVersion } from "../../contracts/src/materials";
 import {
   endpoints,
   fromThree,
   lightPlan,
+  surfaceFinishes,
   toThree,
   toThreeRotation,
   wallSegments,
@@ -164,11 +166,14 @@ export default function Viewer({
   scene,
   onCommand,
   disabled = false,
+  materials,
 }: {
   scene: Scene;
   /** Ontbreekt bij alleen kijken; dan zijn standpunten wel te gebruiken, niet te bewaren. */
   onCommand?: (operations: Operation[]) => void;
   disabled?: boolean;
+  /** De nieuwste materiaalversies van dit project; leeg tot ze geladen zijn. */
+  materials?: readonly MaterialVersion[];
 }) {
   const [ready, setReady] = useState(false);
   const [modelStatus, setModelStatus] = useState("");
@@ -209,6 +214,15 @@ export default function Viewer({
   const plan = useMemo(
     () => lightPlan(scene.items, { mode: light, max: 8 }),
     [scene.items, light],
+  );
+  /*
+   * Welke materiaalkeuze op welk vlak ligt. De weergave beslist daar niets
+   * over; ze tekent wat `surfaceFinishes` zegt, inclusief de vlakken die
+   * bewust neutraal blijven.
+   */
+  const finishes = useMemo(
+    () => surfaceFinishes(scene, materials ?? []),
+    [scene, materials],
   );
   return (
     <div className="viewer" data-render-ready={ready}>
@@ -272,7 +286,9 @@ export default function Viewer({
             receiveShadow
           >
             <shapeGeometry args={[floor.shape]} />
-            <meshStandardMaterial color="#d6c7af" />
+            <meshStandardMaterial
+              color={finishes.floors[floor.id]?.color ?? "#d6c7af"}
+            />
           </mesh>
         ))}
         {scene.walls.flatMap((w) => {
@@ -298,7 +314,9 @@ export default function Viewer({
                     w.thickness / 1000,
                   ]}
                 />
-                <meshStandardMaterial color="#f4eee1" />
+                <meshStandardMaterial
+                  color={finishes.walls[w.id]?.color ?? "#f4eee1"}
+                />
               </mesh>
             );
           });
@@ -308,6 +326,18 @@ export default function Viewer({
       <div className="canvas-note">
         3D · sleep om te draaien · scroll om te zoomen
         {modelStatus && <span role="status"> · {modelStatus}</span>}
+        {(Object.keys(finishes.floors).length > 0 ||
+          Object.keys(finishes.walls).length > 0 ||
+          finishes.notes.length > 0) && (
+          <span role="status">
+            {" "}
+            · Materialen: {Object.keys(finishes.floors).length} vloer
+            {Object.keys(finishes.floors).length === 1 ? "" : "en"} en{" "}
+            {Object.keys(finishes.walls).length} muur
+            {Object.keys(finishes.walls).length === 1 ? "" : "en"} gekleurd
+            {finishes.notes.length > 0 && ` · ${finishes.notes.join(" ")}`}
+          </span>
+        )}
         {light === "evening" && (
           <span role="status">
             {" "}

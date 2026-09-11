@@ -15,7 +15,7 @@ const decimals = (value: string) => value.replace(".", ",");
 const euro = (value: string) => Number(value).toLocaleString("nl-NL", { style: "currency", currency: "EUR" });
 const emptyAlternative = (): Alternative => ({
   id: crypto.randomUUID(), name: "", supplier: "", collection: "", sku: "", colorCode: "",
-  priceSource: "", priceDate: null, unitPrice: null, notes: "",
+  priceSource: "", priceDate: null, unitPrice: null, displayColor: null, notes: "",
 });
 const productOf = (d: MaterialDefinition) => ({
   supplier: d.supplier, collection: d.collection, sku: d.sku, colorCode: d.colorCode,
@@ -188,6 +188,8 @@ export function Materials({ organizationId, projectId, variantId, canEdit }: { o
               definition: {
                 name: text("name"), category: text("category"), room: text("room"), supplier: text("supplier"), collection: text("collection"), sku: text("sku"), colorCode: text("colorCode"),
                 priceSource: text("priceSource"), priceDate: text("priceDate") || null,
+                /* Leeg laten is een geldige uitkomst: dan blijft het vlak in 3D neutraal. */
+                displayColor: text("showColor") === "on" ? text("displayColor") : null,
                 unitPrice: text("unitPrice").trim() ? text("unitPrice").trim().replace(",", ".") : null,
                 sampleStatus: sample, sampleDate: sample === "none" ? null : text("sampleDate") || null,
                 alternatives: alternatives.map(a => ({ ...a, unitPrice: a.unitPrice === null ? null : a.unitPrice.trim().replace(",", ".") || null })),
@@ -222,6 +224,21 @@ export function Materials({ organizationId, projectId, variantId, canEdit }: { o
                 list={key === "category" ? "material-categories" : undefined} defaultValue={draft ? draft[key] : key === "category" ? "Vloer" : ""} />
             </label>)}
             <datalist id="material-categories">{categories.map(value => <option key={value} value={value} />)}</datalist>
+            {/*
+              Twee velden en niet een. De kleurcode is van de leverancier en
+              blijft tekst; de weergavekleur is wat jij op het monster ziet en is
+              alleen voor het beeld. Een RAL-code omrekenen naar een schermkleur
+              kan niet betrouwbaar, en een gegokte tint in een klantbeeld is
+              erger dan een neutraal vlak. Vandaar ook het vinkje: geen kleur is
+              een geldige uitkomst, en geen kleurkiezer die stilzwijgend zwart
+              invult.
+            */}
+            <label>Weergavekleur voor 3D
+              <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input type="checkbox" name="showColor" aria-label="Materiaal weergavekleur gebruiken" defaultChecked={!!draft?.displayColor} />
+                <input type="color" name="displayColor" aria-label="Materiaal weergavekleur" defaultValue={draft?.displayColor ?? "#d6c7af"} />
+              </span>
+            </label>
             {!calc && <label>Eenheid<select name="unit" aria-label="Materiaal eenheid" defaultValue={draft?.unit ?? "m²"}>{["m²", "m", "stuk", "liter", "kg", "rol"].map(value => <option key={value}>{value}</option>)}</select></label>}
             <label>{calc ? "Hoeveelheid (leeg = berekende bestelhoeveelheid)" : "Hoeveelheid (leeg = onbekend)"}<input name="quantity" aria-label="Materiaal hoeveelheid" inputMode="decimal" maxLength={11} defaultValue={draft?.quantity?.replace(".", ",") ?? ""} /></label>
             <label>Keuzestatus<select aria-label="Materiaal status" value={status} onChange={event => setStatus(event.target.value as MaterialDefinition["status"])}>{Object.entries(materialStatuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
