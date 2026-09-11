@@ -1,8 +1,13 @@
-node_modules
+# Keep Docker build contexts deterministic and free of local data or credentials.
 .git
+.env
+.env.*
+!.env.example
+node_modules
+dist
 work
 outputs
-dist
-.env
+coverage
 playwright-report
 test-results
+*.log
