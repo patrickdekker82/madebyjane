@@ -1,5 +1,75 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 7: materialen op vlakken in 3D
+
+De 3D-weergave gaf elke vloer dezelfde zandkleur en elke muur hetzelfde
+gebroken wit, ongeacht wat er in het materiaalblad was gekozen. Daarmee was het
+werk uit fase 4 in 3D onzichtbaar.
+
+### De koppeling loopt over de berekening, niet over de ingetypte naam
+
+Een materiaalkeuze heeft een vrij in te typen `room` en `category`. Daar valt
+geen beeld op te bouwen: het zijn woorden van een mens. Wat wél hard is, is
+`calculation` — door de server berekend, met de variant, de ruimte-ID en de
+grondslag erin. `floor_area` is de vloer van die ruimte, `wall_area` zijn de
+muren eromheen, gevonden via de punten in doorloopvolgorde van de ruimte.
+
+Daaruit volgt ook wat er níét gebeurt: een keuze die op een andere variant is
+gemeten, of die helemaal niet gemeten is, kleurt niets.
+
+### Er wordt geen kleur verzonnen
+
+Een materiaal heeft een `colorCode` van de leverancier: "RAL 9010", "NCS S
+0500-N". Dat is niet betrouwbaar naar een schermkleur te rekenen, en een
+gegokte tint in een klantbeeld is erger dan een neutraal vlak.
+
+Daarom is er een eigen veld `displayColor` bijgekomen: de kleur zoals de
+ontwerper hem op het monster ziet, alleen voor de weergave, met een vinkje
+ernaast omdat "geen kleur" een geldige uitkomst is. Een keuze zonder
+weergavekleur laat het vlak neutraal en zegt dat in beeld.
+
+### Alleen een gemaakte keuze verft
+
+Een voorstel of een aangevraagd monster is nog geen besluit. Een beeld dat dat
+verschil niet maakt, praat de klant een keuze aan die niemand genomen heeft.
+Dus verven alleen "gekozen" en "door klant bevestigd"; de rest wordt geteld en
+gemeld in plaats van verzwegen.
+
+### Twee gevallen waarin een vlak bewust neutraal blijft
+
+Een muur tussen twee ruimtes met verschillende wandafwerking krijgt geen kleur:
+hij staat in 3D als één blok en heeft geen voor- en achterkant met een eigen
+materiaal. Kiezen beide ruimtes dezelfde kleur, dan is er geen strijd en wordt
+hij wel geverfd.
+
+Twee vloerkeuzes voor dezelfde ruimte laten die vloer ook neutraal. Beide
+gevallen staan met naam en toenaam onderin het beeld.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2
+
+TypeScript strict geslaagd, frontendbuild geslaagd. Zes nieuwe tests in
+`finishes.test.ts`, met een scène van twee kamers en een gedeelde muur: de
+koppeling via de berekening, het weigeren van een andere variant, de
+statusregel, het ontbreken van een weergavekleur, de gedeelde muur in drie
+varianten, en twee vloerkeuzes voor één ruimte. Volledige suite 315 geslaagd,
+6 gefaald — dezelfde zes die Chromium vragen.
+
+### Niet geverifieerd in deze omgeving
+
+**Er is geen gekleurd beeld gezien.** Wat `surfaceFinishes` uitrekent is
+getoetst; dat de weergave er een bruikbare plaat van maakt niet. Ook het
+ophalen van de materialen bij het openen van de 3D-weergave is niet in een
+browser gedraaid — alleen de code is nagelopen. Er is voor deze stap geen
+E2E-route bijgekomen.
+
+### Wat fase 7 hierna nog mist
+
+Plafonds hebben geen grondslag in de hoeveelheidberekening en blijven dus
+ongekleurd. Het planblad gebruikt deze kleuren nog niet; de masterprompt vraagt
+dat dezelfde materiaalversie in 2D, 3D én presentatie bruikbaar is, en daarvan
+is nu alleen 3D af. Verder blijft het narekenen van transformaties en
+performance op referentiehardware open.
+
 ## Aanvulling 11 september 2026 — fase 7: dag, avond en lichtvisualisatie
 
 De 3D-weergave kende maar één tijdstip: een egale dag. Daarmee was het
@@ -218,6 +288,59 @@ Van de openstaande punten van fase 3 zijn prijsbron, rechten- en
 exportmetadata en de anker- en schaalmodi hiermee ingevuld. Wat blijft: een
 projectexport die deze exportrechten ook werkelijk toepast, want die export
 bestaat nog niet.
+## Aanvulling 11 september 2026 — fase 3: het exitpad in de browser
+
+Toevoeging van één E2E-route die de twee stukken van het fase-3-exitcriterium
+aflegt die nog nergens stonden: een **zelfgemaakt lichtsymbool** en het
+gebruiken van dezelfde bibliotheekitems in **twee projecten**.
+
+De route maakt zonder programmeren twee items — een bank met een rechthoek en
+een lichtpunt met een ellips, elk getekend in de symboleneditor — plaatst ze in
+een project, maakt een tweede project, plaatst ze daar opnieuw, en controleert
+dat het om dezelfde bibliotheekversie gaat. Dat laatste is de kern: een
+bibliotheekitem hoort van de werkruimte te zijn en niet van het project waarin
+het toevallig is gemaakt. Tot slot wordt gecontroleerd dat het eerste project
+niets is kwijtgeraakt.
+
+Bewust een eigen route met eigen projecten. De bestaande routes zijn lang en
+delen een sessie; er ingrijpen brak vandaag al twee keer iets dat er niets mee
+te maken had.
+
+### Wat hier níét bij hoefde
+
+Bij het nalopen bleek het meeste van het exitcriterium al gedekt door de
+bestaande route met de muur en het raam: GLB-import inclusief weigering van
+ongeldige bestanden en externe bronnen, de 3D-controle, de symboleneditor met
+grenscontrole, en het bewijs dat een nieuwe bibliotheekversie een bestaande
+plaatsing niet verandert. Een eerdere aanvulling beweerde dat dit allemaal
+ontbrak; die alinea is gecorrigeerd.
+
+### Verificatie
+
+TypeScript strict geslaagd. De volledige Vitest-suite ongewijzigd: 287 geslaagd,
+6 gefaald (de bekende sandboxfouten).
+
+De route zelf kon hier niet draaien — Chromium start in deze container niet — en
+is in CI bevestigd: run 34615746829, **24 Playwright-routes geslaagd**, waaronder
+deze in 7,4 seconden.
+
+### Wat CI aanwees en wat dat leerde
+
+De route viel drie keer om voordat hij liep, en telkens lag het aan de route,
+niet aan de app; de 23 bestaande routes slaagden onafgebroken.
+
+De laatste oorzaak is het vermelden waard. De herstelroute meldt zich af,
+waarna elke volgende route opnieuw moet aanmelden. Dat doen ze ook allemaal,
+want de sessiecookies worden vlak ná de aanmeldklik uitgelezen en zijn dan nog
+niet gezet, zodat het bewaren ervan niets oplevert. Aanmelden is bewust
+gelimiteerd tegen raden, en als vierde op rij in korte tijd kwam deze route er
+niet meer doorheen. Hij staat nu vóór de routes die zich afmelden en draait op
+een geldige sessie.
+
+Die cookie-race zit dus in drie bestaande routes en laat ze onnodig opnieuw
+aanmelden. Ze slagen, dus het is geen defect, maar het maakt de suite gevoelig
+voor precies deze grens. Opruimen daarvan is een eigen stap en is hier bewust
+niet meegenomen.
 
 ## Aanvulling 11 september 2026 — fase 3: bibliotheekitems archiveren
 
@@ -267,12 +390,21 @@ gedraaid; er is voor deze stap geen E2E-route bijgekomen.
 
 ### Wat fase 3 nog mist
 
-Het exitcriterium van fase 3 — "gebruiker maakt zonder programmeren een nieuw
-meubelsymbool en lichtsymbool, gebruikt dit in twee projecten en importeert
-veilig een bekend GLB" — is **niet als browserroute vastgelegd**. De onderdelen
-bestaan (symboleneditor, GLB-import met validatie, onveranderlijke versies) en
-zijn los getoetst, maar er is geen enkele E2E-route die dat pad als geheel
-aflegt. Zolang die er niet is, kan fase 3 niet op de exit worden afgetekend.
+**Correctie op een eerdere versie van deze alinea.** Daar stond dat het
+exitcriterium van fase 3 "niet als browserroute is vastgelegd". Dat was
+onjuist en te stellig. De route met de muur en het raam
+(`studio.spec.ts:440`) legt het grootste deel al af: een GLB wordt geweigerd
+als hij ongeldig is of naar externe bronnen verwijst, een geldig model wordt
+gecontroleerd, in 3D getoond, bewaard en geplaatst; de symboleneditor maakt
+rechthoek, ellips en lijn met grenscontrole; en een nieuwe bibliotheekversie
+laat een bestaande plaatsing aantoonbaar ongemoeid.
+
+Wat er werkelijk ontbrak is smaller: een **zelfgemaakt lichtsymbool** — de
+elektrasymbolen elders zijn ingebouwd, niet zelf getekend, en de keuze
+"Lichtpunt" in de itemeditor werd nergens gebruikt — en het gebruiken van
+dezelfde items in **twee** projecten, terwijl alles zich in één project
+afspeelde. Beide staan nu in een eigen route.
+
 Verder blijven prijsbron, rechten-/exportmetadata en anker- en schaalmodi open.
 
 ## Aanvulling 11 september 2026 — de beeldbank kon vollopen zonder uitweg
