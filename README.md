@@ -134,6 +134,10 @@ Heb je al een Chromium van Playwright op de machine staan, dan kun je de downloa
 
 Browser- en integratietests gebruiken afzonderlijke lokale databases en fictieve accounts. Playwright bewaart screenshots in `outputs/qa`, overige testdata in `work`. `scripts/verify-pdf.py` vereist Python met pdfplumber en controleert de uiteindelijke PDF-vectoren. Linux-renderproef: `bash scripts/probe-linux.sh` met een actieve Docker-engine. Deze bouwt een lokaal image en voert één geïsoleerde, netwerkloze render uit; geen productie-installatie.
 
+## Installeren op een server
+
+Zie **`docs/manuals/installatie.md`** voor het opzetten van Studio op een eigen Linux-host: configuratie, versleutelde back-up, de eerste eigenaar en wat je controleert als het misgaat. De snelstart hierboven is voor ontwikkelen op je eigen machine; `pnpm setup` werkt alleen tegen de meegeleverde database en niet tegen een productie-installatie.
+
 ## Grenzen en vervolg
 
 Met Web Locks hervat dezelfde tab de schrijflease direct na herladen; een gedupliceerde tab blijft in leesmodus. Zonder Web Locks valt de editor veilig terug op een nieuwe lease en kan herladen maximaal 45 seconden wachttijd geven. De 3D-proef gebruikt blokvormige meubels en vloeren volgens herkende kamercontouren; muurverbindingen zijn nog in ontwikkeling. Netto hoeveelheden worden berekend, maar een ruimte wordt nog herkend aan haar muurpunten: verwijder of splits je een muur, dan vraagt de app om de bron opnieuw te kiezen. Offerte-PDF werkt met vaste snapshots en een begrensde lokale Chromium-renderer; een productie-exportqueue staat nog open. Nog geen productie-Compose, back-up/herstelprocedure of Hyper-V-validatie.

@@ -19,6 +19,7 @@
     "test:e2e": "playwright test",
     "db:migrate": "tsx scripts/migrate.ts",
     "setup": "tsx scripts/setup.ts",
+    "setup:owner": "tsx scripts/setup-owner.ts",
     "check": "pnpm build && pnpm test",
     "probe:pdf": "tsx scripts/pdf-probe.ts",
     "probe:quote": "tsx scripts/quote-pdf-probe.ts",
