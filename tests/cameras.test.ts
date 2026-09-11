@@ -27,6 +27,7 @@ const standpunt = (naam: string, x = 2000): Camera => ({
   eye: { x, y: 6000, z: 1600 },
   target: { x: 3000, y: 2000, z: 1100 },
   fov: 45,
+  light: "day",
 });
 
 test("een standpunt reist heen en terug zonder te verschuiven", () => {
@@ -100,4 +101,21 @@ test("scenes van voor fase 7 blijven geldig en krijgen een lege lijst", () => {
   const { cameras: _weg, ...zonder } = oud;
   const gelezen = sceneSchema.parse(zonder);
   expect(gelezen.cameras).toEqual([]);
+});
+
+test("de lichtstand hoort bij het standpunt en blijft geldig zonder opgave", () => {
+  /*
+   * "Vanaf de eettafel" overdag en 's avonds zijn twee verschillende platen, en
+   * juist die tweede is waarvoor het lichtplan gemaakt is. Standpunten van vóór
+   * dit veld openen zoals ze altijd deden: overdag.
+   */
+  const camera = standpunt("Vanaf de bank");
+  const avond = cameraSchema.parse({ ...camera, light: "evening" });
+  expect(avond.light).toBe("evening");
+  const { light: _weg, ...zonder } = camera;
+  expect(cameraSchema.parse(zonder).light).toBe("day");
+  // Een stand die niet bestaat wordt geweigerd in plaats van stil genegeerd.
+  expect(cameraSchema.safeParse({ ...camera, light: "nacht" }).success).toBe(
+    false,
+  );
 });
