@@ -7,5 +7,7 @@ ENV_FILE=${ENV_FILE:-"$ROOT/.env"}
 printf 'Upgrade op %s naar %s\n' "$(hostname)" "$(git -C "$ROOT" describe --always --dirty 2>/dev/null || printf onbekend)"
 printf 'De migrator controleert en voert uitsluitend nieuwe schema-migrations uit; hij roteert geen secrets.\n'
 ENV_FILE="$ENV_FILE" "$ROOT/scripts/preflight.sh"
+printf 'Eerst een verplichte versleutelde backup maken vóór eventuele schemawijzigingen.\n'
+ENV_FILE="$ENV_FILE" "$ROOT/scripts/backup.sh"
 docker compose --env-file "$ENV_FILE" -f "$ROOT/compose.production.yaml" up --build --detach --wait
 "$ROOT/scripts/doctor.sh"

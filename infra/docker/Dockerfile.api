@@ -1,19 +1,23 @@
-FROM node:22-bookworm-slim AS dependencies
-WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@11.19.0 --activate
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
-
+# Eén laag: de runtime installeert zelf wat hij nodig heeft. De aparte
+# bouwlaag die hier stond leverde sinds de overstap op --prod niets meer aan
+# de image en installeerde alles dubbel.
 FROM node:22-bookworm-slim AS runtime
 RUN apt-get update \
  && apt-get install --no-install-recommends -y chromium gosu tini ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=dependencies /app/node_modules ./node_modules
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Playwright hoort bij de runtime — de offerte- en presentatie-PDF worden ermee
+# gemaakt — maar zijn eigen browsers niet: deze image draait op de Chromium uit
+# apt, via QUOTE_CHROMIUM_PATH. Zonder deze regel haalt het installeren er nog
+# een paar honderd megabyte aan browsers bij die nooit worden gestart.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN corepack enable && corepack prepare pnpm@11.19.0 --activate \
+ && pnpm install --prod --frozen-lockfile
 COPY --chown=node:node . .
 COPY --chmod=755 infra/docker/api-entrypoint.sh /usr/local/bin/api-entrypoint
 RUN mkdir -p /app/work/assets && chown -R node:node /app/work
 ENV NODE_ENV=production \
     QUOTE_CHROMIUM_PATH=/usr/bin/chromium
 ENTRYPOINT ["tini", "--", "/usr/local/bin/api-entrypoint"]
-CMD ["pnpm", "dev:api"]
+CMD ["pnpm", "start:api"]
