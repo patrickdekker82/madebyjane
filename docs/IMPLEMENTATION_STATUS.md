@@ -1,5 +1,75 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 7: materialen op vlakken in 3D
+
+De 3D-weergave gaf elke vloer dezelfde zandkleur en elke muur hetzelfde
+gebroken wit, ongeacht wat er in het materiaalblad was gekozen. Daarmee was het
+werk uit fase 4 in 3D onzichtbaar.
+
+### De koppeling loopt over de berekening, niet over de ingetypte naam
+
+Een materiaalkeuze heeft een vrij in te typen `room` en `category`. Daar valt
+geen beeld op te bouwen: het zijn woorden van een mens. Wat wél hard is, is
+`calculation` — door de server berekend, met de variant, de ruimte-ID en de
+grondslag erin. `floor_area` is de vloer van die ruimte, `wall_area` zijn de
+muren eromheen, gevonden via de punten in doorloopvolgorde van de ruimte.
+
+Daaruit volgt ook wat er níét gebeurt: een keuze die op een andere variant is
+gemeten, of die helemaal niet gemeten is, kleurt niets.
+
+### Er wordt geen kleur verzonnen
+
+Een materiaal heeft een `colorCode` van de leverancier: "RAL 9010", "NCS S
+0500-N". Dat is niet betrouwbaar naar een schermkleur te rekenen, en een
+gegokte tint in een klantbeeld is erger dan een neutraal vlak.
+
+Daarom is er een eigen veld `displayColor` bijgekomen: de kleur zoals de
+ontwerper hem op het monster ziet, alleen voor de weergave, met een vinkje
+ernaast omdat "geen kleur" een geldige uitkomst is. Een keuze zonder
+weergavekleur laat het vlak neutraal en zegt dat in beeld.
+
+### Alleen een gemaakte keuze verft
+
+Een voorstel of een aangevraagd monster is nog geen besluit. Een beeld dat dat
+verschil niet maakt, praat de klant een keuze aan die niemand genomen heeft.
+Dus verven alleen "gekozen" en "door klant bevestigd"; de rest wordt geteld en
+gemeld in plaats van verzwegen.
+
+### Twee gevallen waarin een vlak bewust neutraal blijft
+
+Een muur tussen twee ruimtes met verschillende wandafwerking krijgt geen kleur:
+hij staat in 3D als één blok en heeft geen voor- en achterkant met een eigen
+materiaal. Kiezen beide ruimtes dezelfde kleur, dan is er geen strijd en wordt
+hij wel geverfd.
+
+Twee vloerkeuzes voor dezelfde ruimte laten die vloer ook neutraal. Beide
+gevallen staan met naam en toenaam onderin het beeld.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2
+
+TypeScript strict geslaagd, frontendbuild geslaagd. Zes nieuwe tests in
+`finishes.test.ts`, met een scène van twee kamers en een gedeelde muur: de
+koppeling via de berekening, het weigeren van een andere variant, de
+statusregel, het ontbreken van een weergavekleur, de gedeelde muur in drie
+varianten, en twee vloerkeuzes voor één ruimte. Volledige suite 315 geslaagd,
+6 gefaald — dezelfde zes die Chromium vragen.
+
+### Niet geverifieerd in deze omgeving
+
+**Er is geen gekleurd beeld gezien.** Wat `surfaceFinishes` uitrekent is
+getoetst; dat de weergave er een bruikbare plaat van maakt niet. Ook het
+ophalen van de materialen bij het openen van de 3D-weergave is niet in een
+browser gedraaid — alleen de code is nagelopen. Er is voor deze stap geen
+E2E-route bijgekomen.
+
+### Wat fase 7 hierna nog mist
+
+Plafonds hebben geen grondslag in de hoeveelheidberekening en blijven dus
+ongekleurd. Het planblad gebruikt deze kleuren nog niet; de masterprompt vraagt
+dat dezelfde materiaalversie in 2D, 3D én presentatie bruikbaar is, en daarvan
+is nu alleen 3D af. Verder blijft het narekenen van transformaties en
+performance op referentiehardware open.
+
 ## Aanvulling 11 september 2026 — fase 7: dag, avond en lichtvisualisatie
 
 De 3D-weergave kende maar één tijdstip: een egale dag. Daarmee was het
