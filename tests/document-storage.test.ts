@@ -10,6 +10,9 @@ import {
   discardDocument,
 } from "../packages/domain/src/document-storage";
 import { moveDocumentsToStorage } from "../scripts/move-assets-to-storage";
+import { QuoteDelivery } from "../packages/domain/src/quote-delivery";
+import { PresentationService } from "../packages/domain/src/presentations";
+import { digest } from "../packages/domain/src/quote-resources";
 
 /**
  * De grootste bestanden die de app maakt — offerte-PDF's, presentatie-PDF's en
@@ -245,4 +248,62 @@ test("de app mag een vastgelegd bestand niet wijzigen of wissen", async () => {
       `${tabel} delete`,
     ).rejects.toThrow(/permission denied/i);
   }
+});
+
+test("een openbare deellink levert de bytes uit de opslag, niet een leeg bestand", async () => {
+  // Deze paden lezen met eigen SQL langs de service heen. Juist daar ging het
+  // tweemaal mis bij het verhuizen, dus ze worden hier expliciet vastgelegd.
+  const secret = "x".repeat(32);
+  const opslag = storage;
+
+  await db.admin.query(
+    "INSERT INTO quote_versions(organization_id,project_id,id,version,request_id,input_hash,number,definition,totals,user_id) VALUES($1,$2,$3,2,$4,'h','2026-00002','{}','{}',$5)",
+    [org, project, quoteId, randomUUID(), userId],
+  );
+  const quotePdf = Buffer.from("%PDF-1.4 offerte uit de opslag");
+  const quoteAsset = (await storeDocument(opslag, org, quotePdf)).assetId;
+  await db.admin.query(
+    "INSERT INTO quote_exports(organization_id,quote_id,quote_version,template_version,content_hash,pdf,pdf_hash,asset_id,stored,byte_size) VALUES($1,$2,2,'t','c',NULL,$3,$4,true,$5)",
+    [
+      org,
+      quoteId,
+      createHash("sha256").update(quotePdf).digest("hex"),
+      quoteAsset,
+      quotePdf.length,
+    ],
+  );
+  const quoteToken = "offerte-token";
+  await db.admin.query(
+    "INSERT INTO quote_shares(organization_id,id,quote_id,quote_version,token_hash,input_hash,user_id,expires_at) VALUES($1,$2,$3,2,$4,'h',$5,now()+interval '7 days')",
+    [org, randomUUID(), quoteId, digest(quoteToken), userId],
+  );
+  const delivery = new QuoteDelivery(db.runtime, secret, opslag);
+  const geleverd = await delivery.publicPdf(org, quoteToken);
+  expect(Buffer.from(geleverd.pdf).equals(quotePdf)).toBe(true);
+
+  const deckPdf = Buffer.from("%PDF-1.4 presentatie uit de opslag");
+  const deckAsset = (await storeDocument(opslag, org, deckPdf)).assetId;
+  await db.admin.query(
+    "INSERT INTO presentation_versions(organization_id,presentation_id,version,request_id,input_hash,definition,content,content_hash,template_version,user_id) VALUES($1,$2,2,$3,'h','{}','{}','c','t',$4)",
+    [org, presentationId, randomUUID(), userId],
+  );
+  await db.admin.query(
+    "INSERT INTO presentation_exports(organization_id,presentation_id,version,content_hash,pdf,pdf_hash,asset_id,stored,byte_size) VALUES($1,$2,2,'c',NULL,$3,$4,true,$5)",
+    [
+      org,
+      presentationId,
+      createHash("sha256").update(deckPdf).digest("hex"),
+      deckAsset,
+      deckPdf.length,
+    ],
+  );
+  const deckToken = "presentatie-token";
+  await db.admin.query(
+    "INSERT INTO presentation_shares(organization_id,id,presentation_id,version,token_hash,input_hash,user_id,expires_at) VALUES($1,$2,$3,2,$4,'h',$5,now()+interval '7 days')",
+    [org, randomUUID(), presentationId, digest(deckToken), userId],
+  );
+  const presentaties = new PresentationService(db.runtime, secret, opslag);
+  const publiek = await presentaties.publicPdf(org, deckToken);
+  expect(Buffer.from(publiek.pdf).equals(deckPdf)).toBe(true);
+  expect(publiek.version).toBe(2);
 });

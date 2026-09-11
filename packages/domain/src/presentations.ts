@@ -630,7 +630,7 @@ export class PresentationService {
     return inTenant(this.pool, organization, async (c) => {
       const row = (
         await c.query(
-          `SELECT e.pdf,e.pdf_hash,s.version
+          `SELECT e.pdf,e.pdf_hash,e.stored,e.asset_id,s.version
              FROM presentation_shares s
              JOIN presentation_exports e
                ON e.organization_id=s.organization_id
@@ -646,7 +646,11 @@ export class PresentationService {
           "Deze link is niet beschikbaar of verlopen.",
           404,
         );
-      return row as { pdf: Buffer; pdf_hash: string; version: number };
+      return {
+        pdf: await documentBytes(this.storage, organization, row, row.pdf),
+        pdf_hash: row.pdf_hash as string,
+        version: row.version as number,
+      };
     });
   }
 }
