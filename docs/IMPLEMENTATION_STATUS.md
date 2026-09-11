@@ -1,5 +1,30 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 1: accountherstel
+
+Sluit het open punt "account recovery" uit fase 1. De opdracht vraagt dit *met libraryvoorzieningen*; token, vervaltijd, eenmalig gebruik, wachtwoordhashing en het intrekken van sessies komen daarom uit Better Auth. De app voegt alleen toe wie het mag doen, de registratie, en het ongeldig maken van oudere links.
+
+Er is geen e-mailkoppeling en er wordt ook niet gedaan alsof: een eigenaar of beheerder maakt onder **Toegang → Accountherstel** een eenmalige link en geeft die persoonlijk door, hetzelfde patroon als de uitnodigingen. De link vervalt na twee uur, werkt één keer, en een nieuwe link maakt de vorige direct ongeldig. Het instellen van een nieuw wachtwoord logt die gebruiker overal uit — bij een vermoeden van misbruik wil je dat een indringer er ook uit ligt. Migration 0015 voegt `detail jsonb` toe aan `identity.access_event`, zodat in de registratie staat wie het voor wie deed.
+
+Een beheerder kan géén eigenaar herstellen; dat mag alleen een eigenaar. Zonder die regel zou een beheerder het eigenaarsaccount kunnen overnemen door er een wachtwoord voor in te stellen. De procedure, inclusief grenzen, staat in `docs/manuals/accountherstel.md`.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+- TypeScript strict en productiebuild geslaagd (6,92 s); de bestaande chunkwaarschuwing blijft.
+- Vitest: **177 van 179 tests geslaagd**. Zeven nieuwe proeven in `tests/account-recovery.test.ts`: een link zet een nieuw wachtwoord en het oude werkt niet meer; dezelfde token werkt geen tweede keer; bestaande sessies worden ingetrokken; een nieuwe link maakt de vorige ongeldig en intrekken werkt (tweemaal intrekken meldt eerlijk `revoked: false`); alleen beheerders, en een admin kan geen eigenaar overnemen; een andere werkruimte en onbekende gebruikers krijgen 404; een te kort wachtwoord wordt geweigerd; en elke handeling staat met actor en gebruiker in de registratie.
+- Playwright: de nieuwe route maakt de link in het scherm, zet er een nieuw wachtwoord mee, controleert dat de bestaande sessie is ingetrokken en dat dezelfde link geen tweede keer werkt. `outputs/qa/herstellink.png` is visueel gecontroleerd.
+
+### Twee dingen die onderweg misgingen
+
+**Een bestaand testbestand overschreven.** `tests/recovery.test.ts` bestond al: 12 proeven voor lokaal herstel (IndexedDB-kladversies). Een nieuw bestand met dezelfde naam heeft die vervangen. Hersteld uit `main` en identiek bevonden; de nieuwe proeven staan nu in `tests/account-recovery.test.ts`. Het viel op doordat de suite 12 tests kwijt was, niet doordat er iets faalde.
+
+**Een eerdere uitspraak over de rate limit klopte niet.** Bij de vorige aanvulling staat dat de browserroute de limiet omzeilt door elke gesimuleerde persoon een eigen `x-studio-client-ip` te geven. De echte oorzaak is een ingebouwde regel van Better Auth: **drie inlogpogingen per tien seconden** voor `/sign-in`, los van de ingestelde 30 per minuut. Of de eigen IP-header de buckets werkelijk splitst, is hier niet vastgesteld. Wat de routes laat slagen is dat zij bestaande sessies hergebruiken in plaats van opnieuw in te loggen. Die limiet is niet aangepast; hij staat nu in de handleiding beschreven.
+
+### Eerstvolgende stap
+
+Van fase 1 resteren: productie-Compose met geteste installatie- en herstelprocedure, assetroutes en S3-adapter, en operationele back-up/restore. Die drie vragen een omgeving waarin Docker daadwerkelijk draait. Er is nog geen productiegeschiktheidsclaim.
+
+
 ## Aanvulling 11 september 2026 — fase 1: rechtenmatrix en projectmembership
 
 Dit pakt twee open punten van fase 1: de **volledige rechtenmatrix** en **expliciete projectmembership**. Tot nu toe zag elk organisatielid elk project in de werkruimte, en stonden de rechten verspreid over losse rollijsten (`canWrite`, `canFinance`, `requireFinance`).
