@@ -1,5 +1,52 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 2 in CI bevestigd
+
+De drie aanvullingen hieronder (metadata verwijderen, lokaal werk als variant,
+PDF-pagina als onderlegger) noemden telkens wat in deze container niet te
+bewijzen was. Dat is nu wél gedraaid.
+
+### Wat CI heeft bevestigd, run 34601235022 op commit 35ebd4b
+
+Volledige Vitest-suite **289 geslaagd, 0 gefaald**. Daarmee is hard vastgesteld
+dat de 6 tests die in de ontwikkelcontainer falen puur omgevingsgebonden zijn:
+ze vragen een Chromium-sandbox die daar niet start.
+
+Volledige Playwright-suite **23 geslaagd, 0 gefaald**, waaronder:
+
+- `onderlegger uploaden → inmeten met twee punten → schaal klopt` — deze route
+  bevat sinds deze stap een tweepagina-PDF waarvan pagina 2 wordt gekozen en de
+  maten worden nagerekend. De omzetting van PDF naar PNG werkt dus in een echte
+  browser, niet alleen in de Node-proef met een ander canvas.
+- `lokaal werk dat niet meer past → bewaren als aparte variant` — de nieuwe
+  route, met een eigen project en een echt opgebouwd conflict.
+- `lokaal herstel: mislukt opslaan → herladen → terughalen → conflict →
+afmelden` — ongewijzigd en weer groen.
+
+### Een fout die twee keer dezelfde vorm had
+
+De stap voor bewaren-als-variant stond eerst ín de bestaande herstelroute. Die
+route brak daardoor twee keer: eerst bij de afmeldmelding, daarna bij het
+afmelden zelf. De oorzaak was geen toeval maar de werking zelf — bewaren als
+variant ruimt het klad op, en het afmeldgedeelte heeft juist een klad nodig. Na
+de tweede poging is de stap uit die route gehaald en heeft hij een eigen route
+met een eigen project gekregen. De herstelroute staat weer precies zoals hij
+was.
+
+### Stand van fase 2
+
+De drie openstaande punten zijn gebouwd en getoetst, en de exitcriteria van fase
+2 — demoruimte met exacte maten, herladen behoudt geometrie, dubbel verzonden
+commando werkt eenmaal, verouderde writes geven conflict, maat- en
+oppervlaktetests en editor-E2E slagen — zijn in deze run alle gedekt.
+
+Wat buiten die criteria open blijft staan: `RestoreContent` is nog een interne
+proefcommand en vraagt vóór release expliciete revisie-/undo-semantiek, en er is
+een draaigreep op het canvas voorzien die er niet is. Er is geen
+productiegeschiktheidsclaim. Of fase 2 hiermee als afgerond geldt, is een
+beoordeling die bij de opdrachtgever ligt; deze aanvulling legt alleen vast wat
+er is gedraaid en wat er is gezien.
+
 ## Aanvulling 11 september 2026 — fase 2: een PDF-pagina als onderlegger
 
 Een bestaande plattegrond komt vaak als PDF binnen. Tot nu toe werd die
