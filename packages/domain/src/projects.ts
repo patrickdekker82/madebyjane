@@ -4,6 +4,7 @@ import { inTenant } from "../../db/src/index";
 import {
   projectInput,
   variantCopyInput,
+  variantRescueInput,
   commandSchema,
   type Scene,
 } from "../../contracts/src/index";
@@ -16,6 +17,40 @@ import {
   type Role,
 } from "./index";
 export type Context = { userId: string; organizationId: string; role: Role };
+/**
+ * Een scène overzetten naar een nieuwe variant. Elk object krijgt een eigen ID:
+ * twee varianten mogen nooit dezelfde muur of hetzelfde meubel delen, anders
+ * zou bewerken van de ene de andere raken. Onderlinge verwijzingen — muren naar
+ * knopen, openingen naar muren — verhuizen mee. De nieuwe variant begint op
+ * revisie 0; het is een eigen ontwerp, geen voortzetting van het oude.
+ */
+function cloneSceneInto(before: Scene, variantId: string): Scene {
+  const ids = new Map(
+    [...before.nodes, ...before.walls, ...before.openings, ...before.items].map(
+      (o) => [o.id, randomUUID()],
+    ),
+  );
+  return {
+    ...structuredClone(before),
+    designVariantId: variantId,
+    floorId: randomUUID(),
+    revision: 0,
+    nodes: before.nodes.map((n) => ({ ...n, id: ids.get(n.id)! })),
+    walls: before.walls.map((w) => ({
+      ...w,
+      id: ids.get(w.id)!,
+      startId: ids.get(w.startId)!,
+      endId: ids.get(w.endId)!,
+    })),
+    openings: before.openings.map((o) => ({
+      ...o,
+      id: ids.get(o.id)!,
+      wallId: ids.get(o.wallId)!,
+    })),
+    items: before.items.map((i) => ({ ...i, id: ids.get(i.id)! })),
+  };
+}
+
 export class ProjectService {
   constructor(private pool: Pool) {}
   private write(ctx: Context) {
@@ -154,33 +189,7 @@ export class ProjectService {
           "Dit project heeft al 100 varianten.",
           409,
         );
-      const ids = new Map(
-        [
-          ...before.nodes,
-          ...before.walls,
-          ...before.openings,
-          ...before.items,
-        ].map((o) => [o.id, randomUUID()]),
-      );
-      const scene: Scene = {
-        ...structuredClone(before),
-        designVariantId: copy.variantId,
-        floorId: randomUUID(),
-        revision: 0,
-        nodes: before.nodes.map((n) => ({ ...n, id: ids.get(n.id)! })),
-        walls: before.walls.map((w) => ({
-          ...w,
-          id: ids.get(w.id)!,
-          startId: ids.get(w.startId)!,
-          endId: ids.get(w.endId)!,
-        })),
-        openings: before.openings.map((o) => ({
-          ...o,
-          id: ids.get(o.id)!,
-          wallId: ids.get(o.wallId)!,
-        })),
-        items: before.items.map((i) => ({ ...i, id: ids.get(i.id)! })),
-      };
+      const scene = cloneSceneInto(before, copy.variantId);
       await c.query("INSERT INTO design_variants VALUES($1,$2,$3,$4)", [
         ctx.organizationId,
         copy.variantId,
@@ -202,6 +211,104 @@ export class ProjectService {
       ]);
       await this.audit(c, ctx, "design.variant_copied", copy.variantId);
       return { variantId: copy.variantId, replayed: false };
+    });
+  }
+
+  /**
+   * Lokaal werk veiligstellen als eigen variant.
+   *
+   * Staat er op de server een nieuwere versie, dan kan het klad uit de browser
+   * niet meer worden teruggestuurd: het bouwt voort op iets dat niet meer
+   * bestaat. Tot nu toe kon de gebruiker het dan alleen downloaden of weggooien.
+   * Dit zet het in plaats daarvan naast het bestaande ontwerp, als een aparte
+   * variant. Niemands werk gaat verloren en niemand overschrijft de ander.
+   *
+   * Het document komt hier van de client en wordt dus niet op gezag aangenomen:
+   * het contract heeft het al als geldige scène gekeurd, en hier wordt getoetst
+   * dat het bij dezelfde werkruimte en hetzelfde project hoort als de bron.
+   */
+  rescueVariant(ctx: Context, sourceId: string, input: unknown) {
+    this.write(ctx);
+    const rescue = variantRescueInput.parse(input);
+    const hash = createHash("sha256")
+      .update(JSON.stringify({ sourceId, ...rescue }))
+      .digest("hex");
+    return inTenant(this.pool, ctx.organizationId, async (c) => {
+      await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+        ctx.organizationId + ":" + rescue.variantId,
+      ]);
+      // Twee keer versturen — een herhaling na een afgebroken verbinding —
+      // levert één variant op, niet twee.
+      const old = await c.query(
+        "SELECT input_hash,user_id FROM variant_copies WHERE variant_id=$1",
+        [rescue.variantId],
+      );
+      if (old.rowCount) {
+        if (
+          old.rows[0].input_hash !== hash ||
+          old.rows[0].user_id !== ctx.userId
+        )
+          throw new DomainError(
+            "IDEMPOTENCY_MISMATCH",
+            "Deze variant-ID is al anders gebruikt.",
+            409,
+          );
+        return { variantId: rescue.variantId, replayed: true };
+      }
+      const bron = await c.query(
+        "SELECT project_id FROM design_variants WHERE id=$1",
+        [sourceId],
+      );
+      if (!bron.rowCount)
+        throw new DomainError("NOT_FOUND", "Ontwerp niet gevonden.", 404);
+      const projectId = bron.rows[0].project_id as string;
+      // Een klad uit een ander project of een andere werkruimte hoort hier niet
+      // thuis; dat zou werk laten overspringen naar een plek waar het niet bij
+      // hoort. De herkomst staat in het document zelf en wordt hier nagelopen.
+      if (
+        rescue.scene.organizationId !== ctx.organizationId ||
+        rescue.scene.projectId !== projectId
+      )
+        throw new DomainError(
+          "INVALID_SCENE",
+          "Dit lokale werk hoort bij een ander project.",
+          422,
+        );
+      await c.query("SELECT id FROM projects WHERE id=$1 FOR UPDATE", [
+        projectId,
+      ]);
+      const count = await c.query(
+        "SELECT count(*) FROM design_variants WHERE project_id=$1",
+        [projectId],
+      );
+      if (Number(count.rows[0].count) >= 100)
+        throw new DomainError(
+          "VARIANT_LIMIT",
+          "Dit project heeft al 100 varianten.",
+          409,
+        );
+      const scene = cloneSceneInto(rescue.scene, rescue.variantId);
+      await c.query("INSERT INTO design_variants VALUES($1,$2,$3,$4)", [
+        ctx.organizationId,
+        rescue.variantId,
+        projectId,
+        rescue.name,
+      ]);
+      await c.query("INSERT INTO design_documents VALUES($1,$2,$3,0,$4)", [
+        ctx.organizationId,
+        rescue.variantId,
+        scene.floorId,
+        scene,
+      ]);
+      await c.query("INSERT INTO variant_copies VALUES($1,$2,$3,$4,$5)", [
+        ctx.organizationId,
+        rescue.variantId,
+        sourceId,
+        ctx.userId,
+        hash,
+      ]);
+      await this.audit(c, ctx, "design.variant_rescued", rescue.variantId);
+      return { variantId: rescue.variantId, replayed: false };
     });
   }
   document(ctx: Context, variantId: string) {
@@ -394,13 +501,27 @@ export class ProjectService {
             );
         }
       }
-      const modelItems = next.items.filter(item => item.model);
+      const modelItems = next.items.filter((item) => item.model);
       if (modelItems.length) {
-        const assets = (await c.query("SELECT id,width,depth,height FROM model_assets WHERE id=ANY($1::uuid[])", [[...new Set(modelItems.map(item => item.model!.assetId))]])).rows;
+        const assets = (
+          await c.query(
+            "SELECT id,width,depth,height FROM model_assets WHERE id=ANY($1::uuid[])",
+            [[...new Set(modelItems.map((item) => item.model!.assetId))]],
+          )
+        ).rows;
         for (const item of modelItems) {
-          const ref = item.model!, asset = assets.find(a => a.id === ref.assetId);
-          if (!asset || asset.width !== ref.width || asset.depth !== ref.depth || asset.height !== ref.height)
-            throw new DomainError("INVALID_MODEL_REFERENCE", "Modelverwijzing is ongeldig voor deze werkruimte.");
+          const ref = item.model!,
+            asset = assets.find((a) => a.id === ref.assetId);
+          if (
+            !asset ||
+            asset.width !== ref.width ||
+            asset.depth !== ref.depth ||
+            asset.height !== ref.height
+          )
+            throw new DomainError(
+              "INVALID_MODEL_REFERENCE",
+              "Modelverwijzing is ongeldig voor deze werkruimte.",
+            );
         }
       }
       await c.query(

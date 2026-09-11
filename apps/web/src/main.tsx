@@ -1075,6 +1075,50 @@ function Editor() {
     rememberDraft(cmd, document);
     void send(cmd);
   };
+  /**
+   * Lokaal werk veiligstellen als eigen variant.
+   *
+   * Dit is de uitweg wanneer het klad niet meer op de serverversie past.
+   * Terugsturen kan dan niet — het bouwt voort op iets dat niet meer bestaat —
+   * maar weggooien hoeft ook niet. Het werk komt naast het bestaande ontwerp te
+   * staan, zodat beide versies bewaard blijven en de gebruiker zelf kan
+   * vergelijken en samenvoegen.
+   */
+  const rescue = async (draft: Draft) => {
+    let document: Scene;
+    try {
+      document = sceneSchema.parse(draft.scene);
+    } catch {
+      setError(
+        "Het lokaal bewaarde ontwerp is niet meer te lezen. Download het herstelbestand en gooi het lokale werk weg.",
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      const naam = `Teruggehaald werk ${new Date(draft.savedAt).toLocaleString("nl-NL")}`;
+      const result = await api<{ variantId: string }>(
+        "/variants/" + variantId + "/rescues",
+        org.id,
+        {
+          variantId: crypto.randomUUID(),
+          name: naam.slice(0, 120),
+          scene: document,
+        },
+      );
+      // Pas opruimen als de server het werk daadwerkelijk heeft vastgelegd.
+      setFound(null);
+      forgetDraft();
+      await navigate({
+        to: "/ontwerp/$variantId",
+        params: { variantId: result.variantId },
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const history = (direction: "undo" | "redo") => {
     if (!scene || pending.current) return;
     const stack = direction === "undo" ? undo : redo,
@@ -1384,11 +1428,16 @@ function Editor() {
             back-up: het staat alleen in deze browser, op deze computer.{" "}
             {found.verdict === "herstelbaar"
               ? "Het sluit aan op de versie die nu op de server staat en kan opnieuw worden opgeslagen."
-              : "Op de server staat intussen een nieuwere versie, dus dit werk kan niet meer worden teruggestuurd. Download het en zet het handmatig over."}
+              : "Op de server staat intussen een nieuwere versie, dus dit werk kan niet meer worden teruggestuurd. Je kunt het als aparte variant naast het bestaande ontwerp bewaren, of downloaden."}
           </span>
           {found.verdict === "herstelbaar" && (
             <button onClick={() => recover(found.draft)}>
               Lokaal werk terughalen
+            </button>
+          )}
+          {found.verdict === "conflict" && (
+            <button onClick={() => void rescue(found.draft)}>
+              Bewaren als aparte variant
             </button>
           )}
           <button

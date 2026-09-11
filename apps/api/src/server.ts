@@ -588,7 +588,11 @@ export function createServer(config: {
       req.body,
     ),
   );
-  const presentations = new PresentationService(config.runtime, config.secret, storage);
+  const presentations = new PresentationService(
+    config.runtime,
+    config.secret,
+    storage,
+  );
   const exports = new ExportJobs(config.runtime, storage);
   const presentationVersionParams = (params: unknown) =>
     z
@@ -915,6 +919,18 @@ export function createServer(config: {
   );
   app.post("/api/v1/variants/:variantId/copies", async (req) =>
     service.copyVariant(
+      await variantContext(req.headers, variant(req.params)),
+      variant(req.params),
+      req.body,
+    ),
+  );
+  /*
+   * Lokaal werk dat niet meer op de server past, naast het bestaande ontwerp
+   * zetten. Het document komt hier van de client en kan dus groter zijn dan een
+   * gewone opdracht; het contract begrenst het aantal objecten al.
+   */
+  app.post("/api/v1/variants/:variantId/rescues", async (req) =>
+    service.rescueVariant(
       await variantContext(req.headers, variant(req.params)),
       variant(req.params),
       req.body,

@@ -1,5 +1,51 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 2: lokaal werk veiligstellen als variant
+
+Staat er op de server een nieuwere versie dan die waarop het lokale klad
+voortbouwt, dan kan dat werk niet meer worden teruggestuurd. Tot nu toe kon de
+gebruiker het dan alleen downloaden of weggooien: het bleef behouden, maar
+buiten de app, als een JSON-bestand dat niemand kan openen.
+
+### Een derde weg bij een conflict
+
+`POST /api/v1/variants/:variantId/rescues` zet het klad naast het bestaande
+ontwerp, als eigen variant. Beide versies blijven zo bestaan en de gebruiker kan
+zelf vergelijken en samenvoegen; niemand overschrijft de ander en er gaat niets
+verloren.
+
+Het document komt hier van de client en wordt niet op gezag aangenomen. Het
+contract (`variantRescueInput`) keurt het als geldige scène, en de server toetst
+dat het bij dezelfde werkruimte en hetzelfde project hoort als de bronvariant.
+Anders dan bij een gewone variantkopie is er géén `baseRevision`-toets: dat het
+afwijkt van de server is juist de reden dat deze route bestaat.
+
+Elk object krijgt een nieuwe ID, zodat de twee varianten niets delen. Die
+kloonstap staat nu als `cloneSceneInto` op één plek en wordt door beide routes
+gebruikt. De actie is herhaalveilig via dezelfde `variant_copies`-registratie als
+de gewone kopie, en levert een auditregel `design.variant_rescued` op.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+TypeScript strict geslaagd, frontendbuild geslaagd. `integration.test.ts` 20
+tests geslaagd, met een nieuwe route die vastlegt: twee keer versturen geeft één
+variant, het lokale werk staat er werkelijk in en niet de serverversie, het is
+een eigen ontwerp op revisie 0 met eigen objecten, het bestaande ontwerp is
+ongewijzigd, dezelfde ID voor ander werk geeft 409, een klad uit een ander
+project of een andere werkruimte 422, een onleesbaar document 400, leesrechten
+403, en er staat precies één auditregel. Volledige run: 276 geslaagd, 6 gefaald.
+
+### Niet geverifieerd in deze omgeving
+
+Die 6 zijn de bekende Chromium-sandboxfouten. De browserroute is uitgebreid met
+de nieuwe knop en de controle dat de editor daarna op de nieuwe variant staat met
+het lokale werk erin, maar die stap is hier **niet gedraaid**; Chromium start in
+deze container niet. CI draait de E2E-suite wel.
+
+### Eerstvolgende stap
+
+Van fase 2 resteert nog een PDF-pagina als onderlegger. Fase 2 is niet afgerond.
+
 ## Aanvulling 11 september 2026 — fase 2: metadata uit onderleggers
 
 Een onderlegger is meestal een telefoonfoto van een bestaande plattegrond. Zo'n

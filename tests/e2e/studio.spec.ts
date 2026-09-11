@@ -2603,6 +2603,34 @@ test("lokaal herstel: mislukt opslaan → herladen → terughalen → conflict �
   ).toHaveCount(0);
   await page.screenshot({ path: "outputs/qa/herstel-gevonden.png" });
 
+  // Maar weggooien hoeft niet: het werk kan naast het bestaande ontwerp blijven
+  // bestaan als eigen variant. Dat is de derde weg naast terugsturen en
+  // downloaden, en de enige die bij een conflict niets verliest.
+  const bewaren = page.getByRole("button", {
+    name: "Bewaren als aparte variant",
+    exact: true,
+  });
+  await expect(bewaren).toBeVisible();
+  await bewaren.click();
+  // De editor staat daarna op de nieuwe variant, met het lokale werk erin.
+  await expect(page).toHaveURL(/\/ontwerp\//);
+  await expect(banner).toHaveCount(0);
+  const gered = await page.evaluate(async () => {
+    const variantId = location.pathname.split("/").pop()!;
+    const me = await (await fetch("/api/v1/me")).json();
+    const organizationId = me.organizations[0].id;
+    const response = await fetch(
+      "/api/v1/variants/" + variantId + "/document",
+      {
+        headers: { "x-organization-id": organizationId },
+      },
+    );
+    return (await response.json()) as { revision: number; items: unknown[] };
+  });
+  expect(gered.revision).toBe(0);
+  expect(gered.items.length).toBeGreaterThan(0);
+  await page.screenshot({ path: "outputs/qa/herstel-variant.png" });
+
   // Afmelden waarschuwt en biedt eerst een export aan.
   await page.getByRole("button", { name: "Afmelden", exact: true }).click();
   const dialog = page.getByRole("dialog");
