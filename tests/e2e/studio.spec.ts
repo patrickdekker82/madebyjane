@@ -3312,11 +3312,17 @@ test("eigen meubel- en lichtsymbool maken → in twee projecten gebruiken", asyn
       .getByLabel("Wachtwoord", { exact: true })
       .fill(credentials.password);
     await page.getByRole("button", { name: "Inloggen", exact: true }).click();
-    // Eerst wachten tot het aanmelden werkelijk rond is. Meteen doornavigeren
-    // brak het verzoek af, waarna de app op het aanmeldscherm bleef staan.
+    /*
+     * Eerst wachten tot het aanmelden werkelijk rond is. Meteen doornavigeren
+     * brak het verzoek af, waarna de app op het aanmeldscherm bleef staan.
+     *
+     * Ruim de tijd: aanmelden is bewust vertraagd tegen raden, en deze route
+     * komt als laatste aan de beurt, vlak nadat de herstelroute zich heeft
+     * afgemeld. De standaard vijf seconden zijn daar te kort voor.
+     */
     await expect(
       page.getByRole("button", { name: "Nieuw project", exact: true }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30000 });
     ownerCookies = await page.context().cookies();
   }
 
@@ -3328,7 +3334,7 @@ test("eigen meubel- en lichtsymbool maken → in twee projecten gebruiken", asyn
       name: "Nieuw project",
       exact: true,
     });
-    await expect(nieuw).toBeVisible();
+    await expect(nieuw).toBeVisible({ timeout: 30000 });
     await nieuw.click();
     await page.getByLabel("Projectnaam").fill(naam);
     await page.getByLabel("Start met de fictieve woonkamer").check();
