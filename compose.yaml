@@ -1,0 +1,21 @@
+name: interieurstudio-dev
+
+# Alleen voor lokale ontwikkeling: activeer expliciet met
+# docker compose --profile development up. Productie gebruikt compose.production.yaml.
+services:
+  postgres:
+    image: postgres:17.5-bookworm@sha256:0145b2977c9b49729ff8f8edc3b1192691eff92c1039bc969e25ae64bd7cbbe9
+    profiles: [development]
+    environment:
+      POSTGRES_DB: interieurstudio
+      POSTGRES_PASSWORD: development-only-change-me
+    ports: ["127.0.0.1:55433:5432"]
+    volumes: [postgres-development:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d interieurstudio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-development:
