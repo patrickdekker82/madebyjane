@@ -63,6 +63,12 @@ services:
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
+    # De ingang draait kort als root: hij zet de eigenaar van het aangekoppelde
+    # gegevensvolume goed en stapt daarna met gosu over naar de gebruiker `node`.
+    # Allebei vragen ze een recht dat `cap_drop: [ALL]` weghaalt — chown vraagt
+    # CHOWN, de overstap SETUID en SETGID — en zonder die drie stopt de container
+    # bij zijn eerste regel. Dit zijn ze, en verder niets.
+    cap_add: [CHOWN, SETUID, SETGID]
     security_opt:
       - no-new-privileges:true
       - seccomp:./infra/docker/chromium-seccomp.json
@@ -92,6 +98,10 @@ services:
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
+    # Dezelfde image en dus dezelfde overstap naar `node`; zonder deze twee komt
+    # de migrator niet op gang en wacht de API eeuwig op een run die nooit slaagt.
+    # Hij zet geen eigenaar goed, dus CHOWN heeft hij niet nodig.
+    cap_add: [SETUID, SETGID]
     security_opt: [no-new-privileges:true]
     mem_limit: 512m
     cpus: "1.00"
@@ -119,6 +129,10 @@ services:
     read_only: true
     tmpfs: [/tmp, /var/run/postgresql]
     cap_drop: [ALL]
+    # De officiele PostgreSQL-image start als root, zet bij de eerste start de
+    # eigenaar van de datamap goed en stapt dan met gosu over naar `postgres`.
+    # Zonder deze rechten komt hij niet voorbij die overstap.
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     security_opt: [no-new-privileges:true]
     mem_limit: 1g
     cpus: "2.00"
