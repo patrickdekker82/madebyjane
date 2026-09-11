@@ -4,6 +4,7 @@ import {QuoteResources} from "../../../packages/domain/src/quote-resources";
 import {QuoteDelivery} from "../../../packages/domain/src/quote-delivery";
 import { ModelAssetService } from "../../../packages/domain/src/model-assets";
 import { UnderlayAssetService } from "../../../packages/domain/src/underlay-assets";
+import { ViewerViewService } from "../../../packages/domain/src/viewer-views";
 import { libraryQuerySchema } from "../../../packages/contracts/src/index";
 import { LibraryService } from "../../../packages/domain/src/library";
 import Fastify from "fastify";
@@ -282,6 +283,17 @@ export function createServer(config: {
   );
   const variant = (params: unknown) =>
     z.object({ variantId: id }).parse(params).variantId;
+  const viewerViews = new ViewerViewService(config.runtime);
+  app.get("/api/v1/variants/:variantId/viewer-views", async (req) =>
+    viewerViews.list(await context(req.headers), variant(req.params)),
+  );
+  app.post("/api/v1/variants/:variantId/viewer-views", async (req) =>
+    viewerViews.save(await context(req.headers), variant(req.params), req.body),
+  );
+  app.post("/api/v1/variants/:variantId/viewer-views/:viewId/delete", async (req) => {
+    const p = z.object({ variantId: id, viewId: id }).parse(req.params);
+    return viewerViews.remove(await context(req.headers), p.variantId, p.viewId);
+  });
   app.get("/api/v1/variants/:variantId/alternatives", async (req) =>
     service.variants(await context(req.headers), variant(req.params)),
   );

@@ -1571,7 +1571,32 @@ function Editor() {
               <Suspense
                 fallback={<div className="center">3D-weergave openen…</div>}
               >
-                <Viewer scene={scene} />
+                <Viewer
+                  scene={scene}
+                  organizationId={org.id}
+                  variantId={variantId}
+                  selected={selected}
+                  disabled={disabled}
+                  onSelect={select}
+                  onMove={(id, x, y) => {
+                    const moved = scene.items.find(
+                      (candidate) => candidate.id === id,
+                    );
+                    if (!moved) return;
+                    command([
+                      {
+                        type: "TransformItem",
+                        id,
+                        x,
+                        y,
+                        width: moved.width,
+                        depth: moved.depth,
+                        rotation: moved.rotation,
+                        custom: moved.custom,
+                      },
+                    ]);
+                  }}
+                />
               </Suspense>
             </ViewError>
           )}
@@ -1968,4 +1993,3 @@ createRoot(document.getElementById("root")!).render(
     <RouterProvider router={router} />
   </QueryClientProvider>,
 );
-

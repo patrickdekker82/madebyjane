@@ -807,6 +807,28 @@ test("de API overleeft het wegvallen van inactieve databaseverbindingen", async 
   expect((await request("GET", "/api/v1/projects")).statusCode).toBe(200);
   expect((await request("GET", "/api/v1/me")).statusCode).toBe(200);
 });
+test("3D-camera is revisiegebonden, tenantveilig, herhaalbaar en alleen door bewerkers te bewaren", async () => {
+  const document = (await request("GET", `/api/v1/variants/${variant}/document`)).json();
+  const view = {
+    id: randomUUID(), name: "Presentatie woonkamer", baseRevision: document.revision,
+    camera: { projection: "perspective", mode: "orbit", position: [9, 9, 10], target: [3, 0, 2], fov: 45, zoom: 1 },
+    settings: { atmosphere: "day", quality: "medium", walls: "cutaway", ceiling: false },
+  };
+  const path = `/api/v1/variants/${variant}/viewer-views`;
+  const saved = await request("POST", path, view);
+  expect(saved.statusCode, saved.body).toBe(200);
+  expect(saved.json()).toMatchObject({ name: view.name, revision: document.revision });
+  expect((await request("POST", path, view)).json().id).toBe(view.id);
+  expect((await request("POST", path, { ...view, name: "Anders" })).statusCode).toBe(409);
+  expect((await request("POST", path, { ...view, id: randomUUID() }, cookieViewer)).statusCode).toBe(403);
+  expect((await request("GET", path, undefined, cookieViewer)).json().items).toHaveLength(1);
+  expect((await request("GET", path, undefined, cookieB, orgB)).statusCode).toBe(404);
+  expect((await request("POST", path, { ...view, id: randomUUID(), baseRevision: document.revision + 1 })).statusCode).toBe(409);
+  await expect(inTenant(db.runtime, orgA, c => c.query("UPDATE viewer_views SET name='gewijzigd'"))).rejects.toThrow(/permission denied/);
+  expect((await request("POST", `${path}/${view.id}/delete`, {})).statusCode).toBe(200);
+  expect((await request("GET", path)).json().items).toHaveLength(0);
+});
+
 test("signout trekt sessie in", async () => {
   expect((await request("POST", "/api/auth/sign-out", {})).statusCode).toBe(
     200,

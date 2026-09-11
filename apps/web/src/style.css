@@ -738,11 +738,47 @@ form {
 }
 .canvas-wrap,
 .viewer {
+  position: relative;
   width: 100%;
   height: 100%;
-  position: relative;
   overflow: hidden;
   min-height: 350px;
+}
+.viewer-toolbar {
+  position: absolute;
+  z-index: 2;
+  left: 12px;
+  right: 12px;
+  top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: end;
+  padding: 8px;
+  background: #fffef6e8;
+  border: 1px solid #d7ded4;
+  border-radius: 8px;
+  backdrop-filter: blur(7px);
+  box-shadow: 0 4px 18px #17261922;
+}
+.viewer-toolbar label {
+  display: grid;
+  gap: 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.viewer-toolbar select,
+.viewer-toolbar button {
+  min-height: 32px;
+  padding: 6px 9px;
+  font-size: 11px;
+}
+.viewer-floor {
+  align-self: center;
+  padding: 0 6px;
+  font-size: 10px;
+  color: #59665a;
 }
 .tool-wall,
 .tool-door,

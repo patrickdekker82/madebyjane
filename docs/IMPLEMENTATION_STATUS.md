@@ -23,6 +23,7 @@ Toegevoegd: offerteformulier met klant-/adresgegevens, datum/geldigheid, voorwaa
 Migration 0010_quotes bewaart immutable concept-/definitieve snapshots onder FORCE RLS. Elke write vereist owner/admin/finance, projectcontext, baseVersion en een herhaalbaar requestId. Finalisatie en jaar-/organisatienummering zijn één transactie; definitieve versies weigeren wijzigingen. Materialen bewaren entry-/version-ID, onbekende/vreemde bronnen worden afgewezen, dubbele materiaalbronnen geweigerd. Verschillen zijn opvraagbaar; verouderde bronnen blokkeren finalisatie. Finalisatie neemt dezelfde materiaal-publicatielock zodat een wijziging niet tussen controle en commit kan vallen. Er wordt geen verzending of klantacceptatie gefingeerd.
 
 Lokale verificatie op Windows, 8 september:
+
 - TypeScript strict geslaagd; Vite-productiebuild met `--configLoader runner` geslaagd (9,49 s). Bekende grote chunks blijven bestaan.
 - Vier nieuwe rekentests geslaagd; bredere run: 31 geslaagd, één bestaande opslagtest faalde bij het aanmaken van een symlink (Windows EPERM). Geen geslaagde volledige suite geclaimd.
 - Vier nieuwe echte PostgreSQL/API-tests en een browserroute toegevoegd. Lokale database-start blokkeert vóór de tests door `uv_os_get_passwd returned ENOMEM` in embedded-postgres. Deze integratie- en E2E-tests zijn dus nog niet geslaagd.
@@ -38,6 +39,7 @@ Bijgewerkt: 6 september 2026. Release 0.0.1 is een ontwikkelbasis, geen producti
 ## Fase 0 — verticale basis en risicoproeven getoetst
 
 Werkend en getoetst:
+
 - React/Vite-ontwerpstudio met login, projectoverzicht, nieuw project, opt-in fictieve woonkamer, Konva-plan, objectlijst, numerieke meubeltransforms, undo/redo en SVG-download.
 - Canoniek scene-schema v1 met gehele mm, 2D/3D-assenconversie, schuine muren en aan muren gekoppelde openingen. Pure commandobatches valideren het eindresultaat.
 - Fastify /api/v1, Better Auth met Drizzle, PostgreSQL 18.4, afzonderlijke runtime-/identity-roles. SQL-migrations met hashcontrole en advisory lock.
@@ -45,6 +47,7 @@ Werkend en getoetst:
 - Private lokale opslagadapter met opaque IDs, groottecontrole, atomisch schrijven, symlink-/traversalafwijzing.
 
 Uitgevoerde verificatie op 6 september 2026, macOS arm64, Node 22.23.1:
+
 - TypeScript strict en Vite-productiebuild geslaagd om 08:51. Vite meldt grote chunks (~804 kB hoofdscherm, ~910 kB lazy 3D, ongecomprimeerd); verdere splitsing blijft open. Typecheck na de database-startcontrole opnieuw geslaagd.
 - Volledige Vitest-run: **24 tests / 6 bestanden geslaagd**, 6,06 s om 08:51. Daarna database-startcontrole toegevoegd: **9 integratietests geslaagd**, 1,67 s om 08:53, inclusief ontbrekende/gewijzigde/nieuwere migrations. Samen 25 bestaande en nieuwe getoetste tests; geen volledige 25-test-run geclaimd.
 - Browserrun: **3 tests geslaagd**, 8,9 s. Login → project → 2400 mm bank → draaien → undo → verplaatsen → herladen → SVG → zichtbare 3D; telefoon/tablet zonder horizontale overflow; uitnodiging → nieuw account → viewer-rechten; belastingproef met 500 objecten en 100 muren.
@@ -55,6 +58,7 @@ Uitgevoerde verificatie op 6 september 2026, macOS arm64, Node 22.23.1:
 - Eerdere dependency-audit 5 september: 0 gerapporteerde kwetsbaarheden. Geen nieuwe audit geclaimd na toevoeging Prettier. Geen volledige securityrelease-gate.
 
 Omgeving:
+
 - De eerste sandbox verbood PostgreSQL shared memory en Chromium Mach ports. Daarna zijn expliciet toegestane escalaties gebruikt voor de testprocessen.
 - Colima-start op 5 september werd automatisch afgewezen vanwege gebruikslimiet. Op 6 september na hervatting opnieuw toegestaan en succesvol gestart. Bestaande Colima VM: 4 CPU, 4 GiB, arm64. Geen Hyper-V-test gedaan.
 
@@ -117,6 +121,7 @@ Ruimteherkenning detecteert begrensde vlakken in het muurpuntnetwerk. Open verta
 Ontwerpvarianten kunnen worden bekeken, gekopieerd en geopend binnen één project. Kopieën krijgen nieuwe node-/wall-/opening-/item-/floor-IDs en revisie 0; oorspronkelijke revisiegeschiedenis wordt niet gekopieerd. Copy controleert rol, organisatie en actuele bronrevisie. Migration 0006_variant_copies bewaart herhaalmetadata onder FORCE RLS. Gelijktijdige identieke verzoeken leveren één kopie; gewijzigd verzoek met hetzelfde ID wordt geweigerd. Projectoverzicht toont één kaart met voorkeur voor de oorspronkelijke variant. Per project maximaal 100 varianten. De editor remount bij variantwissel zodat lease, selectie en lokale geschiedenis gescheiden blijven. De breadcrumb toont de huidige variantnaam.
 
 Verificatie 6 september 09:25–09:31:
+
 - Vijf nieuwe ruimtetests slagen, inclusief 500 gegenereerde rechthoeken/translaties, schuine kamer, aangrenzende kamers, open vertakkingen, geneste contouren en ongeldige kruisingen/overlap.
 - Volledige Vitest-run **34 tests / 7 bestanden geslaagd, 6,47 s**. Inclusief gelijktijdige kopieverzoeken, herhaalveiligheid, tenant-/viewerafwijzing, nieuwe referenties en onafhankelijke kopiegeometrie.
 - Volledige browserrun **4 geslaagd, 11,6 s**. Inclusief 29,04 m², zichtbare 3D, variant maken, maat wijzigen, terugwisselen en ongewijzigde basismuur controleren.
@@ -216,6 +221,7 @@ Nieuwe rekenregels, expliciet gedocumenteerd in `packages/geometry/src/quantitie
 Daarnaast: iedere `pg`-pool krijgt nu een error-listener (`guardPool`). Zonder die listener beëindigt Node het API-proces zodra PostgreSQL een inactieve verbinding sluit, bijvoorbeeld bij een herstart.
 
 Verificatie 7 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+
 - **Volledige Vitest-run: 61 tests / 11 bestanden geslaagd, 14,3 s.** Nieuw: 8 geometrie- en decimaaltests en 2 contracttests, plus 2 integratietests tegen echte PostgreSQL.
 - De geometrietests dekken netto vloer/omtrek/plint/wandoppervlak, deur versus raam, een ingesloten ruimte, te dikke muren, een open contour, onafhankelijkheid van muurrichting en 200 gegenereerde verschuivingen. Het netto oppervlak van de demoruimte (27.154.275 mm²) en de netto omtrek (20.608 mm) zijn los nagerekend met A(d) = A − P·d + d²·Σcot(hoek/2) bij d = 90 mm; beide komen exact overeen.
 - De integratietest toetst tegen echte PostgreSQL: serverberekening en opgeslagen bronrevisie, eenheid uit de bronmaat in plaats van uit de client, onbekende ruimte (409), variant van een ander project (404), variant van een andere werkruimte (404), viewer-afwijzing (403), hoeveelheid zonder onderbouwing (400), onderbouwde afwijking naast de berekening, en na een `ResizeWall` een lagere netto maat met bronrevisie 1.
@@ -232,7 +238,7 @@ Open voor de rest van fase 4: alternatieven en gekozen alternatief, prijsbron en
 
 ### CI voor het eerst extern gedraaid
 
-Op 7 september 19:03–19:05 UTC draaide de workflow *Foundation verification* voor het eerst op een GitHub-runner (ubuntu-24.04, Node 24.18.1, pnpm 11.19.0), op commit `deabc13`. Alle stappen slaagden: `pnpm install --frozen-lockfile`, `playwright install --with-deps chromium`, `pnpm build`, `pnpm test`, `pnpm test:e2e` (42 s) en `pnpm audit --audit-level high`. Daarmee is de eerdere aantekening "CI nog niet extern uitgevoerd" achterhaald. De runner installeert zijn eigen Chromium, dus de nieuwe `PLAYWRIGHT_CHROMIUM_EXECUTABLE`-optie is daar niet actief. Er is nog geen securityscan van containers of secrets; de securityrelease-gate uit fase 9 blijft open.
+Op 7 september 19:03–19:05 UTC draaide de workflow _Foundation verification_ voor het eerst op een GitHub-runner (ubuntu-24.04, Node 24.18.1, pnpm 11.19.0), op commit `deabc13`. Alle stappen slaagden: `pnpm install --frozen-lockfile`, `playwright install --with-deps chromium`, `pnpm build`, `pnpm test`, `pnpm test:e2e` (42 s) en `pnpm audit --audit-level high`. Daarmee is de eerdere aantekening "CI nog niet extern uitgevoerd" achterhaald. De runner installeert zijn eigen Chromium, dus de nieuwe `PLAYWRIGHT_CHROMIUM_EXECUTABLE`-optie is daar niet actief. Er is nog geen securityscan van containers of secrets; de securityrelease-gate uit fase 9 blijft open.
 
 ### Eerstvolgende stap na deze aanvulling
 
@@ -253,6 +259,7 @@ Kiezen doe je in de lijst met de knop **Kies <naam>**. Het gekozen alternatief s
 Geen databasemigration: alles staat in de bestaande `definition`-JSONB. Materiaalversies van vóór deze wijziging missen de nieuwe sleutels; `withDefaults` vult die bij het lezen aan zonder de bewaarde versie te wijzigen of te valideren. Zo blijft een oude versie precies zoals hij is opgeslagen.
 
 Verificatie 7 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+
 - **Volledige Vitest-run: 67 tests / 11 bestanden geslaagd, 14,5 s** (was 61). Nieuw: vijf contracttests over prijsregels, monsterregels, alternatieven, `withDefaults` op een oude definitie en het indicatiebedrag, plus één integratietest tegen echte PostgreSQL.
 - Die integratietest toetst: alternatief met prijs bewaren en teruglezen, kiezen op versie 0 geweigerd (409), verzonnen herkomst geweigerd (409), tegelijk de prijs aanpassen geweigerd (409), een andere naam claimen geweigerd (409), geldige promotie geaccepteerd, de omgekeerde alternatievenlijst na promotie, de ongewijzigde versie 1 in de database, en prijs- en monsterregels die het contract afwijst (400).
 - **Volledige browserrun: 7 routes geslaagd, 46,3 s**, inclusief de nieuwe route: prijs zonder bron geweigerd, prijsbron/datum/monster invullen, alternatief toevoegen, bewaren, indicatiebedrag € 2.248,50 bij 30 m², alternatief kiezen, herkomst en omgedraaide lijst zien, en na herladen versie 2 terugvinden.
@@ -283,6 +290,7 @@ Daarbij opgelost: de canvasknop **Passend** had een eigen fit-berekening die neg
 `selected` is van één ID naar een lijst gegaan. Shift-, ctrl- of cmd-klikken in de plattegrond of de objectlijst voegt toe of haalt weg. Bij twee of meer meubels verschijnt een paneel met zes uitlijningen en twee verdelingen. `packages/geometry/src/arrange.ts` rekent met de asgerichte omhullende van een gedraaid meubel, dus een bank die 30 graden staat lijnt uit op wat je op het plan ziet. Verdelen maakt de tussenruimten tussen de omhullenden gelijk en laat het eerste en laatste meubel staan; passen ze niet, dan worden de tussenruimten negatief en overlappen ze zichtbaar. Alle verplaatsingen gaan als één batch naar de server en zijn dus één stap terug.
 
 Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+
 - **94 tests / 15 bestanden geslaagd, 23,1 s** (was 75 na de merge). Nieuw: elf vangtests en acht uitlijn-/verdeeltests, met 300 respectievelijk 200 gegenereerde gevallen die bewijzen dat de uitkomst altijd hele millimeters is.
 - **10 browserroutes geslaagd, 1,2 min.** Twee nieuwe. De vangroute kalibreert zichzelf: zij meet eerst de schaal met een sleep van 120 px en drukt daarna alles in schermpixels uit, zodat zij niet op de fit-formule van de editor leunt. Rasterslepen levert hele honderdtallen, uitlijnen op een ander meubel levert exact hetzelfde hart, en met vangen uit blijft het meubel staan waar het losgelaten wordt. De uitlijnroute controleert gelijke linkerranden, een ongemoeide y-as, één stap terug voor drie meubels tegelijk en gelijke tussenruimten na verdelen.
 - TypeScript strict en productiebuild geslaagd (9,7 s). Bekende chunkgroottewaarschuwing blijft open.
@@ -303,6 +311,7 @@ Twee nieuwe opdrachten: `SetItemDisplay` zet laag, vergrendeling of zichtbaarhei
 Vergrendeling wordt afgedwongen in `applyOperations`, dus ook wanneer een opdracht niet uit de editor komt: `TransformItem` en `DeleteSelection` op een vergrendeld object leveren een leesbare fout. Ontgrendelen mag altijd. Verborgen objecten worden niet getekend en doen ook niet mee aan het vangen, maar blijven in de objectlijst staan met een oog- en slotpictogram.
 
 Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+
 - **104 tests / 17 bestanden geslaagd, 26,5 s** (was 94). Nieuw: zeven volgordetests en drie commandotests voor lagen, vergrendeling en volgorde.
 - **11 browserroutes geslaagd, 1,5 min.** De nieuwe route wisselt een meubel van laag, verbergt de laag en controleert dat het object uit beeld is maar in de lijst blijft, vergrendelt de laag, ziet verwijderen afgewezen worden met de servermelding, ontgrendelt, verandert de volgorde en vindt alles terug na herladen.
 - TypeScript strict en productiebuild geslaagd (9,8 s). Bekende chunkgroottewaarschuwing blijft open.
@@ -327,6 +336,7 @@ Daarbij opgelost: het canvas gaf een klik alleen door wanneer die op leeg vlak v
 `v` selecteren, `m` muur, `d` deur, `r` raam, `t` maat. Escape gaat terug naar selecteren en heft de selectie op, Delete of Backspace verwijdert de selectie, Ctrl/Cmd+Z is een stap terug en met Shift erbij opnieuw. De afhandeling slaat invoervelden over, zodat typen in een maatveld nooit van gereedschap wisselt of iets verwijdert.
 
 Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+
 - **111 tests / 18 bestanden geslaagd, 25,1 s** (was 104). Zeven nieuwe maatlijntests, waaronder 300 gegenereerde gevallen die aantonen dat het label nooit op zijn kop staat en de lengte altijd heel is.
 - **12 browserroutes geslaagd, 1,5 min.** De nieuwe route kiest het maatgereedschap met een sneltoets, meet tussen twee muurpunten, controleert dat het geëxporteerde planblad **6.200 mm** bevat — de muurlengte uit de geometrie, niet uit de muispositie — verwijdert de maatlijn met Delete en zet dat terug met Ctrl+Z.
 - TypeScript strict en productiebuild geslaagd (9,5 s).
@@ -347,10 +357,12 @@ Met het gereedschap Selecteren trek je op leeg vlak een kader; alles wat het kad
 Een geselecteerde maatlijn krijgt een eigen eigenschappenpaneel met de gemeten lengte, een veld voor de afstand tot de gemeten lijn en een knop **Naar de andere kant**. De lengte staat er alleen ter informatie: die is afgeleid en niet los te bewerken. De nieuwe opdracht `SetAnnotationOffset` verzet alleen de verschuiving.
 
 Twee dingen die daarbij opvielen en zijn hersteld:
+
 - Maatlijnen stonden niet in de objectlijst, terwijl die lijst juist het toegankelijke alternatief voor aanwijzen op het canvas hoort te zijn. Ze staan er nu als **Maat 1**, **Maat 2** enzovoort, en tellen mee in het objectaantal.
 - **Passend** keek alleen naar muurpunten. Een maatlijn die buiten de muren ligt — na omklappen bijvoorbeeld — viel daardoor buiten beeld en was niet meer aan te klikken. De berekening neemt nu ook de maatlijnen mee.
 
 Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+
 - **113 tests / 18 bestanden geslaagd, 18,6 s** (was 111). Twee nieuwe kadertests, inclusief precies op de rand raken, een kader dat van rechtsonder naar linksboven loopt en een gedraaid meubel.
 - **13 browserroutes geslaagd, 1,1 min.** De nieuwe route trekt een kader over de linkerhelft en krijgt twee van de vier meubels, controleert dat een klik zonder sleep de selectie opheft, tekent een maatlijn, verzet die naar 900 mm, klapt hem om naar -900 mm en vindt dat na herladen terug.
 - TypeScript strict en productiebuild geslaagd (7,1 s).
@@ -371,6 +383,7 @@ De keuze voor raster in plaats van PDF staat in `docs/adr/0004-underlay-images.m
 Daarbij opgelost: **Passend** keek niet naar de onderlegger, net zoals het eerder niet naar maatlijnen keek. Een onderlegger die groter is dan het plan viel daardoor buiten beeld. Dat kwam aan het licht doordat de browsertest een schaal van 20,8 mm per pixel kreeg in plaats van 12,5: mijn omrekening van scherm naar wereld klopte niet, omdat de app anders inzoomde dan de test aannam.
 
 Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+
 - **124 tests / 21 bestanden geslaagd, 19,2 s** (was 113). Vijf kopleestests met een in de test zelf gemaakt geldig PNG en JPEG, inclusief afgekapte en misvormde bestanden, SVG, PDF, GIF en onmogelijke maten. Vijf kalibratietests met 200 gegenereerde gevallen voor heen-en-terug rekenen.
 - Eén nieuwe integratietest tegen echte PostgreSQL: type- en maatcontrole, herhaling met dezelfde ID, een ander bestand onder dezelfde ID (409), geweigerde SVG/PDF/GIF/afgekapt bestand (422) zonder dat er een rij achterblijft, vast content-type met nosniff, andere werkruimte krijgt 404, alleen-lezen mag niet uploaden maar wel bekijken, geen UPDATE-recht voor de runtime-rol, en het quotum.
 - **14 browserroutes geslaagd, 1,3 min.** De nieuwe route weigert eerst een SVG, uploadt dan een echt PNG van 1000 × 800, meet twee punten in op 5.000 mm en controleert de schaal.
@@ -388,21 +401,24 @@ Muren werden getekend als dikke lijnen met stompe uiteinden. Op elke hoek liet d
 `packages/geometry/src/walls.ts` levert nu per muur een gesloten contour waarvan de uiteinden versneden zijn tegen de aansluitende muur. Vanaf een gedeeld punt wijzen beide muren weg; de plus-zijde van de een sluit daarom aan op de min-zijde van de ander. Muren van verschillende dikte sluiten net zo goed aan.
 
 Bewuste beperkingen, met reden:
+
 - **Versnijden gebeurt alleen wanneer op een punt precies één andere muur uitkomt.** Op een T-aansluiting of kruising is er geen enkele juiste versnijding. Daar eindigt de muur stomp op het punt zelf; dat valt niet op omdat de doorgaande muur het uiteinde bedekt.
 - **Bij zeer scherpe hoeken vervalt de versnijding.** Voorbij zes keer de muurdikte zou er een lange punt uitsteken; dan is een stomp uiteinde beter.
 
 Zowel het canvas als het geëxporteerde planblad gebruiken dezelfde contouren. Op het planblad worden de muurvlakken eerst allemaal getekend en pas daarna de doorsnede op 1.200 mm uit de openingen gewit, zodat een aangrenzende muur nooit een opening dichttekent die vlak bij een hoek ligt.
 
 Verificatie 10 september, Linux x64, Node 22.22.2:
+
 - **132 tests / 22 bestanden geslaagd, 19,9 s** (was 124). Acht contourtests: los uiteinde, rechte hoek, verschillende diktes, T-aansluiting, zeer scherpe hoek, collineaire muren, en 200 gegenereerde gevallen die aantonen dat elke contour vier eindige punten houdt.
 - **14 browserroutes geslaagd, 1,2 min.** TypeScript strict en productiebuild geslaagd (7,5 s).
 - Zowel het canvas als het geëxporteerde planblad naar afbeelding gerenderd en bekeken: de hoeken zijn dicht, ook de schuine hoek, en de openingen blijven schone gaten.
 
 Twee dingen die het testen opleverde:
+
 - Mijn eerste testverwachting was dat versnijden oppervlak toevoegt. Dat klopt niet: bij een rechte hoek verplaatst het materiaal — wat de buitenhoek erbij krijgt, verliest de binnenhoek. De test controleert nu waar het werkelijk om gaat, namelijk dat een punt vlak buiten de hoek gedekt is.
 - De gevulde contour verving een lijn met een gegarandeerde trefzone van twintig pixels. Zonder die zone is een dunne muur bij uitzoomen niet meer aan te wijzen. De trefzone is teruggezet en een browserroute controleert nu dat een muur op het canvas aanklikbaar blijft.
 
-Nog open in fase 2: annotatieteksten en een legenda; groeperen; opt-in lokaal herstel via IndexedDB; laagpresets per tekenblad; de onderlegger verslepen; PDF-pagina als onderlegger; EXIF verwijderen. In 3D zijn de muren nog losse blokken zonder versneden hoeken; dat hoort bij fase 7. Fase 2 is niet afgerond.
+Nog open in fase 2: annotatieteksten en een legenda; groeperen; opt-in lokaal herstel via IndexedDB; laagpresets per tekenblad; de onderlegger verslepen; PDF-pagina als onderlegger; EXIF verwijderen. De 3D-muren gebruiken inmiddels dezelfde versneden contouren als 2D. Fase 2 is niet afgerond.
 
 ## Aanvulling 10 september 2026 — notities, laagpresets en legenda
 
@@ -421,6 +437,7 @@ Het tekenblad heeft een legenda die per laag meldt hoeveel objecten getoond en h
 **Daarbij een echte fout gevonden.** De legenda meldde "Inrichting: 0 getoond, 3 verborgen" terwijl het blad die drie meubels gewoon tekende: het exportpad filterde verborgen objecten niet. Dat is precies de fout die de legenda hoort te voorkomen. Verborgen objecten tellen nu ook niet meer mee voor de bladomvang. De browsertest controleert sindsdien niet alleen de legendatekst maar ook dat de verborgen namen werkelijk niet in de SVG staan; die tweede controle ontbrak eerst, en daardoor zag alleen de visuele inspectie het.
 
 Verificatie 10 september, Linux x64, Node 22.22.2:
+
 - **132 tests / 22 bestanden geslaagd, 22,0 s** en **15 browserroutes geslaagd, 1,5 min.** TypeScript strict en productiebuild geslaagd (7,7 s).
 - De nieuwe browserroute plaatst een notitie, wijzigt de tekst, controleert die op het planblad, zet een meubel op de laag Verlichting, past de preset toe en controleert dat legenda en tekening hetzelfde zeggen — beide kanten op.
 - Het geëxporteerde blad is naar afbeelding gerenderd en bekeken, vóór en na de correctie.
@@ -436,6 +453,7 @@ Eén lid aanwijzen pakt de hele groep — op het canvas, met het sleepkader en i
 Slepen verplaatst alle leden met dezelfde verschuiving, als één batch en dus één stap terug. Konva verplaatst alleen het aangewezen object; de groepsgenoten krijgen tijdens de sleep dezelfde verschuiving mee, anders valt de groep visueel uit elkaar tot de opdracht landt. Een vergrendeld lid laat de hele verplaatsing afwijzen — dat is dezelfde transactionele regel als elders, met een leesbare melding.
 
 Verificatie 10 september, Linux x64, Node 22.22.2:
+
 - **139 tests / 23 bestanden geslaagd, 28,2 s** (was 132). Zeven groepstests: selectie uitbreiden, losse objecten met rust laten, twee groepen tegelijk, groeperen en opheffen via opdrachten, de weigering van een groep van één, en het opruimen van een groepsverwijzing nadat leden verwijderd zijn.
 - **16 browserroutes geslaagd, 1,9 min.** De nieuwe route groepeert twee meubels, controleert dat één aanwijzen de groep pakt, sleept ze samen, controleert dat de derde niet meebeweegt, zet het met één stap terug en heft de groep weer op.
 - Schermopname midden in de sleep bekeken: beide leden schuiven mee, de eettafel blijft staan.
@@ -497,6 +515,7 @@ Verplaatsen gaat met een eigen gereedschap, aan te zetten in het onderleggerpane
 Onderweg gecorrigeerd: de eerste normalisatie van de kwartslagknop leverde −180 in plaats van 180 graden — dezelfde hoek, maar een verwarrend getal in het veld. De knop houdt nu, net als bij meubels, 0 tot 359 graden aan.
 
 Verificatie 10 september, Linux x64, Node 22.22.2:
+
 - **156 tests / 22 bestanden geslaagd, 28,7 s** (was 151). Vijf nieuwe onderleggertests: omrekenen om de hoek bij 90 graden, de draaiing in de plaatsing, de vier hoeken van een gedraaide afbeelding, draaien dat het midden op zijn plaats houdt in hele millimeters, en draaien naar dezelfde hoek dat niets verplaatst. De bestaande eigenschapstest met 200 gevallen draait nu ook over willekeurige hoeken van −360 tot 360.
 - **17 browserroutes geslaagd, 2,1 min.** De onderleggerroute plaatst de afbeelding numeriek, draait hem 90 graden, controleert dat de hoek daarbij verschuift, maakt vier kwartslagen en komt binnen 3 mm terug op het beginpunt, sleept de afbeelding over het canvas en controleert dat de plaatsing op hele honderden millimeters landt, en vindt plaats en hoek terug na herladen.
 - TypeScript strict en productiebuild geslaagd (10,4 s).
@@ -559,3 +578,22 @@ Verificatie op macOS arm64, Node 22.23.1:
 - De zelfstandige offerte-browsertest is geslaagd (5,5 s testtijd; 9,7 s totaal): invoer, marge, definitief maken, herladen, PDF-download, deellink, intrekken en vervolgconcept. Screenshot `outputs/qa/offerte-definitief.png` bekeken; interne totalen zijn leesbaar en duidelijk van de klanttotalen gescheiden.
 
 De eerste losse browserpoging bereikte het projectoverzicht niet, omdat de route alleen cookies uit een eerder uitgevoerde test gebruikte. De route logt nu zelf in wanneer die cookies ontbreken en is daarmee afzonderlijk uitvoerbaar. Nog open binnen de verdere afwerking van fase 6: een auditoverzicht in de interface en aantoonbare PDF-proeven met meerdere planbladen. De productiequeue valt onder de bredere export- en beheerfasen.
+
+## Aanvulling 11 september 2026 — fase 7 interactieve 3D
+
+De viewer leidt vloer, plafond en muren af uit hetzelfde scene-document als 2D. `wallSegments` snijdt deur- en raamopeningen werkelijk uit de muurvolumes; kozijnen, glas en deurbladen volgen die opening. Meubels gebruiken de bewaarde GLB-geometrie en exacte afmetingen, met een gemelde blokvorm als een asset ontbreekt of buiten het budget valt.
+
+De gebruiker kan orbit, walk, perspectief, orthografisch en isometrisch beeld gebruiken, dag/avond en kwaliteit kiezen, plafond schakelen en muren tonen, doorsnijden of verbergen. De huidige scene bevat één `floorId`; de viewer noemt daarom alleen Begane grond en verzint geen extra verdieping. Selectie komt uit dezelfde editorstaat. Pijltjestoetsen verplaatsen een geselecteerd meubel via `TransformItem`, waarna 2D exact dezelfde millimeterpositie toont.
+
+Camera's worden per organisatie en variant onder RLS bewaard met camera-instellingen, beeldinstellingen en exacte ontwerprevisie. Opslaan is idempotent en begrensd tot vijftig; oude revisies blijven herkenbaar. Een PNG kan alleen vanuit een geselecteerde camera van de actuele revisie worden gemaakt en wordt lokaal in de browser gerenderd. Er is geen serverrenderroute. `RenderProvider` legt alleen de toekomstige grens vast voor een afzonderlijk beveiligde geometrische renderer.
+
+Vaste viewerbudgetten: 500.000 modeldriehoeken, 3,6 MB afgeleide modelgeometrie per asset, maximaal 4096 px per toekomstige texturezijde, 1000 draw calls, één schaduwlicht, 2048 px schaduwmap en DPR 2. De viewer meet na de eerste voltooide WebGL-render de draw calls en driehoeken, stelt deze beschikbaar aan de browsercontrole en waarschuwt zichtbaar als het draw-callbudget wordt overschreden. Modelrequests zijn afbreekbaar en gedeelde geometrie wordt bij project- of assetwissel opgeruimd. De bestaande lazy import en foutgrens laten de 2D-editor werken wanneer WebGL of 3D faalt.
+
+Verificatie op Windows x64, lokale Chrome en embedded PostgreSQL:
+
+- TypeScript strict en de Vite-productiebuild zijn geslaagd. De bestaande waarschuwing voor twee chunks boven 500 kB blijft.
+- **161 tests / 22 bestanden geslaagd.** De enige niet-uitgevoerde bestaande opslagtest stopt op Windows bij het voorbereiden van zijn symlink met `EPERM`, voordat applicatiecode wordt geraakt. De fase-7-integratieroute zelf telt 20 geslaagde tests en dekt rollen, tenantisolatie, revisieconflict, idempotentie en verwijderen van camera's.
+- **17 browserroutes geslaagd, 2,0 min.** De 3D-route dekt isometrisch avondbeeld, doorsnede, camera opslaan, revisiegebonden PNG downloaden, walk-modus en een 3D-verplaatsing van 100 mm die in het 2D X-veld terugkomt.
+- `outputs/qa/ontwerp-3d-avond.png` is visueel gecontroleerd. Tijdens die controle werd een orthografische zoomoverschrijving gevonden en hersteld; de herhaalde export vult het beeld en toont meubels, vloer, muren en echte deur-/raamopeningen.
+
+Open buiten de huidige gegevensbasis: textureafbeeldingen met schaal en rotatie, echte meerdere verdiepingen en een meting op benoemde geïntegreerde laptop-GPU. De code claimt daar geen gereed resultaat voor. De muurprisma's gebruiken dezelfde begrensde verstekcontouren als het 2D-plan en behouden daadwerkelijke deur- en raamopeningen; dit is met geometrie- en browsertests gecontroleerd. Instancing of LOD is niet toegevoegd omdat de bestaande demoscene en het harde driehoeksbudget daar geen gemeten winst voor onderbouwen.

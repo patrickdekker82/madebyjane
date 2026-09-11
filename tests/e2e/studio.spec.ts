@@ -121,6 +121,58 @@ test("login → project → exacte bank → draaien → undo → herladen → SV
     "data-render-ready",
     "true",
   );
+  await expect(page.locator(".viewer")).toHaveAttribute(
+    "data-performance-budget",
+    "ok",
+  );
+  const drawCalls = Number(
+    await page.locator(".viewer").getAttribute("data-draw-calls"),
+  );
+  const renderTriangles = Number(
+    await page.locator(".viewer").getAttribute("data-render-triangles"),
+  );
+  expect(drawCalls).toBeGreaterThan(0);
+  expect(drawCalls).toBeLessThanOrEqual(1_000);
+  expect(renderTriangles).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "Isometrisch", exact: true }).click();
+  await page.getByLabel("Sfeer").selectOption("evening");
+  await page.getByLabel("Muren").selectOption("cutaway");
+  page.once("dialog", (dialog) => dialog.accept("Avondpresentatie"));
+  await page
+    .getByRole("button", { name: "Camera opslaan", exact: true })
+    .click();
+  await expect(
+    page.getByText("Camera en ontwerpversie zijn opgeslagen.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  const imageDownload = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "PNG exporteren", exact: true })
+    .click();
+  const image = await imageDownload;
+  expect(image.suggestedFilename()).toMatch(/^3d-avondpresentatie-r\d+\.png$/);
+  await image.saveAs("outputs/qa/ontwerp-3d-avond.png");
+  await page.getByRole("button", { name: "Walk-modus", exact: true }).click();
+  await expect(
+    page.getByText("W/A/S/D om te lopen", { exact: false }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Orbit gebruiken", exact: true })
+    .click();
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    page.getByText("Server opgeslagen", { exact: false }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Plattegrond", exact: true }).click();
+  await expect(page.getByLabel("Positie X", { exact: true })).toHaveValue(
+    "2300",
+  );
+  await page.getByRole("button", { name: "3D bekijken", exact: true }).click();
+  await expect(page.locator(".viewer")).toHaveAttribute(
+    "data-render-ready",
+    "true",
+  );
   await page.screenshot({ path: "outputs/qa/ontwerp-3d.png" });
   await page
     .getByRole("button", { name: "Terug naar projecten", exact: true })

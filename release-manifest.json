@@ -94,6 +94,10 @@
     {
       "name": "0012_quote_workflow.sql",
       "sha256": "0bd30383b7a570a26f7af69730159feebc8159a2267533fcbca21f8037fdc103"
+    },
+    {
+      "name": "0013_viewer_views.sql",
+      "sha256": "bc0a34ecee52fc1b83a0a95ffef2eb87aab6dd6c567ad42d8eb09b120426d3b4"
     }
   ],
   "containers": {

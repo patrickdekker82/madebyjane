@@ -1,4 +1,5 @@
 import type { Point, Scene, Wall } from "../../contracts/src/index";
+import { wallOutlines, type WallOutline } from "./walls";
 export const distance = (a: Point, b: Point) =>
   Math.hypot(b.x - a.x, b.y - a.y);
 export const toThree = (
@@ -62,6 +63,65 @@ export function wallSegments(scene: Scene, wall: Wall) {
       height: wall.height,
     });
   return result;
+}
+
+/** Driehoeken voor een muurdeel met dezelfde versneden plattegrondcontour als 2D. */
+export function wallSegmentPrism(
+  scene: Scene,
+  wall: Wall,
+  segment: ReturnType<typeof wallSegments>[number],
+  suppliedOutline?: WallOutline,
+) {
+  const outline =
+      suppliedOutline ?? wallOutlines(scene).find((o) => o.wallId === wall.id),
+    { length } = endpoints(scene, wall);
+  if (!outline || outline.points.length !== 4 || length <= 0)
+    throw new Error("Muurcontour ontbreekt.");
+  const [startLeft, endLeft, endRight, startRight] = outline.points as [
+      Point,
+      Point,
+      Point,
+      Point,
+    ],
+    at = (a: Point, b: Point, offset: number): Point => ({
+      x: a.x + ((b.x - a.x) * offset) / length,
+      y: a.y + ((b.y - a.y) * offset) / length,
+    }),
+    from = segment.offset,
+    to = segment.offset + segment.width,
+    a = at(startLeft, endLeft, from),
+    b = at(startLeft, endLeft, to),
+    c = at(startRight, endRight, to),
+    d = at(startRight, endRight, from),
+    bottom = segment.bottom,
+    top = segment.bottom + segment.height,
+    ab = [
+      toThree(a.x, a.y, bottom),
+      toThree(b.x, b.y, bottom),
+      toThree(c.x, c.y, bottom),
+      toThree(d.x, d.y, bottom),
+    ] as const,
+    atTop = [
+      toThree(a.x, a.y, top),
+      toThree(b.x, b.y, top),
+      toThree(c.x, c.y, top),
+      toThree(d.x, d.y, top),
+    ] as const,
+    triangles = [
+      [atTop[0], atTop[1], atTop[2]],
+      [atTop[0], atTop[2], atTop[3]],
+      [ab[0], ab[2], ab[1]],
+      [ab[0], ab[3], ab[2]],
+      [ab[0], ab[1], atTop[1]],
+      [ab[0], atTop[1], atTop[0]],
+      [ab[1], ab[2], atTop[2]],
+      [ab[1], atTop[2], atTop[1]],
+      [ab[2], ab[3], atTop[3]],
+      [ab[2], atTop[3], atTop[2]],
+      [ab[3], ab[0], atTop[0]],
+      [ab[3], atTop[0], atTop[3]],
+    ];
+  return new Float32Array(triangles.flat(2));
 }
 export function polygonArea(points: Point[]) {
   if (points.length < 3)

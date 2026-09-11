@@ -10,6 +10,8 @@ import {
   toThree,
   toThreeRotation,
   wallSegments,
+  wallSegmentPrism,
+  wallOutlines,
   endpoints,
   polygonArea,
   parseDutchNumber,
@@ -85,6 +87,18 @@ test("raam houdt borstwering en latei, schuine muur heeft juiste lengte", () => 
   expect(sections.some((p) => p.bottom === 2350 && p.height === 350)).toBe(
     true,
   );
+});
+test("3D-muurprisma gebruikt dezelfde versneden uiteinden als het 2D-plan", () => {
+  const scene = demo(),
+    wall = scene.walls[0]!,
+    segment = wallSegments(scene, wall)[0]!,
+    outline = wallOutlines(scene).find((o) => o.wallId === wall.id)!,
+    vertices = wallSegmentPrism(scene, wall, segment);
+  expect(vertices[0]).toBeCloseTo(outline.points[0]!.x / 1000, 6);
+  expect(vertices[1]).toBeCloseTo((segment.bottom + segment.height) / 1000, 6);
+  expect(vertices[2]).toBeCloseTo(outline.points[0]!.y / 1000, 6);
+  expect(vertices).toHaveLength(108);
+  expect(Array.from(vertices).every(Number.isFinite)).toBe(true);
 });
 test("overlap, buitenmuur, NaN, duplicaten en korte muur worden afgewezen", () => {
   const s = demo(),

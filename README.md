@@ -1,6 +1,6 @@
 # Studio — interieurontwerp
 
-Een lokale ontwikkelbasis voor een professionele ontwerpstudio. Projecten en geometrie worden in PostgreSQL bewaard. De proef bevat 2D-tekenen, maatvaste meubels, undo, revisies, een 3D-geometrieweergave en een schaalplanblad. Uitnodigingen en tweestapsverificatie zijn beschikbaar. Dit is **geen productieversie**; materiaalkeuzes en offertes zijn beschikbaar; de volledige presentatiemodule, productie-infrastructuur en AI staan nog open.
+Een lokale ontwikkelbasis voor een professionele ontwerpstudio. Projecten en geometrie worden in PostgreSQL bewaard. De proef bevat 2D-tekenen, maatvaste meubels, undo, revisies, interactieve 3D en een schaalplanblad. Uitnodigingen en tweestapsverificatie zijn beschikbaar. Dit is **geen productieversie**; materiaalkeuzes en offertes zijn beschikbaar; de volledige presentatiemodule, productie-infrastructuur en AI staan nog open.
 
 ## Lokaal starten
 
@@ -65,6 +65,12 @@ Klik **Revisie bewaren** om het opgeslagen ontwerp vast te leggen. Open **Versie
 
 De linkerzijbalk toont automatisch gesloten kamers en hun oppervlakte tot de muurhartlijnen. Dit is geen netto vloeroppervlak of bestelhoeveelheid. Verbind muurpunten expliciet: kruisingen of los rakende muren worden gemeld. De 3D-vloer volgt de herkende contour.
 
+### Interactieve 3D
+
+Open **3D bekijken** voor perspectief, orthografisch of isometrisch beeld. Orbit gebruikt slepen en scrollen; de walk-modus gebruikt W/A/S/D. Dag- en avondsfeer, drie kwaliteitsstanden, plafond en volledige, doorgesneden of verborgen muren zijn schakelbaar. Een geselecteerd meubel verplaatst met de pijltjestoetsen 100 mm en met Shift 10 mm via hetzelfde versieerbare commando als de 2D-editor.
+
+Een opgeslagen camera bevat de exacte ontwerprevisie en beeldinstellingen. Selecteer zo'n camera en kies **PNG exporteren** om het geometrisch correcte beeld in de browser te maken. Er is geen serverrenderer. De huidige domeinversie heeft één verdieping, daarom toont de bediening alleen **Begane grond**. Materiaalkleuren gebruiken PBR-eigenschappen; texturebestanden en hun schaal/rotatie volgen wanneer de materiaalasset-pipeline die gegevens levert.
+
 Open **Ontwerpvarianten** om een opgeslagen ontwerp als zelfstandig alternatief te kopiëren. Geef het alternatief een naam en klik **Variant maken**. Wijzigingen raken het basisontwerp niet. Via dezelfde lijst wissel je terug; de huidige naam staat boven in het ontwerp. Er kunnen maximaal 100 varianten per project bestaan. De oorspronkelijke geschiedenis blijft bij de bronvariant.
 
 ## Eigen meubelbibliotheek
@@ -124,7 +130,7 @@ Browser- en integratietests gebruiken afzonderlijke lokale databases en fictieve
 
 ## Grenzen en vervolg
 
-Met Web Locks hervat dezelfde tab de schrijflease direct na herladen; een gedupliceerde tab blijft in leesmodus. Zonder Web Locks valt de editor veilig terug op een nieuwe lease en kan herladen maximaal 45 seconden wachttijd geven. De 3D-proef gebruikt blokvormige meubels en vloeren volgens herkende kamercontouren; muurverbindingen zijn nog in ontwikkeling. Netto hoeveelheden worden berekend, maar een ruimte wordt nog herkend aan haar muurpunten: verwijder of splits je een muur, dan vraagt de app om de bron opnieuw te kiezen. Offerte-PDF werkt met vaste snapshots en een begrensde lokale Chromium-renderer; een productie-exportqueue staat nog open. Nog geen productie-Compose, back-up/herstelprocedure of Hyper-V-validatie.
+Met Web Locks hervat dezelfde tab de schrijflease direct na herladen; een gedupliceerde tab blijft in leesmodus. Zonder Web Locks valt de editor veilig terug op een nieuwe lease en kan herladen maximaal 45 seconden wachttijd geven. De 3D-weergave gebruikt bewaarde GLB-geometrie waar beschikbaar en begrensde blokvormen als fallback; vloeren en plafonds volgen herkende kamercontouren en muurverbindingen gebruiken dezelfde versneden contouren als de 2D-plattegrond. Netto hoeveelheden worden berekend, maar een ruimte wordt nog herkend aan haar muurpunten: verwijder of splits je een muur, dan vraagt de app om de bron opnieuw te kiezen. Offerte-PDF werkt met vaste snapshots en een begrensde lokale Chromium-renderer; een productie-exportqueue staat nog open. Nog geen productie-Compose, back-up/herstelprocedure of Hyper-V-validatie.
 
 De precieze voortgang, testresultaten en eerstvolgende stappen staan in `docs/IMPLEMENTATION_STATUS.md`. Alle oorspronkelijke eisen staan in `docs/MASTERPROMPT.md` en `docs/ACCEPTANCE_MATRIX.md`. Gepinde dependencies en migrations staan in `release-manifest.json`. `docs/DEPENDENCY_LICENSES.json` inventariseert de licenties van 36 directe packages; transitieve en native licentiebijlagen zijn nog niet compleet. CI draait op GitHub Actions (ubuntu-24.04) en voert build, tests, browsertests en `pnpm audit` uit.
 

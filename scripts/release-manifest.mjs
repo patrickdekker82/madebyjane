@@ -1,15 +1,17 @@
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 const pkg = JSON.parse(await readFile("package.json", "utf8"));
+const portableTextHash = async (path) =>
+  createHash("sha256")
+    .update((await readFile(path, "utf8")).replace(/\r\n/g, "\n"))
+    .digest("hex");
 const migrations = [];
 for (const name of (await readdir("packages/db/migrations"))
   .filter((n) => n.endsWith(".sql"))
   .sort()) {
   migrations.push({
     name,
-    sha256: createHash("sha256")
-      .update(await readFile("packages/db/migrations/" + name))
-      .digest("hex"),
+    sha256: await portableTextHash("packages/db/migrations/" + name),
   });
 }
 const licenses = [];
@@ -36,13 +38,13 @@ const manifest = {
   sceneSchemaVersion: 1,
   node: pkg.engines.node,
   packageManager: pkg.packageManager,
-  lockfileSha256: createHash("sha256")
-    .update(await readFile("pnpm-lock.yaml"))
-    .digest("hex"),
+  lockfileSha256: await portableTextHash("pnpm-lock.yaml"),
   dependencies: pkg.dependencies,
   devDependencies: pkg.devDependencies,
   migrations,
-  containers: { chromiumProbe: dockerfile.split("\n")[0].replace("FROM ", "") },
+  containers: {
+    chromiumProbe: dockerfile.split("\n")[0].replace("FROM ", "").trim(),
+  },
   limitations: [
     "Production API/worker/PostgreSQL/Caddy images are not yet delivered.",
     "Linux probe tested on arm64 via Colima; Debian 13 on Hyper-V not tested.",
