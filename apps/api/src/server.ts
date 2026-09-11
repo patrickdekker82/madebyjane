@@ -15,6 +15,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createAuth } from "../../../packages/auth/src/index";
 import { InvitationService } from "../../../packages/auth/src/invitations";
+import { RecoveryService } from "../../../packages/auth/src/recovery";
 import {
   ProjectService,
   type Context,
@@ -51,6 +52,11 @@ export function createServer(config: {
   const auth = createAuth(config.identity, config.baseURL, config.secret);
   const service = new ProjectService(config.runtime);
   const invitations = new InvitationService(
+    config.identity,
+    config.baseURL,
+    config.secret,
+  );
+  const recovery = new RecoveryService(
     config.identity,
     config.baseURL,
     config.secret,
@@ -185,6 +191,31 @@ export function createServer(config: {
     const ctx = await context(req.headers);
     return invitations.create(ctx.userId, ctx.organizationId, req.body);
   });
+  // Accountherstel. De beheerder geeft de link persoonlijk door; er wordt geen
+  // e-mail verstuurd en dat staat ook zo in het scherm.
+  app.post(
+    "/api/v1/members/:userId/recovery",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (req) => {
+      const ctx = await context(req.headers);
+      const p = z
+        .object({ userId: z.string().min(1).max(255) })
+        .parse(req.params);
+      return recovery.create(ctx.userId, ctx.organizationId, p.userId);
+    },
+  );
+  app.post("/api/v1/members/:userId/recovery/revoke", async (req) => {
+    const ctx = await context(req.headers);
+    const p = z
+      .object({ userId: z.string().min(1).max(255) })
+      .parse(req.params);
+    return recovery.revoke(ctx.userId, ctx.organizationId, p.userId);
+  });
+  app.post(
+    "/api/v1/recovery/accept",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (req) => recovery.accept(req.body),
+  );
   app.post("/api/v1/invitations/:invitationId/revoke", async (req) => {
     const ctx = await context(req.headers);
     return invitations.revoke(

@@ -2,6 +2,12 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import type { Role } from "../../../packages/domain/src/index";
+type Member = {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+};
 type Invitation = {
   id: string;
   email: string;
@@ -28,6 +34,13 @@ export function AccessPanel({
     queryFn: () => api<{ items: Invitation[] }>("/invitations", organizationId),
     enabled: allowed,
   });
+  const members = useQuery({
+    queryKey: ["organization-members", organizationId],
+    queryFn: () =>
+      api<{ items: Member[] }>("/organization/members", organizationId),
+    enabled: allowed,
+  });
+  const [recovery, setRecovery] = useState<{ email: string; url: string }>();
   if (!allowed)
     return (
       <main className="center">
@@ -126,6 +139,71 @@ export function AccessPanel({
             </p>
           )}
           {message && <p role="status">{message}</p>}
+        </section>
+        <section>
+          <h2>Accountherstel</h2>
+          <p className="small">
+            Kan een collega niet meer inloggen? Maak een eenmalige herstellink
+            en geef die persoonlijk door. De link vervalt na twee uur, werkt één
+            keer, en het instellen van een nieuw wachtwoord logt alle bestaande
+            sessies van die collega uit. Er wordt geen e-mail verstuurd.
+          </p>
+          {members.isError ? (
+            <p className="error" role="alert">
+              {members.error.message}
+            </p>
+          ) : (
+            <ul className="invite-list">
+              {(members.data?.items ?? [])
+                .filter((m) => m.id !== undefined)
+                .map((m) => (
+                  <li key={m.id}>
+                    <div>
+                      <strong>{m.name}</strong>
+                      <span className="small"> {m.email}</span>
+                    </div>
+                    <button
+                      disabled={busy}
+                      onClick={async () => {
+                        setBusy(true);
+                        setError("");
+                        setMessage("");
+                        try {
+                          const r = await api<{ email: string; url: string }>(
+                            `/members/${encodeURIComponent(m.id)}/recovery`,
+                            organizationId,
+                            {},
+                          );
+                          setRecovery(r);
+                        } catch (e) {
+                          setError((e as Error).message);
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      Herstellink maken
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          )}
+          {recovery && (
+            <div className="invite-result">
+              <label>
+                Eenmalige herstellink voor {recovery.email}
+                <input
+                  readOnly
+                  value={recovery.url}
+                  aria-label="Eenmalige herstellink"
+                />
+              </label>
+              <p className="small">
+                Geef deze link persoonlijk door en bewaar hem niet. Een nieuwe
+                link maken maakt deze meteen ongeldig.
+              </p>
+            </div>
+          )}
         </section>
         <section>
           <h2>Uitnodigingen</h2>
@@ -263,6 +341,80 @@ export function InvitationPage() {
             </button>
           </form>
           <a href="/">Ik heb al een account →</a>
+        </>
+      )}
+    </main>
+  );
+}
+
+/** De pagina achter een herstellink. Zet alleen een nieuw wachtwoord. */
+export function RecoveryPage() {
+  const [token] = useState(() => location.hash.slice(1)),
+    [error, setError] = useState(""),
+    [done, setDone] = useState(false),
+    [busy, setBusy] = useState(false);
+  return (
+    <main className="invitation-page">
+      <span className="brand">
+        <span className="brand-mark">s.</span>studio.
+      </span>
+      <h1>{done ? "Je kunt weer inloggen." : "Kies een nieuw wachtwoord."}</h1>
+      {done ? (
+        <>
+          <p>
+            Je wachtwoord is gewijzigd. Je bent op alle apparaten uitgelogd, dus
+            log opnieuw in met je nieuwe wachtwoord.
+          </p>
+          <a href="/">Naar inloggen →</a>
+        </>
+      ) : (
+        <>
+          <p>
+            Deze link werkt één keer en vervalt na twee uur. Vraag je beheerder
+            om een nieuwe als hij niet meer werkt.
+          </p>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setBusy(true);
+              setError("");
+              const f = new FormData(e.currentTarget);
+              try {
+                await api("/recovery/accept", undefined, {
+                  token,
+                  password: f.get("password"),
+                });
+                setDone(true);
+                history.replaceState(null, "", "/herstel");
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <label>
+              Nieuw wachtwoord
+              <input
+                name="password"
+                type="password"
+                required
+                minLength={12}
+                maxLength={128}
+                autoComplete="new-password"
+              />
+            </label>
+            <p className="small">Minimaal 12 tekens.</p>
+            {error && (
+              <p role="alert" className="error">
+                {error}
+              </p>
+            )}
+            <button className="primary" disabled={busy || !token}>
+              {busy ? "Even geduld…" : "Wachtwoord instellen"}
+            </button>
+          </form>
+          <a href="/">Terug naar inloggen →</a>
         </>
       )}
     </main>

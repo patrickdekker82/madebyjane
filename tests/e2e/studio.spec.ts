@@ -292,6 +292,85 @@ test("project beperken → collega ziet het niet → als projectlid weer wel", a
     await context.close();
   }
 });
+test("collega kan niet meer inloggen → herstellink → nieuw wachtwoord → sessies uit", async ({
+  page,
+  browser,
+}) => {
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  test.skip(
+    colleagueCookies.length === 0,
+    "Deze route herstelt de collega uit de uitnodigingsroute.",
+  );
+  // Deze route staat bewust na de andere routes die de collega gebruiken: een
+  // herstel logt die collega overal uit. Opnieuw inloggen gebeurt hier niet,
+  // want Better Auth staat drie inlogpogingen per tien seconden toe; dat het
+  // nieuwe wachtwoord werkt en het oude niet meer, toetst recovery.test.ts.
+  const context = await browser.newContext(),
+    guest = await context.newPage();
+  try {
+    await context.addCookies(colleagueCookies);
+    await guest.goto("/");
+    await expect(
+      guest.getByRole("heading", { name: "Ruimte voor het volgende." }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Toegang", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Accountherstel", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("listitem")
+      .filter({ hasText: "kijker@example.test" })
+      .getByRole("button", { name: "Herstellink maken", exact: true })
+      .click();
+    const url = await page.getByLabel("Eenmalige herstellink").inputValue();
+    await mkdir("outputs/qa", { recursive: true });
+    await page.screenshot({
+      path: "outputs/qa/herstellink.png",
+      fullPage: true,
+    });
+
+    // De collega zet een nieuw wachtwoord via de link.
+    await guest.goto(url);
+    await guest.getByLabel("Nieuw wachtwoord").fill("herstelwachtwoord-2026");
+    await guest
+      .getByRole("button", { name: "Wachtwoord instellen", exact: true })
+      .click();
+    await expect(
+      guest.getByRole("heading", { name: "Je kunt weer inloggen." }),
+    ).toBeVisible();
+
+    // De bestaande sessie is ingetrokken: terug op het inlogscherm.
+    await guest.goto("/");
+    await expect(guest.getByLabel("E-mailadres")).toBeVisible();
+    await expect(
+      guest.getByRole("heading", { name: "Ruimte voor het volgende." }),
+    ).toHaveCount(0);
+
+    // Dezelfde link werkt geen tweede keer.
+    await guest.goto(url);
+    await guest.getByLabel("Nieuw wachtwoord").fill("nogeenpoging-2026");
+    await guest
+      .getByRole("button", { name: "Wachtwoord instellen", exact: true })
+      .click();
+    await expect(guest.getByRole("alert")).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
 test("belastingproef 500 objecten en 100 muren: rAF-frametijden tijdens pannen", async ({
   page,
 }) => {
