@@ -2,7 +2,7 @@ import type { Pool } from "pg";
 import { createHash, randomUUID } from "node:crypto";
 import { inTenant } from "../../db/src/index";
 import { libraryPublishSchema, libraryQuerySchema } from "../../contracts/src/index";
-import { DomainError, canWrite } from "./index";
+import { DomainError, requirePermission } from "./index";
 import type { Context } from "./projects";
 export class LibraryService {
   constructor(private pool: Pool) {}
@@ -31,8 +31,7 @@ export class LibraryService {
     });
   }
   publish(ctx: Context, input: unknown) {
-    if (!canWrite(ctx.role))
-      throw new DomainError("FORBIDDEN", "Je hebt alleen leestoegang.", 403);
+    requirePermission(ctx.role, "library.manage");
     const value = libraryPublishSchema.parse(input),
       hash = createHash("sha256").update(JSON.stringify(value)).digest("hex");
     return inTenant(this.pool, ctx.organizationId, async (c) => {

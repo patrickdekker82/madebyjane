@@ -2,6 +2,8 @@ import { makeGlb } from "../helpers/glb";
 import { test, expect, type BrowserContext } from "@playwright/test";
 import { readFile, mkdir } from "node:fs/promises";
 let ownerCookies: Awaited<ReturnType<BrowserContext["cookies"]>> = [];
+/** De in test 2 uitgenodigde collega; hergebruikt omdat inloggen gelimiteerd is. */
+let colleagueCookies: Awaited<ReturnType<BrowserContext["cookies"]>> = [];
 test("login → project → exacte bank → draaien → undo → herladen → SVG → 3D", async ({
   page,
 }) => {
@@ -184,6 +186,7 @@ test("collega uitnodigen → account → viewer kan alleen lezen", async ({
     await expect(
       guest.getByRole("heading", { name: "Ruimte voor het volgende." }),
     ).toBeVisible();
+    colleagueCookies = await guest.context().cookies();
     await expect(
       guest.getByRole("button", { name: "Nieuw project" }),
     ).toHaveCount(0);
@@ -193,6 +196,177 @@ test("collega uitnodigen → account → viewer kan alleen lezen", async ({
         name: "Toegang wordt door je beheerder geregeld",
       }),
     ).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+test("project beperken → collega ziet het niet → als projectlid weer wel", async ({
+  page,
+  browser,
+}) => {
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  // Twee verschillende mensen op twee machines: de auth-limiet telt per
+  // client-IP, dus krijgt elke rol hier zijn eigen adres. Dat bootst de
+  // werkelijkheid na in plaats van de limiet te verlagen. De sessies zelf
+  // komen uit eerdere routes, omdat inloggen gelimiteerd is.
+  await page.setExtraHTTPHeaders({ "x-studio-client-ip": "203.0.113.10" });
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  test.skip(
+    colleagueCookies.length === 0,
+    "Deze route hergebruikt de collega uit de uitnodigingsroute.",
+  );
+  const context = await browser.newContext({
+      extraHTTPHeaders: { "x-studio-client-ip": "203.0.113.11" },
+    }),
+    guest = await context.newPage();
+  try {
+    await context.addCookies(colleagueCookies);
+    await page.getByRole("button", { name: "Nieuw project" }).click();
+    await page.getByLabel("Projectnaam").fill("Toegangsproef");
+    await page.getByLabel("Klantnaam").fill("Familie Voorbeeld");
+    await page
+      .getByRole("button", { name: "Project aanmaken", exact: true })
+      .click();
+    // Open project: de collega ziet het gewoon staan.
+    await guest.goto("/");
+    await expect(
+      guest.getByRole("button", { name: "Toegangsproef" }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Projecttoegang", exact: true })
+      .click();
+    await expect(
+      page.getByText(/Iedereen in deze werkruimte kan dit project openen/),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Beperken tot gekozen leden", exact: true })
+      .click();
+    await expect(
+      page.getByText(/Alleen de leden hieronder kunnen dit project openen/),
+    ).toBeVisible();
+    // Na beperken is het project voor de collega weg, niet alleen verborgen.
+    await guest.reload();
+    await expect(
+      guest.getByRole("button", { name: "Toegangsproef" }),
+    ).toHaveCount(0);
+    // Expliciet lid maken geeft de toegang terug.
+    await page
+      .getByLabel("Collega")
+      .selectOption({ label: "Fictieve kijker (kijker@example.test)" });
+    await page.getByLabel("Rol binnen dit project").selectOption("designer");
+    await page
+      .getByRole("button", { name: "Lid toevoegen", exact: true })
+      .click();
+    await expect(page.getByText(/Fictieve kijker.*Ontwerper/)).toBeVisible();
+    await guest.reload();
+    await expect(
+      guest.getByRole("button", { name: "Toegangsproef" }),
+    ).toBeVisible();
+    await mkdir("outputs/qa", { recursive: true });
+    await page.screenshot({
+      path: "outputs/qa/projecttoegang.png",
+      fullPage: true,
+    });
+    // En weer intrekken sluit het net zo hard af.
+    await page
+      .getByRole("button", { name: "Lidmaatschap intrekken", exact: true })
+      .click();
+    await expect(page.getByText("Nog geen expliciete leden.")).toBeVisible();
+    await guest.reload();
+    await expect(
+      guest.getByRole("button", { name: "Toegangsproef" }),
+    ).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+test("collega kan niet meer inloggen → herstellink → nieuw wachtwoord → sessies uit", async ({
+  page,
+  browser,
+}) => {
+  const credentials = JSON.parse(
+    await readFile("work/e2e-credentials.json", "utf8"),
+  );
+  if (ownerCookies.length) {
+    await page.context().addCookies(ownerCookies);
+    await page.goto("/");
+  } else {
+    await page.goto("/");
+    await page.getByLabel("E-mailadres").fill(credentials.email);
+    await page
+      .getByLabel("Wachtwoord", { exact: true })
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Inloggen", exact: true }).click();
+  }
+  test.skip(
+    colleagueCookies.length === 0,
+    "Deze route herstelt de collega uit de uitnodigingsroute.",
+  );
+  // Deze route staat bewust na de andere routes die de collega gebruiken: een
+  // herstel logt die collega overal uit. Opnieuw inloggen gebeurt hier niet,
+  // want Better Auth staat drie inlogpogingen per tien seconden toe; dat het
+  // nieuwe wachtwoord werkt en het oude niet meer, toetst recovery.test.ts.
+  const context = await browser.newContext(),
+    guest = await context.newPage();
+  try {
+    await context.addCookies(colleagueCookies);
+    await guest.goto("/");
+    await expect(
+      guest.getByRole("heading", { name: "Ruimte voor het volgende." }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Toegang", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Accountherstel", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("listitem")
+      .filter({ hasText: "kijker@example.test" })
+      .getByRole("button", { name: "Herstellink maken", exact: true })
+      .click();
+    const url = await page.getByLabel("Eenmalige herstellink").inputValue();
+    await mkdir("outputs/qa", { recursive: true });
+    await page.screenshot({
+      path: "outputs/qa/herstellink.png",
+      fullPage: true,
+    });
+
+    // De collega zet een nieuw wachtwoord via de link.
+    await guest.goto(url);
+    await guest.getByLabel("Nieuw wachtwoord").fill("herstelwachtwoord-2026");
+    await guest
+      .getByRole("button", { name: "Wachtwoord instellen", exact: true })
+      .click();
+    await expect(
+      guest.getByRole("heading", { name: "Je kunt weer inloggen." }),
+    ).toBeVisible();
+
+    // De bestaande sessie is ingetrokken: terug op het inlogscherm.
+    await guest.goto("/");
+    await expect(guest.getByLabel("E-mailadres")).toBeVisible();
+    await expect(
+      guest.getByRole("heading", { name: "Ruimte voor het volgende." }),
+    ).toHaveCount(0);
+
+    // Dezelfde link werkt geen tweede keer.
+    await guest.goto(url);
+    await guest.getByLabel("Nieuw wachtwoord").fill("nogeenpoging-2026");
+    await guest
+      .getByRole("button", { name: "Wachtwoord instellen", exact: true })
+      .click();
+    await expect(guest.getByRole("alert")).toBeVisible();
   } finally {
     await context.close();
   }
@@ -1136,6 +1310,23 @@ test("offerteconcept, decimalen, finalisatie en vaste prijzen na herladen", asyn
   await expect(
     page.getByLabel("Inkoopprijs per eenheid EUR post 1", { exact: true }),
   ).toHaveValue("12");
+  // Auditoverzicht: wie deze offerte opsloeg en definitief maakte, met versie.
+  await page
+    .getByRole("button", { name: "Auditoverzicht bekijken", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Auditoverzicht", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/^Definitief gemaakt · versie 2 · 20/),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Concept opgeslagen · versie 1", { exact: false }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "outputs/qa/offerte-audit.png",
+    fullPage: true,
+  });
   const downloaded = page.waitForEvent("download");
   await page
     .getByRole("button", { name: "Offerte-PDF downloaden", exact: true })

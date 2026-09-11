@@ -3,6 +3,7 @@ import { Quotes } from "./Quotes";
 import { Presentations } from "./Presentations";
 import { LibraryPanel } from "./LibraryPanel";
 import { Variants, VariantName } from "./Variants";
+import { ProjectMembers } from "./ProjectMembers";
 import { RoomSummary } from "./RoomSummary";
 import { RevisionHistory } from "./RevisionHistory";
 import { StructureProperties } from "./StructureProperties";
@@ -111,7 +112,7 @@ import {
 import { parseDutchNumber } from "../../../packages/geometry/src/index";
 import "./style.css";
 import { Probe } from "./Probe";
-import { AccessPanel, InvitationPage } from "./Access";
+import { AccessPanel, InvitationPage, RecoveryPage } from "./Access";
 import { SecurityPanel } from "./Security";
 const Viewer = lazy(() => import("../../../packages/viewer-3d/src/Viewer"));
 type Me = {
@@ -261,7 +262,9 @@ function Login({ onDone }: { onDone: () => void }) {
   );
 }
 function App() {
-  const probe = ["/proef", "/uitnodiging"].includes(location.pathname);
+  const probe = ["/proef", "/uitnodiging", "/herstel"].includes(
+    location.pathname,
+  );
   const query = useQuery({
     queryKey: ["me"],
     queryFn: () => api<Me>("/me"),
@@ -1331,6 +1334,11 @@ function Editor() {
             projectId={scene.projectId}
           />
         )}
+        <ProjectMembers
+          organizationId={org.id}
+          projectId={scene.projectId}
+          role={org.role}
+        />
         <Variants
           organizationId={org.id}
           variantId={variantId}
@@ -2078,6 +2086,11 @@ const invitationRoute = createRoute({
   path: "/uitnodiging",
   component: InvitationPage,
 });
+const recoveryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/herstel",
+  component: RecoveryPage,
+});
 const securityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/beveiliging",
@@ -2090,6 +2103,7 @@ const router = createRouter({
     probeRoute,
     accessRoute,
     invitationRoute,
+    recoveryRoute,
     securityRoute,
   ]),
 });

@@ -1,5 +1,96 @@
 # Implementatiestatus — Studio
 
+## Aanvulling 11 september 2026 — fase 1: accountherstel
+
+Sluit het open punt "account recovery" uit fase 1. De opdracht vraagt dit _met libraryvoorzieningen_; token, vervaltijd, eenmalig gebruik, wachtwoordhashing en het intrekken van sessies komen daarom uit Better Auth. De app voegt alleen toe wie het mag doen, de registratie, en het ongeldig maken van oudere links.
+
+Er is geen e-mailkoppeling en er wordt ook niet gedaan alsof: een eigenaar of beheerder maakt onder **Toegang → Accountherstel** een eenmalige link en geeft die persoonlijk door, hetzelfde patroon als de uitnodigingen. De link vervalt na twee uur, werkt één keer, en een nieuwe link maakt de vorige direct ongeldig. Het instellen van een nieuw wachtwoord logt die gebruiker overal uit — bij een vermoeden van misbruik wil je dat een indringer er ook uit ligt. Migration 0015 voegt `detail jsonb` toe aan `identity.access_event`, zodat in de registratie staat wie het voor wie deed.
+
+Een beheerder kan géén eigenaar herstellen; dat mag alleen een eigenaar. Zonder die regel zou een beheerder het eigenaarsaccount kunnen overnemen door er een wachtwoord voor in te stellen. De procedure, inclusief grenzen, staat in `docs/manuals/accountherstel.md`.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+- TypeScript strict en productiebuild geslaagd (6,92 s); de bestaande chunkwaarschuwing blijft.
+- Vitest: **177 van 179 tests geslaagd**. Zeven nieuwe proeven in `tests/account-recovery.test.ts`: een link zet een nieuw wachtwoord en het oude werkt niet meer; dezelfde token werkt geen tweede keer; bestaande sessies worden ingetrokken; een nieuwe link maakt de vorige ongeldig en intrekken werkt (tweemaal intrekken meldt eerlijk `revoked: false`); alleen beheerders, en een admin kan geen eigenaar overnemen; een andere werkruimte en onbekende gebruikers krijgen 404; een te kort wachtwoord wordt geweigerd; en elke handeling staat met actor en gebruiker in de registratie.
+- Playwright: de nieuwe route maakt de link in het scherm, zet er een nieuw wachtwoord mee, controleert dat de bestaande sessie is ingetrokken en dat dezelfde link geen tweede keer werkt. `outputs/qa/herstellink.png` is visueel gecontroleerd.
+
+### Twee dingen die onderweg misgingen
+
+**Een bestaand testbestand overschreven.** `tests/recovery.test.ts` bestond al: 12 proeven voor lokaal herstel (IndexedDB-kladversies). Een nieuw bestand met dezelfde naam heeft die vervangen. Hersteld uit `main` en identiek bevonden; de nieuwe proeven staan nu in `tests/account-recovery.test.ts`. Het viel op doordat de suite 12 tests kwijt was, niet doordat er iets faalde.
+
+**Een eerdere uitspraak over de rate limit klopte niet.** Bij de vorige aanvulling staat dat de browserroute de limiet omzeilt door elke gesimuleerde persoon een eigen `x-studio-client-ip` te geven. De echte oorzaak is een ingebouwde regel van Better Auth: **drie inlogpogingen per tien seconden** voor `/sign-in`, los van de ingestelde 30 per minuut. Of de eigen IP-header de buckets werkelijk splitst, is hier niet vastgesteld. Wat de routes laat slagen is dat zij bestaande sessies hergebruiken in plaats van opnieuw in te loggen. Die limiet is niet aangepast; hij staat nu in de handleiding beschreven.
+
+### Eerstvolgende stap
+
+Van fase 1 resteren: productie-Compose met geteste installatie- en herstelprocedure, assetroutes en S3-adapter, en operationele back-up/restore. Die drie vragen een omgeving waarin Docker daadwerkelijk draait. Er is nog geen productiegeschiktheidsclaim.
+
+## Aanvulling 11 september 2026 — fase 1: rechtenmatrix en projectmembership
+
+Dit pakt twee open punten van fase 1: de **volledige rechtenmatrix** en **expliciete projectmembership**. Tot nu toe zag elk organisatielid elk project in de werkruimte, en stonden de rechten verspreid over losse rollijsten (`canWrite`, `canFinance`, `requireFinance`).
+
+### De rechtenmatrix als enige bron
+
+`packages/domain/src/permissions.ts` bevat de matrix uit paragraaf 15 van de opdracht, met de gevraagde splitsing: `project.read/write`, `library.manage`, `quote.read/write/finalize`, `costs.read`, `members.manage` en `share.publish/revoke`. Services en routes vragen een recht op in plaats van een rolnaam. Het bestand importeert niets uit `index.ts`, zodat de matrix geen kringverwijzing maakt en ook in de interface bruikbaar is.
+
+Deze stap is gedragsbehoudend: dezelfde rollen mogen precies hetzelfde als daarvoor. De splitsing maakt alleen expliciet wat eerst impliciet in één `requireFinance` zat. `permissions.test.ts` pint de volledige matrix vast, zodat een rol die een recht wint of verliest een bewuste wijziging is en geen bijvangst.
+
+### Projecttoegang
+
+Migration 0014 voegt `projects.access` toe (`organization` of `restricted`, default `organization`) en de tabel `project_memberships` met RLS, FORCE RLS en tenantpolicy. Bestaande projecten blijven open: niemand raakt werk kwijt door deze wijziging, en er is niets nep-teruggevuld.
+
+`resolveProjectRole` is de enige plek die beslist wie bij een project mag:
+
+- Owner en admin beheren de werkruimte en houden hun rol.
+- Een expliciet projectlid krijgt de projectrol. Die kan hoger of lager zijn dan de werkruimterol; alleen owner en admin kennen hem toe.
+- Anders geldt de werkruimterol, maar alleen bij een open project.
+
+Een beperkt project zonder lidmaatschap geeft **404 en geen 403**: het bestaan van het project is zelf al informatie. Projectrollen zijn bewust beperkt tot designer, finance en viewer — owner of admin toekennen zou ledenbeheer via een project uitbreidbaar maken tot de hele werkruimte.
+
+De API resolveert dit vóór de services: elke projectroute gebruikt `projectContext`, elke variantroute `variantContext`, zodat de rol die een service ziet de rol voor dát project is. Daarmee is "organisatie en project op elke route gecontroleerd" ook werkelijk op elke route waar. Het filter op de projectlijst staat in de query, niet in de interface, zodat een beperkt project ook niet via de API lekt. Het intrekken van een offerte-deellink loopt via een link-ID en controleert nu eveneens de projecttoegang.
+
+De interface heeft een dialoog **Projecttoegang** voor owner en admin: openstellen of beperken, leden toevoegen met een projectrol, en lidmaatschap intrekken. Ledenbeheer schrijft auditregels (`project.access_changed`, `project.member_set`, `project.member_removed`) met dezelfde `detail`-kolom uit migration 0013.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded), pnpm 11.19.0
+
+- TypeScript strict en productiebuild geslaagd (6,41 s). De bestaande waarschuwing over chunks groter dan 500 kB blijft open.
+- Vitest: **170 van 172 tests geslaagd**. Nieuw: 3 matrixproeven en 7 toegangsproeven (open project blijft zichtbaar; beperken sluit project-, variant-, offerte- en planbladroutes af met 404; owner en admin houden toegang; een projectlid krijgt de projectrol en mag tekenen waar zijn werkruimterol dat niet toestaat; een projectrol kan ook mínder geven; ledenbeheer is 403 voor andere rollen; intrekken sluit weer af en schrijft precies één auditregel; een andere organisatie bereikt niets).
+- Playwright: **15 van 18 routes geslaagd (3,6 min)**. De nieuwe route beperkt een project in de browser, laat zien dat het bij de collega uit de lijst verdwijnt, geeft toegang terug via lidmaatschap en trekt die weer in. `outputs/qa/projecttoegang.png` is visueel gecontroleerd.
+- Gecontroleerd dat de productiebundel geen servercode of SQL bevat: de gedeelde waarden staan in `packages/contracts`, niet in de domeinmodule met databasetoegang.
+
+### Niet geverifieerd in deze omgeving
+
+De 2 mislukte Vitest-tests en 3 mislukte browserroutes zijn **niet** door deze wijziging veroorzaakt: dezelfde vijf vielen om vóór deze wijziging, met identieke foutmelding en regelnummer. Oorzaak blijft dat Chromium in deze container zijn sandbox niet kan starten, waardoor server-side PDF-rendering 500 geeft. `chromiumSandbox: true` is opnieuw niet aangepast.
+
+De nieuwe browserroute liep aanvankelijk vast op de auth-rate-limit van 30 verzoeken per minuut. Die limiet is **niet** verlaagd; de route hergebruikt bestaande sessies en geeft de twee gesimuleerde personen elk hun eigen `x-studio-client-ip`, wat overeenkomt met twee mensen op twee machines.
+
+### Eerstvolgende stap
+
+Van fase 1 resteren: account recovery en wachtwoordherstel, productie-Compose met installatie- en herstelprocedure, assetroutes en S3-adapter, en operationele back-up/restore. De productiecontainers en de installatieproef vragen een omgeving waar Docker daadwerkelijk gedraaid kan worden. Er is nog steeds geen productiegeschiktheidsclaim.
+
+## Aanvulling 11 september 2026 — auditoverzicht per offerte
+
+Dit sluit het open punt "een auditoverzicht in de gebruikersinterface" uit de vorige aanvulling. De tabel `audit_events` werd al geschreven maar nergens gelezen; er was dus registratie zonder inzage.
+
+Een offerte heeft nu een knop **Auditoverzicht bekijken**. Die toont per regel de handeling (concept opgeslagen, definitief gemaakt, deellink gemaakt, deellink ingetrokken), de offerteversie waarop de handeling sloeg, het offertenummer bij finalisatie, en wie het deed met naam, e-mailadres en tijdstip in Europe/Amsterdam. Nieuwste regel bovenaan, maximaal 200 regels. Het overzicht is alleen leesbaar; er is geen pad om auditregels te schrijven of te wijzigen vanuit de interface.
+
+Migration 0013 voegt `detail jsonb` toe aan `audit_events` (maximaal 2000 tekens) plus een index op `(organization_id,subject_id,created_at DESC)`. De offerte-, deel- en intrekpaden schrijven de versie in dat veld. Regels van vóór deze migration hebben geen versie; het scherm toont daar "versie niet vastgelegd" in plaats van een geraden waarde. Bestaande audit-inserts in de andere modules zijn ongewijzigd gebleven en blijven werken, omdat de nieuwe kolom een default heeft.
+
+Rechten en isolatie: alleen owner, admin en finance kunnen het overzicht opvragen; designer en viewer krijgen server-side 403. RLS op `audit_events` beperkt de rijen tot de eigen organisatie. Namen komen uit `identity."user"` via de identity-verbinding, omdat de runtimeverbinding die tabel niet mag lezen; het domein blijft daarmee los van identity.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded), pnpm 11.19.0
+
+- TypeScript strict geslaagd; productiebuild geslaagd (7,26 s). De bestaande waarschuwing over chunks groter dan 500 kB blijft open.
+- Vitest: **160 van 162 tests geslaagd**. De nieuwe integratieproef dekt volgorde, versie, offertenummer, naam en e-mailadres per regel, het maken en intrekken van een deellink bij de juiste versie, scheiding tussen twee offertes in hetzelfde project, 403 voor designer en viewer, en 404 bij een onbekende offerte en vanuit een andere organisatie.
+- Playwright: **14 van 17 routes geslaagd (3,5 min)**. De offerteroute opent het auditoverzicht na definitief maken en leest "Definitief gemaakt · versie 2" en "Concept opgeslagen · versie 1"; `outputs/qa/offerte-audit.png` is visueel gecontroleerd en toont versie, nummer, naam, e-mailadres en tijdstip.
+
+### Niet geverifieerd in deze omgeving
+
+De twee mislukte Vitest-tests en de drie mislukte browserroutes zijn **niet** door deze wijziging veroorzaakt: dezelfde vijf vallen om op de ongewijzigde code van commit 82305d1, met identieke foutmelding en regelnummer. De oorzaak is deze container: Chromium kan zijn sandbox niet starten, dus elke server-side PDF-render geeft 500. `chromiumSandbox: true` is bewust niet aangepast om de proef te laten slagen. De auditassertie voor deellinks is daarom bewust in een proef zonder renderer gezet: die schrijft de PDF-bytes vooraf in `quote_exports`, zodat de registratie wordt getoetst en niet de renderer. Het renderpad houdt zijn eigen bestaande tests. Linux-CI met de gepinde Chromium moet de vijf resterende proeven bevestigen.
+
+### Eerstvolgende stap
+
+Het resterende open punt van fase 6 is een aantoonbare PDF-proef met meerdere planbladen; die vraagt een werkende Chromium-sandbox. Daarna blijven de grenzen uit de vorige aanvulling staan: fase-5-presentatiebouwer, PPTX, productie-exportqueue, installatie/back-up/herstel en fase-9-hardening. Een werkruimtebreed auditscherm buiten offertes is niet gebouwd en is geen onderdeel van fase 6.
+
 ## Aanvulling 10 september 2026 — afronding offerteworkflow fase 6
 
 Deze aanvulling is leidend voor fase 6; de oudere rapportages hieronder blijven als historische testregistraties staan. De wijzigingen zijn samengevoegd met main cb03021, inclusief de materiaalberekeningen en nieuwe editor-/browsertests. Het eerste offertedeel uit PR #2 staat al in main; de afronding krijgt een afzonderlijke pull request.
@@ -23,6 +114,7 @@ Toegevoegd: offerteformulier met klant-/adresgegevens, datum/geldigheid, voorwaa
 Migration 0010_quotes bewaart immutable concept-/definitieve snapshots onder FORCE RLS. Elke write vereist owner/admin/finance, projectcontext, baseVersion en een herhaalbaar requestId. Finalisatie en jaar-/organisatienummering zijn één transactie; definitieve versies weigeren wijzigingen. Materialen bewaren entry-/version-ID, onbekende/vreemde bronnen worden afgewezen, dubbele materiaalbronnen geweigerd. Verschillen zijn opvraagbaar; verouderde bronnen blokkeren finalisatie. Finalisatie neemt dezelfde materiaal-publicatielock zodat een wijziging niet tussen controle en commit kan vallen. Er wordt geen verzending of klantacceptatie gefingeerd.
 
 Lokale verificatie op Windows, 8 september:
+
 - TypeScript strict geslaagd; Vite-productiebuild met `--configLoader runner` geslaagd (9,49 s). Bekende grote chunks blijven bestaan.
 - Vier nieuwe rekentests geslaagd; bredere run: 31 geslaagd, één bestaande opslagtest faalde bij het aanmaken van een symlink (Windows EPERM). Geen geslaagde volledige suite geclaimd.
 - Vier nieuwe echte PostgreSQL/API-tests en een browserroute toegevoegd. Lokale database-start blokkeert vóór de tests door `uv_os_get_passwd returned ENOMEM` in embedded-postgres. Deze integratie- en E2E-tests zijn dus nog niet geslaagd.
@@ -38,6 +130,7 @@ Bijgewerkt: 6 september 2026. Release 0.0.1 is een ontwikkelbasis, geen producti
 ## Fase 0 — verticale basis en risicoproeven getoetst
 
 Werkend en getoetst:
+
 - React/Vite-ontwerpstudio met login, projectoverzicht, nieuw project, opt-in fictieve woonkamer, Konva-plan, objectlijst, numerieke meubeltransforms, undo/redo en SVG-download.
 - Canoniek scene-schema v1 met gehele mm, 2D/3D-assenconversie, schuine muren en aan muren gekoppelde openingen. Pure commandobatches valideren het eindresultaat.
 - Fastify /api/v1, Better Auth met Drizzle, PostgreSQL 18.4, afzonderlijke runtime-/identity-roles. SQL-migrations met hashcontrole en advisory lock.
@@ -45,6 +138,7 @@ Werkend en getoetst:
 - Private lokale opslagadapter met opaque IDs, groottecontrole, atomisch schrijven, symlink-/traversalafwijzing.
 
 Uitgevoerde verificatie op 6 september 2026, macOS arm64, Node 22.23.1:
+
 - TypeScript strict en Vite-productiebuild geslaagd om 08:51. Vite meldt grote chunks (~804 kB hoofdscherm, ~910 kB lazy 3D, ongecomprimeerd); verdere splitsing blijft open. Typecheck na de database-startcontrole opnieuw geslaagd.
 - Volledige Vitest-run: **24 tests / 6 bestanden geslaagd**, 6,06 s om 08:51. Daarna database-startcontrole toegevoegd: **9 integratietests geslaagd**, 1,67 s om 08:53, inclusief ontbrekende/gewijzigde/nieuwere migrations. Samen 25 bestaande en nieuwe getoetste tests; geen volledige 25-test-run geclaimd.
 - Browserrun: **3 tests geslaagd**, 8,9 s. Login → project → 2400 mm bank → draaien → undo → verplaatsen → herladen → SVG → zichtbare 3D; telefoon/tablet zonder horizontale overflow; uitnodiging → nieuw account → viewer-rechten; belastingproef met 500 objecten en 100 muren.
@@ -55,6 +149,7 @@ Uitgevoerde verificatie op 6 september 2026, macOS arm64, Node 22.23.1:
 - Eerdere dependency-audit 5 september: 0 gerapporteerde kwetsbaarheden. Geen nieuwe audit geclaimd na toevoeging Prettier. Geen volledige securityrelease-gate.
 
 Omgeving:
+
 - De eerste sandbox verbood PostgreSQL shared memory en Chromium Mach ports. Daarna zijn expliciet toegestane escalaties gebruikt voor de testprocessen.
 - Colima-start op 5 september werd automatisch afgewezen vanwege gebruikslimiet. Op 6 september na hervatting opnieuw toegestaan en succesvol gestart. Bestaande Colima VM: 4 CPU, 4 GiB, arm64. Geen Hyper-V-test gedaan.
 
@@ -117,6 +212,7 @@ Ruimteherkenning detecteert begrensde vlakken in het muurpuntnetwerk. Open verta
 Ontwerpvarianten kunnen worden bekeken, gekopieerd en geopend binnen één project. Kopieën krijgen nieuwe node-/wall-/opening-/item-/floor-IDs en revisie 0; oorspronkelijke revisiegeschiedenis wordt niet gekopieerd. Copy controleert rol, organisatie en actuele bronrevisie. Migration 0006_variant_copies bewaart herhaalmetadata onder FORCE RLS. Gelijktijdige identieke verzoeken leveren één kopie; gewijzigd verzoek met hetzelfde ID wordt geweigerd. Projectoverzicht toont één kaart met voorkeur voor de oorspronkelijke variant. Per project maximaal 100 varianten. De editor remount bij variantwissel zodat lease, selectie en lokale geschiedenis gescheiden blijven. De breadcrumb toont de huidige variantnaam.
 
 Verificatie 6 september 09:25–09:31:
+
 - Vijf nieuwe ruimtetests slagen, inclusief 500 gegenereerde rechthoeken/translaties, schuine kamer, aangrenzende kamers, open vertakkingen, geneste contouren en ongeldige kruisingen/overlap.
 - Volledige Vitest-run **34 tests / 7 bestanden geslaagd, 6,47 s**. Inclusief gelijktijdige kopieverzoeken, herhaalveiligheid, tenant-/viewerafwijzing, nieuwe referenties en onafhankelijke kopiegeometrie.
 - Volledige browserrun **4 geslaagd, 11,6 s**. Inclusief 29,04 m², zichtbare 3D, variant maken, maat wijzigen, terugwisselen en ongewijzigde basismuur controleren.
@@ -216,6 +312,7 @@ Nieuwe rekenregels, expliciet gedocumenteerd in `packages/geometry/src/quantitie
 Daarnaast: iedere `pg`-pool krijgt nu een error-listener (`guardPool`). Zonder die listener beëindigt Node het API-proces zodra PostgreSQL een inactieve verbinding sluit, bijvoorbeeld bij een herstart.
 
 Verificatie 7 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+
 - **Volledige Vitest-run: 61 tests / 11 bestanden geslaagd, 14,3 s.** Nieuw: 8 geometrie- en decimaaltests en 2 contracttests, plus 2 integratietests tegen echte PostgreSQL.
 - De geometrietests dekken netto vloer/omtrek/plint/wandoppervlak, deur versus raam, een ingesloten ruimte, te dikke muren, een open contour, onafhankelijkheid van muurrichting en 200 gegenereerde verschuivingen. Het netto oppervlak van de demoruimte (27.154.275 mm²) en de netto omtrek (20.608 mm) zijn los nagerekend met A(d) = A − P·d + d²·Σcot(hoek/2) bij d = 90 mm; beide komen exact overeen.
 - De integratietest toetst tegen echte PostgreSQL: serverberekening en opgeslagen bronrevisie, eenheid uit de bronmaat in plaats van uit de client, onbekende ruimte (409), variant van een ander project (404), variant van een andere werkruimte (404), viewer-afwijzing (403), hoeveelheid zonder onderbouwing (400), onderbouwde afwijking naast de berekening, en na een `ResizeWall` een lagere netto maat met bronrevisie 1.
@@ -232,7 +329,7 @@ Open voor de rest van fase 4: alternatieven en gekozen alternatief, prijsbron en
 
 ### CI voor het eerst extern gedraaid
 
-Op 7 september 19:03–19:05 UTC draaide de workflow *Foundation verification* voor het eerst op een GitHub-runner (ubuntu-24.04, Node 24.18.1, pnpm 11.19.0), op commit `deabc13`. Alle stappen slaagden: `pnpm install --frozen-lockfile`, `playwright install --with-deps chromium`, `pnpm build`, `pnpm test`, `pnpm test:e2e` (42 s) en `pnpm audit --audit-level high`. Daarmee is de eerdere aantekening "CI nog niet extern uitgevoerd" achterhaald. De runner installeert zijn eigen Chromium, dus de nieuwe `PLAYWRIGHT_CHROMIUM_EXECUTABLE`-optie is daar niet actief. Er is nog geen securityscan van containers of secrets; de securityrelease-gate uit fase 9 blijft open.
+Op 7 september 19:03–19:05 UTC draaide de workflow _Foundation verification_ voor het eerst op een GitHub-runner (ubuntu-24.04, Node 24.18.1, pnpm 11.19.0), op commit `deabc13`. Alle stappen slaagden: `pnpm install --frozen-lockfile`, `playwright install --with-deps chromium`, `pnpm build`, `pnpm test`, `pnpm test:e2e` (42 s) en `pnpm audit --audit-level high`. Daarmee is de eerdere aantekening "CI nog niet extern uitgevoerd" achterhaald. De runner installeert zijn eigen Chromium, dus de nieuwe `PLAYWRIGHT_CHROMIUM_EXECUTABLE`-optie is daar niet actief. Er is nog geen securityscan van containers of secrets; de securityrelease-gate uit fase 9 blijft open.
 
 ### Eerstvolgende stap na deze aanvulling
 
@@ -253,6 +350,7 @@ Kiezen doe je in de lijst met de knop **Kies <naam>**. Het gekozen alternatief s
 Geen databasemigration: alles staat in de bestaande `definition`-JSONB. Materiaalversies van vóór deze wijziging missen de nieuwe sleutels; `withDefaults` vult die bij het lezen aan zonder de bewaarde versie te wijzigen of te valideren. Zo blijft een oude versie precies zoals hij is opgeslagen.
 
 Verificatie 7 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+
 - **Volledige Vitest-run: 67 tests / 11 bestanden geslaagd, 14,5 s** (was 61). Nieuw: vijf contracttests over prijsregels, monsterregels, alternatieven, `withDefaults` op een oude definitie en het indicatiebedrag, plus één integratietest tegen echte PostgreSQL.
 - Die integratietest toetst: alternatief met prijs bewaren en teruglezen, kiezen op versie 0 geweigerd (409), verzonnen herkomst geweigerd (409), tegelijk de prijs aanpassen geweigerd (409), een andere naam claimen geweigerd (409), geldige promotie geaccepteerd, de omgekeerde alternatievenlijst na promotie, de ongewijzigde versie 1 in de database, en prijs- en monsterregels die het contract afwijst (400).
 - **Volledige browserrun: 7 routes geslaagd, 46,3 s**, inclusief de nieuwe route: prijs zonder bron geweigerd, prijsbron/datum/monster invullen, alternatief toevoegen, bewaren, indicatiebedrag € 2.248,50 bij 30 m², alternatief kiezen, herkomst en omgedraaide lijst zien, en na herladen versie 2 terugvinden.
@@ -283,6 +381,7 @@ Daarbij opgelost: de canvasknop **Passend** had een eigen fit-berekening die neg
 `selected` is van één ID naar een lijst gegaan. Shift-, ctrl- of cmd-klikken in de plattegrond of de objectlijst voegt toe of haalt weg. Bij twee of meer meubels verschijnt een paneel met zes uitlijningen en twee verdelingen. `packages/geometry/src/arrange.ts` rekent met de asgerichte omhullende van een gedraaid meubel, dus een bank die 30 graden staat lijnt uit op wat je op het plan ziet. Verdelen maakt de tussenruimten tussen de omhullenden gelijk en laat het eerste en laatste meubel staan; passen ze niet, dan worden de tussenruimten negatief en overlappen ze zichtbaar. Alle verplaatsingen gaan als één batch naar de server en zijn dus één stap terug.
 
 Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+
 - **94 tests / 15 bestanden geslaagd, 23,1 s** (was 75 na de merge). Nieuw: elf vangtests en acht uitlijn-/verdeeltests, met 300 respectievelijk 200 gegenereerde gevallen die bewijzen dat de uitkomst altijd hele millimeters is.
 - **10 browserroutes geslaagd, 1,2 min.** Twee nieuwe. De vangroute kalibreert zichzelf: zij meet eerst de schaal met een sleep van 120 px en drukt daarna alles in schermpixels uit, zodat zij niet op de fit-formule van de editor leunt. Rasterslepen levert hele honderdtallen, uitlijnen op een ander meubel levert exact hetzelfde hart, en met vangen uit blijft het meubel staan waar het losgelaten wordt. De uitlijnroute controleert gelijke linkerranden, een ongemoeide y-as, één stap terug voor drie meubels tegelijk en gelijke tussenruimten na verdelen.
 - TypeScript strict en productiebuild geslaagd (9,7 s). Bekende chunkgroottewaarschuwing blijft open.
@@ -303,6 +402,7 @@ Twee nieuwe opdrachten: `SetItemDisplay` zet laag, vergrendeling of zichtbaarhei
 Vergrendeling wordt afgedwongen in `applyOperations`, dus ook wanneer een opdracht niet uit de editor komt: `TransformItem` en `DeleteSelection` op een vergrendeld object leveren een leesbare fout. Ontgrendelen mag altijd. Verborgen objecten worden niet getekend en doen ook niet mee aan het vangen, maar blijven in de objectlijst staan met een oog- en slotpictogram.
 
 Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+
 - **104 tests / 17 bestanden geslaagd, 26,5 s** (was 94). Nieuw: zeven volgordetests en drie commandotests voor lagen, vergrendeling en volgorde.
 - **11 browserroutes geslaagd, 1,5 min.** De nieuwe route wisselt een meubel van laag, verbergt de laag en controleert dat het object uit beeld is maar in de lijst blijft, vergrendelt de laag, ziet verwijderen afgewezen worden met de servermelding, ontgrendelt, verandert de volgorde en vindt alles terug na herladen.
 - TypeScript strict en productiebuild geslaagd (9,8 s). Bekende chunkgroottewaarschuwing blijft open.
@@ -327,6 +427,7 @@ Daarbij opgelost: het canvas gaf een klik alleen door wanneer die op leeg vlak v
 `v` selecteren, `m` muur, `d` deur, `r` raam, `t` maat. Escape gaat terug naar selecteren en heft de selectie op, Delete of Backspace verwijdert de selectie, Ctrl/Cmd+Z is een stap terug en met Shift erbij opnieuw. De afhandeling slaat invoervelden over, zodat typen in een maatveld nooit van gereedschap wisselt of iets verwijdert.
 
 Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+
 - **111 tests / 18 bestanden geslaagd, 25,1 s** (was 104). Zeven nieuwe maatlijntests, waaronder 300 gegenereerde gevallen die aantonen dat het label nooit op zijn kop staat en de lengte altijd heel is.
 - **12 browserroutes geslaagd, 1,5 min.** De nieuwe route kiest het maatgereedschap met een sneltoets, meet tussen twee muurpunten, controleert dat het geëxporteerde planblad **6.200 mm** bevat — de muurlengte uit de geometrie, niet uit de muispositie — verwijdert de maatlijn met Delete en zet dat terug met Ctrl+Z.
 - TypeScript strict en productiebuild geslaagd (9,5 s).
@@ -347,10 +448,12 @@ Met het gereedschap Selecteren trek je op leeg vlak een kader; alles wat het kad
 Een geselecteerde maatlijn krijgt een eigen eigenschappenpaneel met de gemeten lengte, een veld voor de afstand tot de gemeten lijn en een knop **Naar de andere kant**. De lengte staat er alleen ter informatie: die is afgeleid en niet los te bewerken. De nieuwe opdracht `SetAnnotationOffset` verzet alleen de verschuiving.
 
 Twee dingen die daarbij opvielen en zijn hersteld:
+
 - Maatlijnen stonden niet in de objectlijst, terwijl die lijst juist het toegankelijke alternatief voor aanwijzen op het canvas hoort te zijn. Ze staan er nu als **Maat 1**, **Maat 2** enzovoort, en tellen mee in het objectaantal.
 - **Passend** keek alleen naar muurpunten. Een maatlijn die buiten de muren ligt — na omklappen bijvoorbeeld — viel daardoor buiten beeld en was niet meer aan te klikken. De berekening neemt nu ook de maatlijnen mee.
 
 Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+
 - **113 tests / 18 bestanden geslaagd, 18,6 s** (was 111). Twee nieuwe kadertests, inclusief precies op de rand raken, een kader dat van rechtsonder naar linksboven loopt en een gedraaid meubel.
 - **13 browserroutes geslaagd, 1,1 min.** De nieuwe route trekt een kader over de linkerhelft en krijgt twee van de vier meubels, controleert dat een klik zonder sleep de selectie opheft, tekent een maatlijn, verzet die naar 900 mm, klapt hem om naar -900 mm en vindt dat na herladen terug.
 - TypeScript strict en productiebuild geslaagd (7,1 s).
@@ -371,6 +474,7 @@ De keuze voor raster in plaats van PDF staat in `docs/adr/0004-underlay-images.m
 Daarbij opgelost: **Passend** keek niet naar de onderlegger, net zoals het eerder niet naar maatlijnen keek. Een onderlegger die groter is dan het plan viel daardoor buiten beeld. Dat kwam aan het licht doordat de browsertest een schaal van 20,8 mm per pixel kreeg in plaats van 12,5: mijn omrekening van scherm naar wereld klopte niet, omdat de app anders inzoomde dan de test aannam.
 
 Verificatie 10 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded):
+
 - **124 tests / 21 bestanden geslaagd, 19,2 s** (was 113). Vijf kopleestests met een in de test zelf gemaakt geldig PNG en JPEG, inclusief afgekapte en misvormde bestanden, SVG, PDF, GIF en onmogelijke maten. Vijf kalibratietests met 200 gegenereerde gevallen voor heen-en-terug rekenen.
 - Eén nieuwe integratietest tegen echte PostgreSQL: type- en maatcontrole, herhaling met dezelfde ID, een ander bestand onder dezelfde ID (409), geweigerde SVG/PDF/GIF/afgekapt bestand (422) zonder dat er een rij achterblijft, vast content-type met nosniff, andere werkruimte krijgt 404, alleen-lezen mag niet uploaden maar wel bekijken, geen UPDATE-recht voor de runtime-rol, en het quotum.
 - **14 browserroutes geslaagd, 1,3 min.** De nieuwe route weigert eerst een SVG, uploadt dan een echt PNG van 1000 × 800, meet twee punten in op 5.000 mm en controleert de schaal.
@@ -388,17 +492,20 @@ Muren werden getekend als dikke lijnen met stompe uiteinden. Op elke hoek liet d
 `packages/geometry/src/walls.ts` levert nu per muur een gesloten contour waarvan de uiteinden versneden zijn tegen de aansluitende muur. Vanaf een gedeeld punt wijzen beide muren weg; de plus-zijde van de een sluit daarom aan op de min-zijde van de ander. Muren van verschillende dikte sluiten net zo goed aan.
 
 Bewuste beperkingen, met reden:
+
 - **Versnijden gebeurt alleen wanneer op een punt precies één andere muur uitkomt.** Op een T-aansluiting of kruising is er geen enkele juiste versnijding. Daar eindigt de muur stomp op het punt zelf; dat valt niet op omdat de doorgaande muur het uiteinde bedekt.
 - **Bij zeer scherpe hoeken vervalt de versnijding.** Voorbij zes keer de muurdikte zou er een lange punt uitsteken; dan is een stomp uiteinde beter.
 
 Zowel het canvas als het geëxporteerde planblad gebruiken dezelfde contouren. Op het planblad worden de muurvlakken eerst allemaal getekend en pas daarna de doorsnede op 1.200 mm uit de openingen gewit, zodat een aangrenzende muur nooit een opening dichttekent die vlak bij een hoek ligt.
 
 Verificatie 10 september, Linux x64, Node 22.22.2:
+
 - **132 tests / 22 bestanden geslaagd, 19,9 s** (was 124). Acht contourtests: los uiteinde, rechte hoek, verschillende diktes, T-aansluiting, zeer scherpe hoek, collineaire muren, en 200 gegenereerde gevallen die aantonen dat elke contour vier eindige punten houdt.
 - **14 browserroutes geslaagd, 1,2 min.** TypeScript strict en productiebuild geslaagd (7,5 s).
 - Zowel het canvas als het geëxporteerde planblad naar afbeelding gerenderd en bekeken: de hoeken zijn dicht, ook de schuine hoek, en de openingen blijven schone gaten.
 
 Twee dingen die het testen opleverde:
+
 - Mijn eerste testverwachting was dat versnijden oppervlak toevoegt. Dat klopt niet: bij een rechte hoek verplaatst het materiaal — wat de buitenhoek erbij krijgt, verliest de binnenhoek. De test controleert nu waar het werkelijk om gaat, namelijk dat een punt vlak buiten de hoek gedekt is.
 - De gevulde contour verving een lijn met een gegarandeerde trefzone van twintig pixels. Zonder die zone is een dunne muur bij uitzoomen niet meer aan te wijzen. De trefzone is teruggezet en een browserroute controleert nu dat een muur op het canvas aanklikbaar blijft.
 
@@ -421,6 +528,7 @@ Het tekenblad heeft een legenda die per laag meldt hoeveel objecten getoond en h
 **Daarbij een echte fout gevonden.** De legenda meldde "Inrichting: 0 getoond, 3 verborgen" terwijl het blad die drie meubels gewoon tekende: het exportpad filterde verborgen objecten niet. Dat is precies de fout die de legenda hoort te voorkomen. Verborgen objecten tellen nu ook niet meer mee voor de bladomvang. De browsertest controleert sindsdien niet alleen de legendatekst maar ook dat de verborgen namen werkelijk niet in de SVG staan; die tweede controle ontbrak eerst, en daardoor zag alleen de visuele inspectie het.
 
 Verificatie 10 september, Linux x64, Node 22.22.2:
+
 - **132 tests / 22 bestanden geslaagd, 22,0 s** en **15 browserroutes geslaagd, 1,5 min.** TypeScript strict en productiebuild geslaagd (7,7 s).
 - De nieuwe browserroute plaatst een notitie, wijzigt de tekst, controleert die op het planblad, zet een meubel op de laag Verlichting, past de preset toe en controleert dat legenda en tekening hetzelfde zeggen — beide kanten op.
 - Het geëxporteerde blad is naar afbeelding gerenderd en bekeken, vóór en na de correctie.
@@ -436,6 +544,7 @@ Eén lid aanwijzen pakt de hele groep — op het canvas, met het sleepkader en i
 Slepen verplaatst alle leden met dezelfde verschuiving, als één batch en dus één stap terug. Konva verplaatst alleen het aangewezen object; de groepsgenoten krijgen tijdens de sleep dezelfde verschuiving mee, anders valt de groep visueel uit elkaar tot de opdracht landt. Een vergrendeld lid laat de hele verplaatsing afwijzen — dat is dezelfde transactionele regel als elders, met een leesbare melding.
 
 Verificatie 10 september, Linux x64, Node 22.22.2:
+
 - **139 tests / 23 bestanden geslaagd, 28,2 s** (was 132). Zeven groepstests: selectie uitbreiden, losse objecten met rust laten, twee groepen tegelijk, groeperen en opheffen via opdrachten, de weigering van een groep van één, en het opruimen van een groepsverwijzing nadat leden verwijderd zijn.
 - **16 browserroutes geslaagd, 1,9 min.** De nieuwe route groepeert twee meubels, controleert dat één aanwijzen de groep pakt, sleept ze samen, controleert dat de derde niet meebeweegt, zet het met één stap terug en heft de groep weer op.
 - Schermopname midden in de sleep bekeken: beide leden schuiven mee, de eettafel blijft staan.
@@ -497,6 +606,7 @@ Verplaatsen gaat met een eigen gereedschap, aan te zetten in het onderleggerpane
 Onderweg gecorrigeerd: de eerste normalisatie van de kwartslagknop leverde −180 in plaats van 180 graden — dezelfde hoek, maar een verwarrend getal in het veld. De knop houdt nu, net als bij meubels, 0 tot 359 graden aan.
 
 Verificatie 10 september, Linux x64, Node 22.22.2:
+
 - **156 tests / 22 bestanden geslaagd, 28,7 s** (was 151). Vijf nieuwe onderleggertests: omrekenen om de hoek bij 90 graden, de draaiing in de plaatsing, de vier hoeken van een gedraaide afbeelding, draaien dat het midden op zijn plaats houdt in hele millimeters, en draaien naar dezelfde hoek dat niets verplaatst. De bestaande eigenschapstest met 200 gevallen draait nu ook over willekeurige hoeken van −360 tot 360.
 - **17 browserroutes geslaagd, 2,1 min.** De onderleggerroute plaatst de afbeelding numeriek, draait hem 90 graden, controleert dat de hoek daarbij verschuift, maakt vier kwartslagen en komt binnen 3 mm terug op het beginpunt, sleept de afbeelding over het canvas en controleert dat de plaatsing op hele honderden millimeters landt, en vindt plaats en hoek terug na herladen.
 - TypeScript strict en productiebuild geslaagd (10,4 s).
@@ -559,6 +669,7 @@ Verificatie op macOS arm64, Node 22.23.1:
 - De zelfstandige offerte-browsertest is geslaagd (5,5 s testtijd; 9,7 s totaal): invoer, marge, definitief maken, herladen, PDF-download, deellink, intrekken en vervolgconcept. Screenshot `outputs/qa/offerte-definitief.png` bekeken; interne totalen zijn leesbaar en duidelijk van de klanttotalen gescheiden.
 
 De eerste losse browserpoging bereikte het projectoverzicht niet, omdat de route alleen cookies uit een eerder uitgevoerde test gebruikte. De route logt nu zelf in wanneer die cookies ontbreken en is daarmee afzonderlijk uitvoerbaar. Nog open binnen de verdere afwerking van fase 6: een auditoverzicht in de interface en aantoonbare PDF-proeven met meerdere planbladen. De productiequeue valt onder de bredere export- en beheerfasen.
+
 ## Aanvulling 10 september 2026 — fase 4: LED-paden
 
 Fase 4 had de materiaalkant al (catalogus, keuzestatussen, alternatieven, hoeveelheden). Dit is de eerste helft van het lichtplan: **LED-strips als bewerkbare polyline**.
@@ -721,7 +832,7 @@ Een deellink wijst altijd naar één versie. Het ontwerp mag daarna verder; de k
 
 **Twee keer publiceren met hetzelfde verzoek-ID levert dezelfde versie op.** Dat is precies de eis uit het masterprompt dat een mislukte poging geen dubbele publicatie maakt. De PDF wordt bij de versie bewaard en is daarna byte-identiek; een deellink wordt pas gemaakt nadat de PDF er is, zodat een gedeelde link nooit naar een half bestand wijst.
 
-Migration `0013_presentations.sql` volgt hetzelfde patroon als de offertes: RLS met `FORCE ROW LEVEL SECURITY`, `tenant_isolation`-policies, en het runtime-account krijgt alleen SELECT en INSERT. Er is één uitzondering, expliciet toegekend: het concept mag worden bijgewerkt en een deellink mag worden ingetrokken. Gepubliceerde versies en exports kunnen niet worden gewijzigd, ook niet door de applicatie zelf.
+Migration `0016_presentations.sql` (bij het schrijven `0013`, hernummerd toen main de 0013 tot en met 0015 in gebruik nam) volgt hetzelfde patroon als de offertes: RLS met `FORCE ROW LEVEL SECURITY`, `tenant_isolation`-policies, en het runtime-account krijgt alleen SELECT en INSERT. Er is één uitzondering, expliciet toegekend: het concept mag worden bijgewerkt en een deellink mag worden ingetrokken. Gepubliceerde versies en exports kunnen niet worden gewijzigd, ook niet door de applicatie zelf.
 
 ### Twee echte fouten in het paneel
 
@@ -828,3 +939,33 @@ De twee meldingen staan daarom **bij naam en GHSA-nummer** in `pnpm-workspace.ya
 ### Nog open in fase 5
 
 **pg-boss** als echte wachtrij met gescheiden concurrency voor zware en lichte taken; de werker draait nog in het API-proces. Uitgebreide PPTX-QA op echte klantdata schuift naar fase 9. Verder is het 3D-camerablok afhankelijk van fase 7.
+
+## Aanvulling 11 september 2026 — main binnengehaald: presentaties volgen de projecttoegang
+
+`main` liep door met werk van Codex: een rechtenmatrix, expliciete projectmembership, een auditoverzicht per offerte en accountherstel. Deze tak botste daarop. Bij het samenvoegen kwamen drie dingen naar boven die meer zijn dan tekstconflicten.
+
+### Een presentatie-ID mag geen zijingang zijn
+
+Main maakte projecten beperkbaar: een project is óf open voor de hele werkruimte, óf alleen voor expliciete leden, en elke projectgebonden route loopt sindsdien langs de **projectrol** in plaats van de werkruimterol. De presentatieroutes kwamen uit deze tak en deden dat nog niet.
+
+Dat is niet alleen een gemiste conventie. Een presentatie draagt het projectnummer niet in haar pad: `/api/v1/presentations/<id>` zegt nergens bij welk project ze hoort. Zonder eigen controle kon een ontwerper die geen lid is van een beperkt project de presentatie er wél uit lezen — inclusief het planblad en de prijzen erin.
+
+`ProjectAccessService` heeft er daarom drie ingangen bij, alle drie via dezelfde `resolveProjectRole`: vanaf een presentatie, vanaf een exporttaak en vanaf een deellink. De API gebruikt ze voor elke presentatieroute die niet al een projectnummer in het pad heeft.
+
+**De test is eerst omgevallen zonder de controle en daarna geslaagd met.** Zonder de koppeling gaf `/presentations/<id>` een 200 aan een niet-lid waar 404 hoort; dat is nagespeeld door één route tijdelijk terug te zetten. De route dekt lezen, publiceren, exporteren, de deellinklijst, de PDF, de webviewer en het intrekken — plus de bevestiging dat een bestaande deellink blijft werken, want die hangt aan het token en niet aan een sessie.
+
+### Twee migrations met hetzelfde nummer
+
+Main nam 0013, 0014 en 0015 in gebruik; deze tak had zelf al 0013 en 0014 voor de presentaties. Git ziet daar geen conflict in — het zijn andere bestandsnamen — maar twee migrations met hetzelfde nummer is precies het soort verwarring dat later misgaat. De presentatiemigrations heten nu `0016_presentations.sql` en `0017_presentation_exports.sql`; de inhoud is ongewijzigd.
+
+### En één gewoon conflict
+
+`contentOf` in de domeinlaag: deze tak voegde `ledPaths` toe aan de inhoud van een scene, main verving de rolopsomming door de rechtenmatrix. Beide horen erin.
+
+### Verificatie 11 september, Linux x64, Node 22.22.2, PostgreSQL 18.4 (embedded)
+
+- **249 tests / 30 bestanden geslaagd, 44,5 s.** Dat is deze tak (230) plus het werk van main (18) plus de nieuwe toegangstest.
+- **22 browserroutes geslaagd, 2,3 min.** Twee daarvan kwamen met main mee.
+- `probe:presentation` en `probe:quote` met alle drie de controlescripts: 8 pagina's met een schaalreferentie van exact 100 mm, 9 dia's van 10 × 5,625 inch met 3 bewerkbare tabellen en alleen Georgia, en 7 offertepagina's met 40 unieke posten, exact totaal en een schaallijn van 100 mm.
+- `pnpm audit --audit-level high` schoon op de twee genoteerde image-size-meldingen na.
+- TypeScript strict en productiebuild geslaagd (10,6 s).

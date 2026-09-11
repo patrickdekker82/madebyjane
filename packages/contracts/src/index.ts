@@ -567,3 +567,18 @@ export type LibraryVersion = {
   version: number;
   definition: LibraryDefinition;
 };
+
+/** Gedeeld tussen server en interface; geen databasecode in dit bestand. */
+export const projectAccessModes = ["organization", "restricted"] as const;
+export type ProjectAccess = (typeof projectAccessModes)[number];
+/**
+ * Projectrollen zijn bewust beperkt tot de drie werkrollen: owner en admin zijn
+ * hier niet toe te kennen, anders was ledenbeheer via een project uit te breiden.
+ */
+export const projectRoles = ["designer", "finance", "viewer"] as const;
+export const projectMemberInput = z
+  .object({ userId: z.string().min(1).max(255), role: z.enum(projectRoles) })
+  .strict();
+export const projectAccessInput = z
+  .object({ access: z.enum(projectAccessModes) })
+  .strict();

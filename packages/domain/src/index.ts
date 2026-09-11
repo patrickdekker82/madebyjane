@@ -1,4 +1,10 @@
 import {
+  can,
+  permissionMessages,
+  type Role,
+  type Permission,
+} from "./permissions";
+import {
   sceneSchema,
   operationSchema,
   type Scene,
@@ -221,7 +227,20 @@ export const contentOf = ({
     ledPaths,
     underlay,
   });
-export type Role = "owner" | "admin" | "designer" | "finance" | "viewer";
+export {
+  can,
+  permissionsFor,
+  permissions,
+  roles,
+  type Role,
+  type Permission,
+} from "./permissions";
+/** Korte vorm voor het meest gebruikte recht; de matrix blijft de bron. */
 export function canWrite(role: Role) {
-  return ["owner", "admin", "designer"].includes(role);
+  return can(role, "project.write");
+}
+/** Weigert fail-closed met de vaste melding bij het geweigerde recht. */
+export function requirePermission(role: Role, permission: Permission) {
+  if (!can(role, permission))
+    throw new DomainError("FORBIDDEN", permissionMessages[permission], 403);
 }

@@ -1,5 +1,6 @@
 import { MaterialService } from "../../../packages/domain/src/materials";
 import { QuoteService } from "../../../packages/domain/src/quotes";
+import { ProjectAccessService } from "../../../packages/domain/src/project-access";
 import { QuoteResources } from "../../../packages/domain/src/quote-resources";
 import { QuoteDelivery } from "../../../packages/domain/src/quote-delivery";
 import { ModelAssetService } from "../../../packages/domain/src/model-assets";
@@ -14,11 +15,16 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createAuth } from "../../../packages/auth/src/index";
 import { InvitationService } from "../../../packages/auth/src/invitations";
+import { RecoveryService } from "../../../packages/auth/src/recovery";
 import {
   ProjectService,
   type Context,
 } from "../../../packages/domain/src/projects";
-import { DomainError, canWrite } from "../../../packages/domain/src/index";
+import {
+  DomainError,
+  canWrite,
+  requirePermission,
+} from "../../../packages/domain/src/index";
 import {
   id,
   projectInput,
@@ -50,6 +56,11 @@ export function createServer(config: {
   const auth = createAuth(config.identity, config.baseURL, config.secret);
   const service = new ProjectService(config.runtime);
   const invitations = new InvitationService(
+    config.identity,
+    config.baseURL,
+    config.secret,
+  );
+  const recovery = new RecoveryService(
     config.identity,
     config.baseURL,
     config.secret,
@@ -146,6 +157,31 @@ export function createServer(config: {
       );
     return { userId: s.user.id, organizationId: org, role: r.rows[0].role };
   }
+  const access = new ProjectAccessService(config.runtime);
+  /**
+   * Contexten voor projectgebonden routes. De rol die de services zien is de
+   * rol voor dít project, zodat elke route organisatie én project controleert.
+   */
+  const projectContext = async (
+    headers: Parameters<typeof context>[0],
+    project: string,
+  ) => access.forProject(await context(headers), project);
+  const variantContext = async (
+    headers: Parameters<typeof context>[0],
+    variantId: string,
+  ) => access.forVariant(await context(headers), variantId);
+  const presentationContext = async (
+    headers: Parameters<typeof context>[0],
+    presentationId: string,
+  ) => access.forPresentation(await context(headers), presentationId);
+  const exportJobContext = async (
+    headers: Parameters<typeof context>[0],
+    jobId: string,
+  ) => access.forExportJob(await context(headers), jobId);
+  const presentationShareContext = async (
+    headers: Parameters<typeof context>[0],
+    shareId: string,
+  ) => access.forPresentationShare(await context(headers), shareId);
   app.get("/api/v1/health", async () => ({ status: "ok", version: "0.0.1" }));
   app.get("/api/v1/me", async (req) => {
     const s = await session(req.headers);
@@ -171,6 +207,31 @@ export function createServer(config: {
     const ctx = await context(req.headers);
     return invitations.create(ctx.userId, ctx.organizationId, req.body);
   });
+  // Accountherstel. De beheerder geeft de link persoonlijk door; er wordt geen
+  // e-mail verstuurd en dat staat ook zo in het scherm.
+  app.post(
+    "/api/v1/members/:userId/recovery",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (req) => {
+      const ctx = await context(req.headers);
+      const p = z
+        .object({ userId: z.string().min(1).max(255) })
+        .parse(req.params);
+      return recovery.create(ctx.userId, ctx.organizationId, p.userId);
+    },
+  );
+  app.post("/api/v1/members/:userId/recovery/revoke", async (req) => {
+    const ctx = await context(req.headers);
+    const p = z
+      .object({ userId: z.string().min(1).max(255) })
+      .parse(req.params);
+    return recovery.revoke(ctx.userId, ctx.organizationId, p.userId);
+  });
+  app.post(
+    "/api/v1/recovery/accept",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (req) => recovery.accept(req.body),
+  );
   app.post("/api/v1/invitations/:invitationId/revoke", async (req) => {
     const ctx = await context(req.headers);
     return invitations.revoke(
@@ -279,8 +340,6 @@ export function createServer(config: {
   const quotes = new QuoteService(config.runtime);
   const resources = new QuoteResources(config.runtime),
     delivery = new QuoteDelivery(config.runtime, config.secret);
-  const presentations = new PresentationService(config.runtime, config.secret);
-  const exports = new ExportJobs(config.runtime);
   const versionParams = (params: unknown) =>
     z
       .object({
@@ -291,77 +350,126 @@ export function createServer(config: {
       .parse(params);
   app.get("/api/v1/projects/:id/quote-resources", async (req) =>
     resources.list(
-      await context(req.headers),
+      await projectContext(req.headers, z.object({ id }).parse(req.params).id),
       z.object({ id }).parse(req.params).id,
     ),
   );
   app.post("/api/v1/projects/:id/quote-prices", async (req) =>
     resources.price(
-      await context(req.headers),
+      await projectContext(req.headers, z.object({ id }).parse(req.params).id),
       z.object({ id }).parse(req.params).id,
       req.body,
     ),
   );
   app.post("/api/v1/projects/:id/quote-attachments", async (req) =>
     resources.attachment(
-      await context(req.headers),
+      await projectContext(req.headers, z.object({ id }).parse(req.params).id),
       z.object({ id }).parse(req.params).id,
       req.body,
     ),
   );
   app.get("/api/v1/projects/:id/quote-design/:revisionId", async (req) => {
     const p = z.object({ id, revisionId: id }).parse(req.params);
-    return resources.design(await context(req.headers), p.id, p.revisionId);
+    return resources.design(
+      await projectContext(req.headers, p.id),
+      p.id,
+      p.revisionId,
+    );
   });
   const quoteParams = (params: unknown) =>
     z.object({ id, quoteId: id }).parse(params);
   app.get("/api/v1/projects/:id/quotes", async (req) =>
     quotes.list(
-      await context(req.headers),
+      await projectContext(req.headers, z.object({ id }).parse(req.params).id),
       z.object({ id }).parse(req.params).id,
     ),
   );
   app.post("/api/v1/projects/:id/quotes", async (req) =>
     quotes.save(
-      await context(req.headers),
+      await projectContext(req.headers, z.object({ id }).parse(req.params).id),
       z.object({ id }).parse(req.params).id,
       req.body,
     ),
   );
   app.get("/api/v1/projects/:id/quotes/:quoteId/differences", async (req) => {
     const p = quoteParams(req.params);
-    return quotes.differences(await context(req.headers), p.id, p.quoteId);
+    return quotes.differences(
+      await projectContext(req.headers, p.id),
+      p.id,
+      p.quoteId,
+    );
   });
   app.post("/api/v1/projects/:id/quotes/:quoteId/finalize", async (req) => {
     const p = quoteParams(req.params);
     return quotes.finalize(
-      await context(req.headers),
+      await projectContext(req.headers, p.id),
       p.id,
       p.quoteId,
       req.body,
     );
   });
+  // Namen horen bij identity; de runtimeverbinding mag die tabel niet lezen.
+  async function withActors<T extends { user_id: string }>(rows: T[]) {
+    const ids = [...new Set(rows.map((r) => r.user_id))];
+    const users = ids.length
+      ? (
+          await config.identity.query(
+            'SELECT id,name,email FROM identity."user" WHERE id = ANY($1)',
+            [ids],
+          )
+        ).rows
+      : [];
+    const byId = new Map(users.map((u) => [u.id, u]));
+    return rows.map((r) => ({
+      ...r,
+      user_name: byId.get(r.user_id)?.name ?? null,
+      user_email: byId.get(r.user_id)?.email ?? null,
+    }));
+  }
+  app.get("/api/v1/projects/:id/quotes/:quoteId/audit", async (req) => {
+    const p = quoteParams(req.params);
+    const r = await quotes.audit(
+      await projectContext(req.headers, p.id),
+      p.id,
+      p.quoteId,
+    );
+    return { items: await withActors(r.items) };
+  });
   app.get("/api/v1/projects/:id/quotes/:quoteId/history", async (req) => {
     const p = quoteParams(req.params);
-    return quotes.history(await context(req.headers), p.id, p.quoteId);
+    return quotes.history(
+      await projectContext(req.headers, p.id),
+      p.id,
+      p.quoteId,
+    );
   });
   app.get(
     "/api/v1/projects/:id/quotes/:quoteId/versions/:version",
     async (req) => {
       const p = versionParams(req.params);
-      return quotes.get(await context(req.headers), p.id, p.quoteId, p.version);
+      return quotes.get(
+        await projectContext(req.headers, p.id),
+        p.id,
+        p.quoteId,
+        p.version,
+      );
     },
   );
   app.post("/api/v1/projects/:id/quotes/:quoteId/revise", async (req) => {
     const p = quoteParams(req.params);
-    return quotes.revise(await context(req.headers), p.id, p.quoteId, req.body);
+    return quotes.revise(
+      await projectContext(req.headers, p.id),
+      p.id,
+      p.quoteId,
+      req.body,
+    );
   });
   app.get(
     "/api/v1/projects/:id/quotes/:quoteId/versions/:version/events",
     async (req) => {
       const p = versionParams(req.params);
       return quotes.events(
-        await context(req.headers),
+        await projectContext(req.headers, p.id),
         p.id,
         p.quoteId,
         p.version,
@@ -373,7 +481,7 @@ export function createServer(config: {
     async (req) => {
       const p = versionParams(req.params);
       return quotes.transition(
-        await context(req.headers),
+        await projectContext(req.headers, p.id),
         p.id,
         p.quoteId,
         p.version,
@@ -387,7 +495,7 @@ export function createServer(config: {
     async (req, reply) => {
       const p = versionParams(req.params),
         r = await delivery.export(
-          await context(req.headers),
+          await projectContext(req.headers, p.id),
           p.id,
           p.quoteId,
           p.version,
@@ -407,7 +515,7 @@ export function createServer(config: {
     async (req) => {
       const p = versionParams(req.params);
       return delivery.shares(
-        await context(req.headers),
+        await projectContext(req.headers, p.id),
         p.id,
         p.quoteId,
         p.version,
@@ -420,7 +528,7 @@ export function createServer(config: {
     async (req) => {
       const p = versionParams(req.params);
       return delivery.share(
-        await context(req.headers),
+        await projectContext(req.headers, p.id),
         p.id,
         p.quoteId,
         p.version,
@@ -428,7 +536,52 @@ export function createServer(config: {
       );
     },
   );
-
+  app.post("/api/v1/quote-shares/:id/revoke", async (req) =>
+    delivery.revoke(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+    ),
+  );
+  app.get(
+    "/api/v1/quote-shares/:organization/:token",
+    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const p = z
+          .object({
+            organization: id,
+            token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+          })
+          .parse(req.params),
+        r = await delivery.publicPdf(p.organization, p.token);
+      return reply
+        .type("application/pdf")
+        .header("Content-Disposition", 'attachment; filename="offerte.pdf"')
+        .send(r.pdf);
+    },
+  );
+  app.get("/api/v1/projects/:id/materials", async (req) =>
+    materials.list(
+      await projectContext(req.headers, z.object({ id }).parse(req.params).id),
+      z.object({ id }).parse(req.params).id,
+    ),
+  );
+  app.get("/api/v1/projects/:id/quantities", async (req) => {
+    const { variantId } = z.object({ variantId: id }).parse(req.query);
+    return materials.quantities(
+      await projectContext(req.headers, z.object({ id }).parse(req.params).id),
+      z.object({ id }).parse(req.params).id,
+      variantId,
+    );
+  });
+  app.post("/api/v1/projects/:id/materials", async (req) =>
+    materials.publish(
+      await projectContext(req.headers, z.object({ id }).parse(req.params).id),
+      z.object({ id }).parse(req.params).id,
+      req.body,
+    ),
+  );
+  const presentations = new PresentationService(config.runtime, config.secret);
+  const exports = new ExportJobs(config.runtime);
   const presentationVersionParams = (params: unknown) =>
     z
       .object({
@@ -436,41 +589,55 @@ export function createServer(config: {
         version: z.coerce.number().int().min(1).max(10000),
       })
       .parse(params);
-  app.get("/api/v1/projects/:id/presentations", async (req) =>
-    presentations.list(
-      await context(req.headers),
-      z.object({ id }).parse(req.params).id,
-    ),
-  );
-  app.post("/api/v1/projects/:id/presentations", async (req) =>
-    presentations.create(
-      await context(req.headers),
-      z.object({ id }).parse(req.params).id,
+  app.get("/api/v1/projects/:id/presentations", async (req) => {
+    const project = z.object({ id }).parse(req.params).id;
+    return presentations.list(
+      await projectContext(req.headers, project),
+      project,
+    );
+  });
+  app.post("/api/v1/projects/:id/presentations", async (req) => {
+    const project = z.object({ id }).parse(req.params).id;
+    return presentations.create(
+      await projectContext(req.headers, project),
+      project,
       req.body,
-    ),
-  );
+    );
+  });
   app.get("/api/v1/presentations/:presentationId", async (req) =>
     presentations.get(
-      await context(req.headers),
+      await presentationContext(
+        req.headers,
+        z.object({ presentationId: id }).parse(req.params).presentationId,
+      ),
       z.object({ presentationId: id }).parse(req.params).presentationId,
     ),
   );
   app.put("/api/v1/presentations/:presentationId", async (req) =>
     presentations.save(
-      await context(req.headers),
+      await presentationContext(
+        req.headers,
+        z.object({ presentationId: id }).parse(req.params).presentationId,
+      ),
       z.object({ presentationId: id }).parse(req.params).presentationId,
       req.body,
     ),
   );
   app.get("/api/v1/presentations/:presentationId/versions", async (req) =>
     presentations.versions(
-      await context(req.headers),
+      await presentationContext(
+        req.headers,
+        z.object({ presentationId: id }).parse(req.params).presentationId,
+      ),
       z.object({ presentationId: id }).parse(req.params).presentationId,
     ),
   );
   app.get("/api/v1/presentations/:presentationId/outdated", async (req) =>
     presentations.outdated(
-      await context(req.headers),
+      await presentationContext(
+        req.headers,
+        z.object({ presentationId: id }).parse(req.params).presentationId,
+      ),
       z.object({ presentationId: id }).parse(req.params).presentationId,
     ),
   );
@@ -479,7 +646,10 @@ export function createServer(config: {
     { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
     async (req) =>
       presentations.publish(
-        await context(req.headers),
+        await presentationContext(
+          req.headers,
+          z.object({ presentationId: id }).parse(req.params).presentationId,
+        ),
         z.object({ presentationId: id }).parse(req.params).presentationId,
         req.body,
       ),
@@ -490,7 +660,7 @@ export function createServer(config: {
     async (req, reply) => {
       const p = presentationVersionParams(req.params);
       const r = await presentations.pdf(
-        await context(req.headers),
+        await presentationContext(req.headers, p.presentationId),
         p.presentationId,
         p.version,
       );
@@ -509,7 +679,7 @@ export function createServer(config: {
     { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
     async (req) => {
       const p = presentationVersionParams(req.params);
-      const ctx = await context(req.headers);
+      const ctx = await presentationContext(req.headers, p.presentationId);
       const format = z
         .object({ id, format: z.enum(["pdf", "pptx"]) })
         .strict()
@@ -531,22 +701,23 @@ export function createServer(config: {
   );
   app.get("/api/v1/presentations/:presentationId/exports", async (req) =>
     exports.list(
-      await context(req.headers),
+      await presentationContext(
+        req.headers,
+        z.object({ presentationId: id }).parse(req.params).presentationId,
+      ),
       z.object({ presentationId: id }).parse(req.params).presentationId,
     ),
   );
-  app.get("/api/v1/export-jobs/:id", async (req) =>
-    exports.get(
-      await context(req.headers),
-      z.object({ id }).parse(req.params).id,
-    ),
-  );
+  app.get("/api/v1/export-jobs/:id", async (req) => {
+    const job = z.object({ id }).parse(req.params).id;
+    return exports.get(await exportJobContext(req.headers, job), job);
+  });
   app.get(
     "/api/v1/presentations/:presentationId/versions/:version/pptx",
     async (req, reply) => {
       const p = presentationVersionParams(req.params);
       const r = await presentations.deck(
-        await context(req.headers),
+        await presentationContext(req.headers, p.presentationId),
         p.presentationId,
         p.version,
       );
@@ -580,7 +751,7 @@ export function createServer(config: {
     async (req, reply) => {
       const p = presentationVersionParams(req.params);
       const v = await presentations.version(
-        await context(req.headers),
+        await presentationContext(req.headers, p.presentationId),
         p.presentationId,
         p.version,
       );
@@ -594,11 +765,13 @@ export function createServer(config: {
   );
   app.get(
     "/api/v1/presentations/:presentationId/versions/:version/shares",
-    async (req) =>
-      presentations.shares(
-        await context(req.headers),
-        presentationVersionParams(req.params).presentationId,
-      ),
+    async (req) => {
+      const presentation = presentationVersionParams(req.params).presentationId;
+      return presentations.shares(
+        await presentationContext(req.headers, presentation),
+        presentation,
+      );
+    },
   );
   app.post(
     "/api/v1/presentations/:presentationId/versions/:version/shares",
@@ -606,19 +779,20 @@ export function createServer(config: {
     async (req) => {
       const p = presentationVersionParams(req.params);
       return presentations.share(
-        await context(req.headers),
+        await presentationContext(req.headers, p.presentationId),
         p.presentationId,
         p.version,
         req.body,
       );
     },
   );
-  app.post("/api/v1/presentation-shares/:id/revoke", async (req) =>
-    presentations.revoke(
-      await context(req.headers),
-      z.object({ id }).parse(req.params).id,
-    ),
-  );
+  app.post("/api/v1/presentation-shares/:id/revoke", async (req) => {
+    const share = z.object({ id }).parse(req.params).id;
+    return presentations.revoke(
+      await presentationShareContext(req.headers, share),
+      share,
+    );
+  });
   app.get(
     "/api/v1/presentation-shares/:organization/:token",
     { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
@@ -661,50 +835,6 @@ export function createServer(config: {
       );
     },
   );
-  app.post("/api/v1/quote-shares/:id/revoke", async (req) =>
-    delivery.revoke(
-      await context(req.headers),
-      z.object({ id }).parse(req.params).id,
-    ),
-  );
-  app.get(
-    "/api/v1/quote-shares/:organization/:token",
-    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
-    async (req, reply) => {
-      const p = z
-          .object({
-            organization: id,
-            token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
-          })
-          .parse(req.params),
-        r = await delivery.publicPdf(p.organization, p.token);
-      return reply
-        .type("application/pdf")
-        .header("Content-Disposition", 'attachment; filename="offerte.pdf"')
-        .send(r.pdf);
-    },
-  );
-  app.get("/api/v1/projects/:id/materials", async (req) =>
-    materials.list(
-      await context(req.headers),
-      z.object({ id }).parse(req.params).id,
-    ),
-  );
-  app.get("/api/v1/projects/:id/quantities", async (req) => {
-    const { variantId } = z.object({ variantId: id }).parse(req.query);
-    return materials.quantities(
-      await context(req.headers),
-      z.object({ id }).parse(req.params).id,
-      variantId,
-    );
-  });
-  app.post("/api/v1/projects/:id/materials", async (req) =>
-    materials.publish(
-      await context(req.headers),
-      z.object({ id }).parse(req.params).id,
-      req.body,
-    ),
-  );
   const library = new LibraryService(config.runtime);
   app.get("/api/v1/library", async (req) => {
     return library.list(
@@ -715,6 +845,42 @@ export function createServer(config: {
   app.post("/api/v1/library", async (req) =>
     library.publish(await context(req.headers), req.body),
   );
+  // Ledenbeheer per project. De keuzelijst komt uit identity, omdat de
+  // runtimeverbinding die tabel niet mag lezen.
+  app.get("/api/v1/organization/members", async (req) => {
+    const ctx = await context(req.headers);
+    requirePermission(ctx.role, "members.manage");
+    const r = await config.identity.query(
+      'SELECT u.id,u.name,u.email,m.role FROM identity.membership m JOIN identity."user" u ON u.id=m.user_id WHERE m.organization_id=$1 ORDER BY u.name,u.id',
+      [ctx.organizationId],
+    );
+    return { items: r.rows };
+  });
+  app.get("/api/v1/projects/:id/members", async (req) => {
+    const project = z.object({ id }).parse(req.params).id;
+    const r = await access.list(await context(req.headers), project);
+    return { access: r.access, items: await withActors(r.items) };
+  });
+  app.post("/api/v1/projects/:id/access", async (req) =>
+    access.setAccess(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+      req.body,
+    ),
+  );
+  app.post("/api/v1/projects/:id/members", async (req) =>
+    access.addMember(
+      await context(req.headers),
+      z.object({ id }).parse(req.params).id,
+      req.body,
+    ),
+  );
+  app.post("/api/v1/projects/:id/members/:userId/remove", async (req) => {
+    const p = z
+      .object({ id, userId: z.string().min(1).max(255) })
+      .parse(req.params);
+    return access.removeMember(await context(req.headers), p.id, p.userId);
+  });
   app.get("/api/v1/projects", async (req) => {
     const { offset } = z
       .object({ offset: z.coerce.number().int().min(0).max(100000).default(0) })
@@ -732,21 +898,27 @@ export function createServer(config: {
   const variant = (params: unknown) =>
     z.object({ variantId: id }).parse(params).variantId;
   app.get("/api/v1/variants/:variantId/alternatives", async (req) =>
-    service.variants(await context(req.headers), variant(req.params)),
+    service.variants(
+      await variantContext(req.headers, variant(req.params)),
+      variant(req.params),
+    ),
   );
   app.post("/api/v1/variants/:variantId/copies", async (req) =>
     service.copyVariant(
-      await context(req.headers),
+      await variantContext(req.headers, variant(req.params)),
       variant(req.params),
       req.body,
     ),
   );
   app.get("/api/v1/variants/:variantId/document", async (req) =>
-    service.document(await context(req.headers), variant(req.params)),
+    service.document(
+      await variantContext(req.headers, variant(req.params)),
+      variant(req.params),
+    ),
   );
   app.post("/api/v1/variants/:variantId/lease", async (req) =>
     service.lease(
-      await context(req.headers),
+      await variantContext(req.headers, variant(req.params)),
       variant(req.params),
       z.object({ leaseId: id }).strict().parse(req.body).leaseId,
     ),
@@ -756,17 +928,20 @@ export function createServer(config: {
     { schema: { body: z.toJSONSchema(commandSchema, { target: "draft-7" }) } },
     async (req) =>
       service.command(
-        await context(req.headers),
+        await variantContext(req.headers, variant(req.params)),
         variant(req.params),
         req.body,
       ),
   );
   app.get("/api/v1/variants/:variantId/revisions", async (req) =>
-    service.revisions(await context(req.headers), variant(req.params)),
+    service.revisions(
+      await variantContext(req.headers, variant(req.params)),
+      variant(req.params),
+    ),
   );
   app.post("/api/v1/variants/:variantId/revisions", async (req) =>
     service.revision(
-      await context(req.headers),
+      await variantContext(req.headers, variant(req.params)),
       variant(req.params),
       z
         .object({ name: z.string().trim().min(1).max(120) })
@@ -776,7 +951,7 @@ export function createServer(config: {
   );
   app.get("/api/v1/variants/:variantId/plan.svg", async (req, reply) => {
     const scene = await service.document(
-      await context(req.headers),
+      await variantContext(req.headers, variant(req.params)),
       variant(req.params),
     );
     const options = z
