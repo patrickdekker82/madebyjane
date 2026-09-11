@@ -1,4 +1,54 @@
 # Installatie- en beheerfundament
+## Correctie 11 september 2026 — twee dingen die de stack niet hadden laten starten
+
+Twee fouten die pas op een echte Docker-host aan het licht zouden komen, en die
+hier zijn gevonden zonder er een te hebben.
+
+### Caddy stuurde elke API-aanroep naar de SPA
+
+De eerste versie zette `root`, `try_files` en `file_server` los in het siteblok,
+met daarnaast een `handle /api/*`. Caddy ordent losse directives niet op
+volgorde van het bestand maar op zijn eigen vaste lijst, en `try_files` staat
+daarin vóór `handle`.
+
+Dat is te zien door de configuratie te compileren met dezelfde Caddy als in de
+image (2.10.2, `caddy adapt`). In de gecompileerde routes stond de herschrijving
+op plaats 1 en het `/api/*`-blok op plaats 3. Elk verzoek dat geen bestaand
+bestand is — dus élke API-aanroep — werd eerst herschreven naar `/index.html`,
+waarna de matcher op `/api/*` niet meer aansloeg. De app zou geladen zijn en
+daarna niets hebben gedaan: elke aanroep kreeg HTML terug.
+
+Nu staan beide in een `handle`. Die sluiten elkaar uit en worden wél op volgorde
+afgehandeld; de gecompileerde routes tonen `/api/*` vóór de SPA-terugval.
+
+### `cap_drop: [ALL]` liet drie containers niet opstarten
+
+De API-ingang draait kort als root: hij zet de eigenaar van het gegevensvolume
+goed en stapt daarna met gosu over naar `node`. De officiële PostgreSQL-image
+doet hetzelfde richting `postgres`. Chown vraagt CHOWN, de overstap vraagt
+SETUID en SETGID — precies de rechten die `cap_drop: [ALL]` weghaalt. Met
+`set -eu` in de ingang stopt de container dan bij zijn eerste regel, en omdat de
+migrator dezelfde image gebruikt zou de API eeuwig wachten op een migratierun
+die nooit slaagt.
+
+Elke dienst krijgt nu de rechten terug die hij aantoonbaar nodig heeft, en niet
+meer dan dat. Caddy houdt alleen NET_BIND_SERVICE.
+
+### Niet geverifieerd in deze omgeving
+
+De Caddy-correctie is bewezen: de configuratie is gecompileerd en de routes zijn
+nagelopen. **De capabilities zijn dat niet.** Er is hier geen Docker-daemon, dus
+dat de containers met deze rechten daadwerkelijk starten is beredeneerd uit de
+ingangsscripts en de bekende werking van gosu, niet gezien. Wie deze stack voor
+het eerst opzet, ziet het binnen een minuut: start de migrator en meldt
+`doctor.sh` een geslaagde healthcheck, dan klopt het.
+
+### Opgemerkt, niet aangeraakt
+
+De API-image installeert alle devDependencies, waaronder `embedded-postgres` —
+dat een volledige PostgreSQL in de productie-image trekt — en start met
+`pnpm dev:api`. Dat werkt, maar een eigen startscript en een uitgeklede
+installatie horen bij de volgende infrastap.
 
 Deze wijziging levert het eerste herhaalbare productiepad voor de huidige
 applicatie. Het is gericht op een Debian 13-host met Docker Compose v2, lokale
