@@ -1,4 +1,39 @@
 # Installatie- en beheerfundament
+## Aanvulling — de eerste eigenaar kon in productie niet bestaan
+
+Bij het schrijven van de installatiehandleiding bleek het pad naar de eerste
+gebruiker te ontbreken. `pnpm setup` is vastgeklonken aan de meegeleverde
+PostgreSQL op poort 55432 en aan de sleutels uit `work/local-db`; in productie
+bestaan die geen van beide. De stack zou dus zijn opgekomen met een app waar
+niemand in kon.
+
+`scripts/setup-owner.ts` doet hetzelfde werk met de configuratie uit `.env`, en
+`scripts/setup-owner.sh` start dat in een wegwerpcontainer op het interne
+netwerk — de database is van buiten niet bereikbaar en dat blijft zo.
+
+Het gebruikt de **migratierol** en niet de approl. Dat is geen gemak maar een
+grens: `studio_auth` heeft op `identity.organization` en `identity.membership`
+alleen SELECT, zodat een gekaapte app zichzelf geen tweede werkruimte met een
+eigen eigenaar kan geven. Het aanmaken van de eerste eigenaar hoort daarom bij
+de installateur, en is nooit aan HTTP geknoopt.
+
+### Geverifieerd
+
+`tests/setup-production.test.ts` bouwt de productierolverdeling na op een echte
+PostgreSQL: een eigen database met `studio_migrator` als eigenaar, migrations
+als die rol, en dan de eerste eigenaar. Vastgelegd: gebruiker, organisatie en
+eigenaarslidmaatschap ontstaan, een tweede poging wordt geweigerd, en
+`studio_auth` krijgt `permission denied` op het aanmaken van een organisatie.
+
+Het instappunt is ook geladen vanuit een echte `pnpm install --prod`-installatie,
+zodat het niet alsnog op een ontbrekend pakket strandt in de container.
+
+### Niet geverifieerd in deze omgeving
+
+De wikkel `setup-owner.sh` zelf is niet gedraaid: daarvoor is een
+Docker-daemon nodig. Dat `docker compose run --rm -it migrator` hier een
+werkende terminal oplevert voor de wachtwoordvraag is beredeneerd, niet gezien.
+
 ## Correctie 11 september 2026 — twee dingen die de stack niet hadden laten starten
 
 Twee fouten die pas op een echte Docker-host aan het licht zouden komen, en die
