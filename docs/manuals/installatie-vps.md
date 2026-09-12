@@ -34,9 +34,11 @@ publiek bereikbaar is.
 firewall maar met de binding zelf — zie stap 4 voor waarom een firewall hier
 niet genoeg is.
 
-**4. Twee bestanden in de repository krijgen een lokale aanpassing.** Die komen
-bij elke `git pull` terug; stap 7 en [Bijwerken](#bijwerken) houden dat
-beheersbaar.
+**4. Twee regels in `.env`, en verder niets.** De certificaatroute en de
+binding zijn configuratie, geen patch: je past geen bestand uit de repository
+aan, en bijwerken blijft `git pull`. De preflight controleert beide instellingen,
+en `doctor.sh` waarschuwt als er ondanks je binding tóch op alle interfaces
+geluisterd wordt.
 
 En één ding om nu te weten, niet omdat het technisch is maar omdat het het
 product raakt: **een klant kan zonder VPN niets zien.** Wil je later een
@@ -366,7 +368,7 @@ echo '10.8.0.1 studio.voorbeeld.nl' | sudo tee -a /etc/hosts
 Doe dat dan ook op elke client — zonder werkende naam krijgt de browser de app
 niet te zien, hoe goed de tunnel ook staat.
 
-## 7. De code en de twee lokale aanpassingen
+## 7. De code
 
 ```bash
 sudo mkdir -p /opt/interieurstudio
@@ -379,44 +381,9 @@ Houd deze map aan: de systemd-unit voor de back-up verwijst ernaar. Node.js,
 pnpm en PostgreSQL hoef je **niet** op de host te installeren — alles wordt in
 de containers gebouwd en gedraaid.
 
-Zet de aanpassingen op een eigen branch, zodat een `git pull` straks een
-zichtbaar conflict geeft in plaats van je wijzigingen stil te overschrijven:
-
-```bash
-git checkout -b vps-vpn
-```
-
-**Aanpassing 1 — Caddy een eigen CA laten gebruiken.** Zonder dit blijft Caddy
-proberen een Let's Encrypt-certificaat te halen, wat achter de VPN niet lukt:
-
-```bash
-sed -i 's/^\tencode zstd gzip$/\ttls internal\n\tencode zstd gzip/' infra/docker/Caddyfile
-head -3 infra/docker/Caddyfile      # verwacht: tls internal onder de eerste regel
-```
-
-**Aanpassing 2 — Caddy alleen op de tunnel laten luisteren.** Vul hier het adres
-van je eigen `wg0` in:
-
-```bash
-WG_ADDR=10.8.0.1
-sed -i \
-  -e "s|- \"\${HTTP_PORT:-80}:80\"|- \"$WG_ADDR:\${HTTP_PORT:-80}:80\"|" \
-  -e "s|- \"\${HTTPS_PORT:-443}:443\"|- \"$WG_ADDR:\${HTTPS_PORT:-443}:443\"|" \
-  compose.production.yaml
-grep -A3 '^    ports:' compose.production.yaml
-```
-
-Je verwacht `"10.8.0.1:${HTTP_PORT:-80}:80"` en de tegenhanger voor 443.
-
-Dit staat in `compose.production.yaml` en niet in `.env` omdat de preflight eist
-dat `HTTP_PORT` en `HTTPS_PORT` **getallen** zijn; een `adres:poort` erin zetten
-laat de controle falen. Laat die twee dus op 80 en 443 staan.
-
-Leg de aanpassingen vast:
-
-```bash
-git commit -am "lokaal: eigen CA en binding op de WireGuard-interface"
-```
+Meer is dit niet. Geen patch, geen eigen branch: de twee dingen die VPN-only
+nodig heeft — de certificaatroute en de binding — staan in `.env` en komen in de
+volgende stap. Bijwerken blijft daarmee `git pull`.
 
 ## 8. Configuratie
 
@@ -434,6 +401,33 @@ sed -i \
   -e "s|^STUDIO_DATA_DIR=.*|STUDIO_DATA_DIR=$DATA|" \
   .env
 ```
+
+`PUBLIC_BASE_URL` moet letterlijk `https://` + `CADDY_SITE_ADDRESS` zijn; de
+preflight controleert dat, en de app accepteert geen andere origin.
+
+Dan de twee regels die deze installatie tot een VPN-installatie maken. Vul het
+adres van je eigen `wg0` in:
+
+```bash
+WG_ADDR=10.8.0.1
+sed -i \
+  -e "s|^HTTP_PORT=.*|HTTP_PORT=$WG_ADDR:80|" \
+  -e "s|^HTTPS_PORT=.*|HTTPS_PORT=$WG_ADDR:443|" \
+  -e "s|^CADDY_TLS=.*|CADDY_TLS=tls internal|" \
+  .env
+grep -E '^(HTTP_PORT|HTTPS_PORT|CADDY_TLS)=' .env
+```
+
+Wat je hier doet, in gewone woorden. `HTTP_PORT` en `HTTPS_PORT` mogen `poort`
+of `adres:poort` zijn; met een adres publiceert Docker **uitsluitend** daarop, en
+is er op het publieke adres niets om te bereiken. En `CADDY_TLS=tls internal`
+laat Caddy zijn eigen CA gebruiken in plaats van een publiek vertrouwd
+certificaat aan te vragen — wat achter een VPN niet kan slagen.
+
+De preflight controleert allebei: dat het adres werkelijk op deze host actief is
+(staat de tunnel niet, dan weet je dat nu en niet na een mislukte start), en dat
+de certificaatroute bij het DNS-antwoord past. Wijst je naam naar een privaat
+adres terwijl `CADDY_TLS` leeg is, dan waarschuwt hij daarover.
 
 Dan de vijf geheimen. `install.sh` vraagt ze anders interactief op; hier zet je
 ze in één keer neer:
@@ -551,8 +545,9 @@ sudo ss -ltnp | grep -E ':(80|443)\b'
 ```
 
 Je verwacht `10.8.0.1:80` en `10.8.0.1:443`, en **niet** `0.0.0.0:*`. Staat er
-`0.0.0.0`, dan is aanpassing 2 uit stap 7 niet meegekomen en is de app publiek
-bereikbaar.
+`0.0.0.0`, dan is `HTTP_PORT`/`HTTPS_PORT` zonder adres gebleven en is de app
+publiek bereikbaar. `./scripts/doctor.sh` controleert dit ook en zegt het met
+zoveel woorden, dus je hoeft het niet te onthouden.
 
 Blijft het hangen op `--wait`, dan wordt een container niet gezond. Kijk in deze
 volgorde — postgres moet gezond zijn voordat de migrator draait, en de migrator
@@ -570,19 +565,17 @@ docker compose --env-file .env -f compose.production.yaml logs api
 Caddy heeft bij de eerste start een eigen CA aangemaakt. Haal de root eruit:
 
 ```bash
-docker compose --env-file .env -f compose.production.yaml exec caddy \
-  cat /data/caddy/pki/authorities/local/root.crt > /tmp/studio-root-ca.crt
-openssl x509 -in /tmp/studio-root-ca.crt -noout -subject -dates
+./scripts/export-ca.sh
 ```
 
-Vindt hij dat pad niet, dan zoek je hem op de host — hij staat onder de
-gegevensmap van Caddy:
+Dat schrijft `/tmp/studio-root-ca.crt`, controleert dat het een leesbaar
+certificaat is, toont wie het uitgaf en hoe lang het geldig is, en zegt wat de
+volgende stap is. Een ander pad mag: `./scripts/export-ca.sh ~/studio-root-ca.crt`.
 
-```bash
-sudo find "$DATA/caddy" -name root.crt
-```
+Dit is een certificaat en geen sleutel — het mag rondgestuurd worden. De
+privésleutel blijft in de gegevensmap van Caddy en hoort daar.
 
-Vertrouw hem op de VPS zelf (handig voor de controles in stap 12):
+Vertrouw hem op de VPS zelf, zodat de controles in stap 12 zonder omweg werken:
 
 ```bash
 sudo cp /tmp/studio-root-ca.crt /usr/local/share/ca-certificates/studio-root.crt
@@ -614,11 +607,12 @@ alleen is niet genoeg. Firefox gebruikt zijn eigen certificaatopslag en negeert
 die van het systeem: importeer de root daar apart, of zet
 `security.enterprise_roots.enabled` aan.
 
-Twee dingen die anders voor verwarring zorgen: de bladcertificaten van Caddy's
+Twee dingen die anders voor verwarring zorgen. De bladcertificaten van Caddy's
 eigen CA leven maar een halve dag en de tussenliggende een week — dat is met
 opzet en Caddy vernieuwt ze zelf, zolang hij draait. En de root zelf zit in de
 back-up van je gegevensmap; zet je de installatie ooit ergens anders neer zonder
-die data, dan krijg je een nieuwe CA en moet je opnieuw uitrollen.
+die data, dan ontstaat er een nieuwe CA en moet je opnieuw uitrollen. Het script
+herinnert je daaraan.
 
 ## 12. Eerste eigenaar en controle
 
@@ -756,36 +750,26 @@ toegewezen kan worden, dan is de ordening uit stap 5 niet actief.
 cd /opt/interieurstudio
 tmux new -s upgrade
 set -a; . /etc/interieurstudio/backup.env; set +a
-
-git fetch origin
-git rebase origin/main          # jouw twee aanpassingen komen hier bovenop
-docker compose --env-file .env -f compose.production.yaml stop caddy
+git pull
 ./scripts/upgrade.sh
 ```
 
-Twee dingen wijken hier af van de basishandleiding.
-
-**De rebase.** Je twee lokale aanpassingen staan als commit op de branch
-`vps-vpn`; `git rebase origin/main` zet ze op de nieuwe versie. Raakt een
-update dezelfde regels, dan krijg je een zichtbaar conflict in plaats van een
-stille overschrijving — los het op, en controleer met `grep -A3 '^    ports:'
-compose.production.yaml` en `head -3 infra/docker/Caddyfile` dat beide
-aanpassingen er nog in staan voordat je verder gaat.
-
-**Het stoppen van Caddy.** `upgrade.sh` draait de preflight, en die controleert
-of poort 80 en 443 vrij zijn met een filter dat alleen naar het poortnummer
-kijkt — niet naar het adres waarop iets luistert. Bij de standaardinstellingen
-van Docker luistert er een `docker-proxy` op die poorten zolang de stack draait,
-en dan meldt de preflight ze als bezet en stopt de upgrade. Caddy eerst stoppen
-haalt die listener weg; `upgrade.sh` start hem daarna zelf weer met
-`up --build --wait`. Dit geldt net zo goed voor een publieke installatie en is
-hier beredeneerd uit `scripts/preflight.sh` en `scripts/upgrade.sh`, niet gemeten
-— faalt de preflight toch nog op de poorten, dan weet je waar het zit.
+Dat is alles — geen rebase en geen container die je eerst met de hand moet
+stoppen. Dat is precies waarom de twee VPN-instellingen in `.env` staan en niet
+in de bestanden van de repository: `git pull` raakt je configuratie niet.
 
 `upgrade.sh` draait eerst de preflight, dan een volledige back-up, en pas daarna
-de nieuwe images en migrations. Zijn je restic-bestemmingen niet bereikbaar, dan
-stopt de upgrade — met opzet: geen schemawijziging zonder terugweg. Dat is ook
-waarom de credentials hier in je omgeving moeten staan.
+de nieuwe images en migrations. De preflight ziet dat je eigen Caddy poort 80 en
+443 al vasthoudt en rekent dat niet als belemmering; bij een verse installatie
+moeten ze wel vrij zijn. Zijn je restic-bestemmingen niet bereikbaar, dan stopt
+de upgrade — met opzet: geen schemawijziging zonder terugweg. Dat is ook waarom
+de credentials hier in je omgeving moeten staan.
+
+Controleer na de upgrade of de binding nog staat:
+
+```bash
+./scripts/doctor.sh
+```
 
 ---
 
@@ -799,16 +783,17 @@ root na installatie apart aanzetten.
 in plaats van naar `10.8.0.1`, of je wacht op de TTL. De app laadt dan buiten de
 tunnel niet en binnen de tunnel niet over de juiste route.
 
-**De app is van buiten bereikbaar.** `sudo ss -ltnp | grep -E ':(80|443)\b'`
-moet je WireGuard-adres tonen. Staat er `0.0.0.0`, dan is aanpassing 2 uit stap 7
-weggevallen — bijvoorbeeld door een `git pull` die de rebase niet meenam. Ufw
-helpt hier niet tegen; zie stap 4.
+**De app is van buiten bereikbaar.** `./scripts/doctor.sh` zegt het, en
+`sudo ss -ltnp | grep -E ':(80|443)\b'` toont het: hier moet je WireGuard-adres
+staan. Zie je `0.0.0.0`, dan mist het adres in `HTTP_PORT`/`HTTPS_PORT` in `.env`.
+Ufw helpt hier niet tegen; zie stap 4.
 
 **Na een reboot draait Caddy niet.** De tunnel kwam later dan Docker. Controleer
 `systemctl is-active wg-quick@wg0` en de drop-in uit stap 5.
 
-**`upgrade.sh` stopt op "HTTP-poort 80 is al in gebruik".** Zie
-[Bijwerken](#bijwerken): stop Caddy vóór de upgrade.
+**De preflight zegt dat het adres niet actief is op deze host.** De tunnel
+staat niet: `systemctl status wg-quick@wg0`. Dat is de controle die je anders
+pas als een mislukte containerstart had gezien.
 
 **De nachtelijke back-up faalt terwijl de handmatige slaagde.** Dan mist de
 systemd-run iets wat jouw shell wel had: meestal de credentials

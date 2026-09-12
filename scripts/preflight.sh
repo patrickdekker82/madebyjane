@@ -17,6 +17,72 @@ need_secret() {
   value=$(env_value "$1" || true)
   is_secret "$value" || fail "$1 ontbreekt, is een placeholder, of bevat onveilige tekens."
 }
+publish_address() { case "$1" in *:*) printf '%s' "${1%:*}" ;; *) printf '' ;; esac; }
+publish_port() { printf '%s' "${1##*:}"; }
+address_is_local() {
+  command -v ip >/dev/null 2>&1 || { warn "Het commando ip ontbreekt; adres $1 is niet gecontroleerd."; return 0; }
+  ip -4 -o addr show 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | grep -qx "$1"
+}
+# Bij een upgrade draait de eigen stack nog; dan houdt Caddy poort 80 en 443
+# vast en is "bezet" geen belemmering maar de verwachte toestand.
+caddy_is_running() {
+  docker compose --env-file "$ENV_FILE" -f "$ROOT/compose.production.yaml" \
+    ps --status running --quiet caddy 2>/dev/null | grep -q .
+}
+check_tls_mode() {
+  case "$1" in
+    "") printf 'Certificaatroute: automatisch, publiek vertrouwd.\n' ;;
+    "tls internal") printf 'Certificaatroute: eigen CA van Caddy; rol de root uit met scripts/export-ca.sh.\n' ;;
+    "tls "*)
+      case "$1" in
+        *[\{\}\$]*) fail "CADDY_TLS mag geen { } of \$ bevatten; Caddy leest die als plaatsvervanger." ;;
+      esac
+      warn "CADDY_TLS verwijst naar eigen certificaatbestanden. Die moeten ook in de Caddy-container staan; de preflight controleert alleen de vorm."
+      ;;
+    *) fail "CADDY_TLS moet leeg zijn, 'tls internal', of een tls-regel met certificaatpaden." ;;
+  esac
+}
+# Een privaat adres en een publiek vertrouwd certificaat sluiten elkaar uit: de
+# uitgever moet de host van buiten kunnen bereiken. Omgekeerd is een eigen CA op
+# een publiek adres een certificaat dat geen bezoeker kent. Beide zijn een
+# waarschuwing en geen blokkade: de host kan legitiem anders bereikbaar zijn dan
+# de naam suggereert.
+warn_tls_dns_mismatch() {
+  local site=$1 resolved=$2 tls=$3
+  case "$resolved" in
+    10.*|127.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*)
+      [ -n "$tls" ] ||
+        warn "$site resolveert naar het private adres $resolved terwijl CADDY_TLS leeg is; een publiek vertrouwd certificaat kan zo niet worden uitgegeven. Zet CADDY_TLS op 'tls internal' voor een installatie achter een VPN."
+      ;;
+    *)
+      [ "$tls" != "tls internal" ] ||
+        warn "$site resolveert naar het publieke adres $resolved terwijl CADDY_TLS op 'tls internal' staat; bezoekers krijgen dan een certificaat dat hun browser niet kent."
+      ;;
+  esac
+}
+check_publish() {
+  local label=$1 value=$2 address port
+  address=$(publish_address "$value")
+  port=$(publish_port "$value")
+  case "$value" in
+    *:*) [ -n "$address" ] || fail "$label mist een adres voor de dubbele punt; gebruik poort of adres:poort." ;;
+  esac
+  [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ] ||
+    fail "$label moet een poortnummer zijn, eventueel als adres:poort (uitsluitend IPv4)."
+  if [ -n "$address" ]; then
+    [[ "$address" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || fail "$label bevat geen geldig IPv4-adres: $address."
+    address_is_local "$address" ||
+      fail "$label publiceert op $address, maar dat adres is niet actief op deze host. Staat de VPN-interface aan?"
+    printf 'Publicatie %s: uitsluitend op %s, poort %s.\n' "$label" "$address" "$port"
+  else
+    printf 'Publicatie %s: op alle interfaces, poort %s.\n' "$label" "$port"
+  fi
+  if [ "$CADDY_RUNNING" -eq 1 ]; then
+    printf 'Poort %s is in gebruik door de eigen Caddy-container; bij een upgrade is dat verwacht.\n' "$port"
+  else
+    port_free "$port" || fail "$label: poort $port is al in gebruik."
+  fi
+}
 port_free() {
   if command -v ss >/dev/null 2>&1; then
     ! ss -ltnH "sport = :$1" | grep -q .
@@ -52,18 +118,23 @@ rm -f "$DATA_DIR/.write-check"
 available=$(df -Pk "$DATA_DIR" | awk 'NR == 2 {print $4}')
 [ "${available:-0}" -ge "$MIN_DISK_KIB" ] || fail "Minder dan 100 GiB vrije lokale schijfruimte in $DATA_DIR."
 
-HTTP_PORT=$(env_value HTTP_PORT || printf 80)
-HTTPS_PORT=$(env_value HTTPS_PORT || printf 443)
-[[ "$HTTP_PORT" =~ ^[0-9]+$ ]] && [[ "$HTTPS_PORT" =~ ^[0-9]+$ ]] || fail "HTTP_PORT en HTTPS_PORT moeten poortnummers zijn."
-port_free "$HTTP_PORT" || fail "HTTP-poort $HTTP_PORT is al in gebruik."
-port_free "$HTTPS_PORT" || fail "HTTPS-poort $HTTPS_PORT is al in gebruik."
+CADDY_RUNNING=0
+if caddy_is_running; then CADDY_RUNNING=1; fi
+check_publish HTTP_PORT "$(env_value HTTP_PORT || printf 80)"
+check_publish HTTPS_PORT "$(env_value HTTPS_PORT || printf 443)"
+
+CADDY_TLS_VALUE=$(env_value CADDY_TLS || printf '')
+check_tls_mode "$CADDY_TLS_VALUE"
 
 SITE=$(env_value CADDY_SITE_ADDRESS || true)
 PUBLIC_URL=$(env_value PUBLIC_BASE_URL || true)
 [ -n "$SITE" ] && [ -n "$PUBLIC_URL" ] || fail "CADDY_SITE_ADDRESS of PUBLIC_BASE_URL ontbreekt."
 [ "$PUBLIC_URL" = "https://$SITE" ] || fail "PUBLIC_BASE_URL moet exact https://CADDY_SITE_ADDRESS zijn."
 if command -v getent >/dev/null 2>&1; then
-  getent ahosts "$SITE" >/dev/null 2>&1 || fail "DNS voor $SITE resolveert niet vanaf deze host."
+  RESOLVED=$(getent ahosts "$SITE" | awk 'NR == 1 {print $1}' || true)
+  [ -n "$RESOLVED" ] || fail "DNS voor $SITE resolveert niet vanaf deze host."
+  printf 'DNS: %s resolveert naar %s.\n' "$SITE" "$RESOLVED"
+  warn_tls_dns_mismatch "$SITE" "$RESOLVED" "$CADDY_TLS_VALUE"
 else
   warn "getent ontbreekt; DNS voor $SITE is niet gecontroleerd."
 fi

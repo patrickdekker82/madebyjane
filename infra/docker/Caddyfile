@@ -1,4 +1,10 @@
 {$CADDY_SITE_ADDRESS} {
+	# De certificaatroute komt uit .env, zodat een installatie die alleen via een
+	# VPN bereikbaar is geen gepatcht bestand nodig heeft. Leeg betekent de
+	# standaard: automatisch een publiek vertrouwd certificaat. `tls internal`
+	# laat Caddy zijn eigen CA gebruiken, wat de enige werkende route is wanneer
+	# poort 80 en 443 niet van buiten bereikbaar zijn.
+	{$CADDY_TLS}
 	encode zstd gzip
 
 	# De volgorde van deze twee blokken is niet vrijblijvend, en daarom staan ze

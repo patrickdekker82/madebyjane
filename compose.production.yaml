@@ -7,6 +7,11 @@ services:
       dockerfile: infra/docker/Dockerfile.web
     environment:
       CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:?Configureer CADDY_SITE_ADDRESS in .env}
+      CADDY_TLS: ${CADDY_TLS:-}
+    # HTTP_PORT en HTTPS_PORT mogen `poort` of `adres:poort` zijn. Met een adres
+    # publiceert Docker uitsluitend daarop — de manier om een installatie achter
+    # een VPN te houden, want een firewallregel op de host wordt voor
+    # gepubliceerde containerpoorten niet beoordeeld.
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
