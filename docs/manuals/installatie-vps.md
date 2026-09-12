@@ -9,6 +9,11 @@ Dit is de VPS-variant van [installatie.md](installatie.md). Die handleiding gaat
 uit van een publiek domein met een automatisch Let's Encrypt-certificaat; hier
 is niets publiek bereikbaar, en dat verandert vier dingen.
 
+**Ga je nu installeren?** Gebruik dan
+[installatie-checklist.md](installatie-checklist.md): dezelfde route, afvinkbaar,
+met per stap wat je moet zien en zonder de toelichting hieronder. Dit document
+legt uit waarom het zo werkt; de checklist zegt wat je typt.
+
 **Lees dit eerst.** Net als de basishandleiding is deze procedure opgeschreven
 vanaf de scripts en de configuratie in de repository, en is de stack **nog nooit
 op een echte host opgestart**. De twee bestandsaanpassingen uit stap 7 zijn wel

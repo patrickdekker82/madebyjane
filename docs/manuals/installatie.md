@@ -20,6 +20,9 @@ bekijkt.
 Twee handleidingen beginnen eerder dan deze en nemen de stappen hieronder over,
 elk met de valkuilen van hun eigen soort host:
 
+- [installatie-checklist.md](installatie-checklist.md) — de afvinkbare versie
+  van de VPS-route, met per stap wat je moet zien. Dit is wat je erbij houdt
+  terwijl je installeert.
 - [installatie-vps.md](installatie-vps.md) — een VPS achter een
   WireGuard-VPN, volledig vanuit de terminal. Niets publiek bereikbaar, dus
   Caddy's eigen CA in plaats van Let's Encrypt, een binding op de tunnel, en
