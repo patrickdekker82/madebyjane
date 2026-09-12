@@ -17,10 +17,14 @@ bekijkt.
 
 ## Wat je nodig hebt
 
-Installeer je op een Hyper-V-host, dan staat de route van een lege VM tot een
-draaiende stack stap voor stap in
-[installatie-hyper-v.md](installatie-hyper-v.md); die handleiding neemt de
-stappen hieronder over en vult aan wat op een Hyper-V-gast anders is.
+Twee handleidingen beginnen eerder dan deze en nemen de stappen hieronder over,
+elk met de valkuilen van hun eigen soort host:
+
+- [installatie-vps.md](installatie-vps.md) — een VPS, volledig vanuit de
+  terminal: SSH-hardening, firewall, schijfruimte en een back-up die vanuit
+  systemd bij zijn opslagcredentials kan.
+- [installatie-hyper-v.md](installatie-hyper-v.md) — een Hyper-V-VM, vanaf het
+  aanmaken van de machine.
 
 **Een Linux-host.** Debian 13 is het beoogde doel; de preflight waarschuwt bij
 iets anders maar gaat door. x86_64 of aarch64. Als startschatting: 4 vCPU,
