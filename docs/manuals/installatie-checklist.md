@@ -60,8 +60,33 @@ Twee dingen om niet te verwarren:
 Geeft `ip` meerdere adressen op `wg0`, neem dan het IPv4-adres: `HTTP_PORT` en
 `HTTPS_PORT` ondersteunen geen IPv6.
 
-Zet vóór je begint een **A-record** voor `$DOMEIN` naar `$WG_ADDR` (dus naar het
-tunneladres, niet naar het publieke adres). Geen AAAA-record.
+### De naam moet naar `$WG_ADDR` wijzen — drie manieren
+
+De app accepteert alleen `https://$DOMEIN` als origin, dus een IP-adres invullen
+werkt niet. Die naam moet naar je tunneladres wijzen, en dat kan op drie
+manieren. De preflight controleert alleen dát de naam op de VPS resolveert, niet
+hóe.
+
+**1. Een A-record in publieke DNS.** Het eenvoudigst, als je provider het
+toestaat. Veel providers weigeren een A-record naar een privé-adres als
+`10.8.0.1` ("geen geldig IPv4-adres"); dan valt deze route af en is dat geen
+probleem — ga naar 2 of 3. Zet geen AAAA-record.
+
+**2. `/etc/hosts`, op de VPS en op elke client.** Geen DNS nodig, werkt meteen,
+en dit is de snelste route om te kunnen testen:
+
+```bash
+echo "$WG_ADDR $DOMEIN" | sudo tee -a /etc/hosts        # op de VPS
+```
+
+Op je laptop dezelfde regel (macOS en Linux: `/etc/hosts`; Windows:
+`C:\Windows\System32\drivers\etc\hosts` als administrator). Nadeel: op iOS
+en Android kan dit niet, dus telefoons en tablets bereiken de app zo niet.
+
+**3. Een eigen DNS op de VPS**, en die aan je WireGuard-clients meegeven. Dit is
+de route die óók op telefoons werkt; zie
+[Telefoons en tablets](#telefoons-en-tablets-dns-op-de-vps) onderaan. Doe dit
+gerust later — begin met 2 en test eerst.
 
 ---
 
@@ -262,11 +287,14 @@ ssh studio@203.0.113.10
 getent ahosts "$DOMEIN"
 ```
 
-**Je ziet:** je tunneladres (`10.8.0.1`), niet het publieke adres. Klopt dit
-niet, dan stopt de preflight straks — repareer het hier.
+**Je ziet:** je tunneladres (`10.8.0.1`), niet het publieke adres. Komt er niets
+of het verkeerde terug, dan stopt de preflight straks — repareer het hier, met
+route 1, 2 of 3 uit het blok bovenaan. De snelste:
 
-> Filtert je resolver privé-adressen weg? Dan:
-> `echo "$WG_ADDR $DOMEIN" | sudo tee -a /etc/hosts`, en hetzelfde op elke client.
+```bash
+echo "$WG_ADDR $DOMEIN" | sudo tee -a /etc/hosts
+getent ahosts "$DOMEIN"
+```
 
 Controleer ook dat Docker werkt zonder `sudo`:
 
@@ -551,11 +579,56 @@ Eerst de preflight, dan een volledige back-up, dan de nieuwe images en
 migrations. Zijn je back-upbestemmingen onbereikbaar, dan stopt de upgrade — met
 opzet.
 
+## Telefoons en tablets: DNS op de VPS
+
+`/etc/hosts` bestaat niet op iOS en Android. Wil je de app ook daar openen — en
+dat wil je, want presentaties bekijk je op een tablet — geef je clients dan een
+DNS mee die de naam kent. Een kleine `dnsmasq` op de VPS volstaat.
+
+```bash
+sudo apt install -y dnsmasq
+sudo tee /etc/dnsmasq.d/studio.conf >/dev/null <<CONF
+listen-address=$WG_ADDR
+bind-interfaces
+no-resolv
+server=9.9.9.9
+server=1.1.1.1
+address=/$DOMEIN/$WG_ADDR
+CONF
+sudo systemctl restart dnsmasq
+sudo ufw allow in on wg0 to any port 53 proto udp
+```
+
+`bind-interfaces` met `listen-address` houdt hem op de tunnel, en `no-resolv`
+met expliciete upstreams voorkomt een lus als er een lokale resolver draait.
+
+Voeg daarna in **elke clientconfiguratie** onder `[Interface]` toe:
+
+```
+DNS = 10.8.0.1
+```
+
+Controleer vanaf een client met de tunnel actief:
+
+```bash
+nslookup studio.voorbeeld.nl
+```
+
+**Je ziet:** `10.8.0.1`, met de VPS als server.
+
+Twee dingen om te weten. Al je DNS-verkeer loopt dan tijdens een actieve tunnel
+via de VPS, die het doorzet naar de upstreams hierboven. En op een
+**Linux**-client vereist `DNS =` dat `resolvconf` of `systemd-resolved`
+aanwezig is; ontbreekt dat, dan weigert `wg-quick` te starten en gebruik je daar
+`/etc/hosts`.
+
 ## Als iets niet klopt
 
 | Symptoom | Waar het zit |
 |---|---|
 | Preflight: adres niet actief op deze host | De tunnel staat niet: `systemctl status wg-quick@wg0` |
+| DNS-provider weigert een A-record naar 10.8.0.1 | Normaal; gebruik `/etc/hosts` of DNS op de VPS |
+| App werkt op de laptop, niet op de telefoon | `/etc/hosts` bestaat daar niet; zet DNS op de VPS |
 | Preflight: poort al in gebruik | Iets anders luistert op 80/443: `sudo ss -ltnp` |
 | `doctor.sh` meldt alle interfaces | Het adres mist in `HTTP_PORT`/`HTTPS_PORT` in `.env` |
 | Certificaatwaarschuwing in de browser | Stap 10; let op Firefox en iOS/Android |

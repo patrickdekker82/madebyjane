@@ -87,8 +87,13 @@ zelf.
 Twee dingen om te weten bij die keuze: het verraadt je interne adresplan aan wie
 je DNS opvraagt, en sommige resolvers filteren privé-adressen uit publieke
 antwoorden weg ("DNS rebinding protection", onder andere in dnsmasq en Unbound).
-Loop je daar tegenaan, dan zet je de naam in `/etc/hosts` op de VPS en op elke
-client.
+
+Veel DNS-providers weigeren zo'n record trouwens al bij het aanmaken — een
+privé-adres geldt daar niet als geldige waarde. Dat is geen belemmering: de
+preflight eist alleen dat de naam op de VPS resolveert, niet dat hij in publieke
+DNS staat. Zet hem dan in `/etc/hosts` op de VPS en op elke client, of geef je
+WireGuard-clients een DNS mee die de naam kent. Beide routes staan uitgeschreven
+in [installatie-checklist.md](installatie-checklist.md).
 
 ---
 
