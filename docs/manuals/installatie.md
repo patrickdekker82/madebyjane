@@ -20,9 +20,10 @@ bekijkt.
 Twee handleidingen beginnen eerder dan deze en nemen de stappen hieronder over,
 elk met de valkuilen van hun eigen soort host:
 
-- [installatie-vps.md](installatie-vps.md) — een VPS, volledig vanuit de
-  terminal: SSH-hardening, firewall, schijfruimte en een back-up die vanuit
-  systemd bij zijn opslagcredentials kan.
+- [installatie-vps.md](installatie-vps.md) — een VPS achter een
+  WireGuard-VPN, volledig vanuit de terminal. Niets publiek bereikbaar, dus
+  Caddy's eigen CA in plaats van Let's Encrypt, een binding op de tunnel, en
+  een back-up die vanuit systemd bij zijn opslagcredentials kan.
 - [installatie-hyper-v.md](installatie-hyper-v.md) — een Hyper-V-VM, vanaf het
   aanmaken van de machine.
 

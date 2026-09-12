@@ -1,61 +1,93 @@
-# Installatie op een VPS, volledig vanuit de terminal
+# Installatie op een VPS achter WireGuard, volledig vanuit de terminal
 
-Van een verse Debian-VPS naar een draaiende Studio achter HTTPS, met een eerste
-eigenaar en een nachtelijke versleutelde back-up. Elke stap is een commando over
-SSH; er is geen console, geen grafische omgeving en geen editor nodig.
+Van een verse Debian-VPS naar een draaiende Studio die **uitsluitend over je
+WireGuard-VPN** bereikbaar is, met een eerste eigenaar en een nachtelijke
+versleutelde back-up. Elke stap is een commando over SSH; er is geen console,
+geen grafische omgeving en geen editor nodig.
 
-Dit is de VPS-variant van [installatie.md](installatie.md). Waar die handleiding
-uitgaat van een host die er al staat, begint deze bij `ssh root@…` en dekt ook
-wat een publieke machine extra nodig heeft: SSH-hardening, een firewall, en een
-back-up die vanuit systemd bij zijn opslagcredentials kan.
+Dit is de VPS-variant van [installatie.md](installatie.md). Die handleiding gaat
+uit van een publiek domein met een automatisch Let's Encrypt-certificaat; hier
+is niets publiek bereikbaar, en dat verandert vier dingen.
 
 **Lees dit eerst.** Net als de basishandleiding is deze procedure opgeschreven
 vanaf de scripts en de configuratie in de repository, en is de stack **nog nooit
-op een echte host opgestart**. Reken op één of twee ruwe randen bij de eerste
-poging; [Als het misgaat](installatie.md#als-het-misgaat) staat in de
-basishandleiding.
+op een echte host opgestart**. De twee bestandsaanpassingen uit stap 7 zijn wel
+gecontroleerd: de YAML parseert en de Caddyfile houdt zijn structuur.
+
+## Wat VPN-only anders maakt
+
+**1. Geen Let's Encrypt-certificaat.** De gebruikelijke validatie vraagt dat
+Let's Encrypt poort 80 of 443 van buiten bereikt, en dat is precies wat je niet
+wil. Daarom gebruikt Caddy hier zijn **eigen CA** (`tls internal`) en rol je die
+root eenmalig uit naar je eigen apparaten. Eén ding is daarbij nagekeken en
+blijkt goed te gaan: de zwaarste route van de app, de offerte-PDF, laadt geen
+pagina over HTTPS maar krijgt zijn HTML rechtstreeks aangeleverd
+(`page.setContent` in `packages/documents/src/quote-pdf.ts`), en bevat geen
+enkele externe verwijzing. Chromium in de container hoeft dat certificaat dus
+niet te vertrouwen, en de PDF-export raakt hier niet door in de knoop.
+
+**2. De DNS-naam wijst naar je WireGuard-adres**, niet naar het publieke adres
+van de VPS. De preflight eist alleen dát de naam resolveert, niet dat hij
+publiek bereikbaar is.
+
+**3. Caddy mag niet op het publieke adres luisteren.** Dat regel je niet met de
+firewall maar met de binding zelf — zie stap 4 voor waarom een firewall hier
+niet genoeg is.
+
+**4. Twee bestanden in de repository krijgen een lokale aanpassing.** Die komen
+bij elke `git pull` terug; stap 7 en [Bijwerken](#bijwerken) houden dat
+beheersbaar.
+
+En één ding om nu te weten, niet omdat het technisch is maar omdat het het
+product raakt: **een klant kan zonder VPN niets zien.** Wil je later een
+presentatie of offerte met iemand buiten je netwerk delen, dan is dat met deze
+opzet niet mogelijk — dan komt er een publieke route bij, en die keuze staat aan
+het eind onder [Wat deze installatie nog niet heeft](#wat-deze-installatie-nog-niet-heeft).
 
 ## Voordat je begint
 
-Drie dingen bepalen of dit soepel gaat, en twee ervan kosten geld als je ze
-verkeerd kiest.
+**Specificaties.** 4 vCPU en 8 GB RAM is de startschatting; één zware export
+tegelijk is waar de containergrenzen op gedimensioneerd zijn. Op **6 vCores en
+12 GB RAM** zit je daar comfortabel boven: de limieten in
+`compose.production.yaml` tellen in bedrijf op tot 4,5 vCPU en ongeveer 2,25 GB
+(Caddy 0,5/256m, API 2,0/1g, PostgreSQL 2,0/1g, plus de migrator die alleen
+tijdens een migratie draait). Het geheugen daarboven is niet verspild — de
+kernel gebruikt het als paginacache voor PostgreSQL, en dat is precies waar een
+database het graag heeft. Wil je meer dan één zware export tegelijk aankunnen,
+dan is dat een bewuste verhoging van `mem_limit` en `cpus` voor de API in
+`compose.production.yaml`, geen automatisch gevolg van een ruimer pakket.
 
-**Schijfruimte is het echte knelpunt.** De preflight weigert te beginnen bij
-minder dan 100 GiB vrij op `STUDIO_DATA_DIR`, en de meeste VPS-pakketten in de
-8 GB-RAM-klasse leveren 80 tot 160 GB. Let op het verschil tussen GB en GiB: een
-volume van "100 GB" toont na formatteren ongeveer 93 GiB en is dus **niet
-genoeg**. Drie werkbare uitkomsten:
+**Schijfruimte.** De preflight weigert te beginnen bij minder dan 100 GiB vrij
+op `STUDIO_DATA_DIR`. Let op het verschil tussen GB en GiB — een pakket van
+"100 GB" toont na formatteren ongeveer 93 GiB en valt er net onder — maar
+**200 GB is 186 GiB en haalt de grens ruim**. Twee dingen om in de gaten te
+houden naarmate de installatie volloopt:
 
-- Een pakket met ruim ≥ 120 GB lokale SSD/NVMe. Het eenvoudigst.
-- Een apart blockstorage-volume van ≥ 120 GB, gemount op `STUDIO_DATA_DIR`. De
-  preflight meet `df` op precies die map, dus dit voldoet. Blockstorage is
-  blokniveau en daarmee geschikt voor PostgreSQL — een SMB- of NFS-share is dat
-  niet, en die moet je dus niet gebruiken.
-- Een kleinere installatie, met een bewuste aanpassing van `MIN_DISK_KIB` in
-  `scripts/preflight.sh`. Die grens staat er niet voor niets: de assets groeien
-  met elk project, en de back-up legt onderweg een volledige kopie van de assets
-  plus de databasedump in `STUDIO_DATA_DIR/backups/staging`. Reken op ruimte voor
-  je assets, nog eens zoveel voor die staging, en de database erbij.
+- De back-up legt onderweg een volledige kopie van de assets plus de
+  databasedump in `STUDIO_DATA_DIR/backups/staging`. Reken dus op je assets,
+  nog eens zoveel voor die staging, en de database erbij.
+- Zakt de vrije ruimte onder 100 GiB, dan stopt niet alleen `install.sh` maar
+  ook `upgrade.sh` — die draait de preflight opnieuw.
 
-**Specificaties.** 4 vCPU, 8 GB RAM (16 GB als er meerdere exports tegelijk
-lopen). Eén zware export tegelijk is waar de containergrenzen op gedimensioneerd
-zijn. Dit is een startschatting en geen meting.
+**Een domeinnaam.** Ook binnen een VPN heb je een echte DNS-naam nodig:
+`PUBLIC_BASE_URL` moet exact `https://` + `CADDY_SITE_ADDRESS` zijn en de app
+accepteert geen andere origin. Een IP-adres invullen werkt niet. Gebruik een
+(sub)domein dat je bezit, bijvoorbeeld `studio.voorbeeld.nl`, en laat het naar je
+WireGuard-adres wijzen. Dat kan gewoon in publieke DNS — een A-record met een
+privé-adres is toegestaan en werkt meteen voor al je clients én voor de VPS
+zelf.
 
-**Een domeinnaam.** Caddy vraagt zelf een Let's Encrypt-certificaat aan. Op een
-VPS is dat de makkelijke route: het adres is publiek, dus je hebt alleen een
-A-record nodig en geen portforwarding. Zet dat record **nu** al, dan is de TTL
-verlopen tegen de tijd dat je bij stap 5 bent.
-
-Zet vooralsnog **alleen een A-record** (IPv4). Heb je ook een AAAA-record, dan
-moet IPv6 werkelijk tot in de container reiken; zo niet, dan lopen zowel de
-certificaataanvraag als bezoekers met IPv6 vast op een adres dat niet antwoordt.
-Voeg AAAA later toe, als je het hebt gecontroleerd.
+Twee dingen om te weten bij die keuze: het verraadt je interne adresplan aan wie
+je DNS opvraagt, en sommige resolvers filteren privé-adressen uit publieke
+antwoorden weg ("DNS rebinding protection", onder andere in dnsmasq en Unbound).
+Loop je daar tegenaan, dan zet je de naam in `/etc/hosts` op de VPS en op elke
+client.
 
 ---
 
 ## 1. Eerste login en de host vastzetten
 
-Log in als root op het IP-adres dat je provider geeft:
+Log in als root op het publieke IP-adres dat je provider geeft:
 
 ```bash
 ssh root@203.0.113.10
@@ -66,10 +98,10 @@ Werk bij en installeer wat je nodig hebt:
 ```bash
 apt update && apt full-upgrade -y
 apt install -y ca-certificates curl git restic openssl tmux ufw \
-  unattended-upgrades systemd-timesyncd
+  wireguard qrencode unattended-upgrades systemd-timesyncd
 ```
 
-`tmux` staat er met een reden: de installatie in stap 6 bouwt twee images en
+`tmux` staat er met een reden: de installatie in stap 10 bouwt twee images en
 duurt minuten. Valt je SSH-verbinding dan weg, dan gaat de build mee. In tmux
 niet.
 
@@ -83,35 +115,104 @@ timedatectl        # verwacht: "System clock synchronized: yes"
 ```
 
 Die laatste regel is precies wat de preflight opvraagt, en een verkeerde klok
-laat certificaataanvragen mislukken.
+laat elk certificaat — ook dat van je eigen CA — buiten zijn geldigheidsvenster
+vallen.
 
-Heeft je pakket 8 GB RAM of minder, geef Chromium dan wat lucht met een
-swapbestand:
+Met 12 GB RAM heb je geen swapbestand nodig; de containergrenzen tellen op tot
+ruim daaronder.
 
-```bash
-fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
-echo '/swapfile none swap sw 0 0' >> /etc/fstab
-```
-
-### Een blockstorage-volume mounten (alleen als je die route kiest)
-
-Controleer eerst hoe het volume heet — `lsblk` toont het naast je systeemschijf,
-meestal als `/dev/sdb` of `/dev/disk/by-id/scsi-0DO_Volume_…`. Formatteren wist
-het volume, dus lees de naam goed:
+Zet automatische beveiligingsupdates aan:
 
 ```bash
-lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT
-mkfs.ext4 -L studio-data /dev/sdb        # alleen op een leeg, nieuw volume
-mkdir -p /srv/interieurstudio
-echo 'LABEL=studio-data /srv/interieurstudio ext4 defaults,nofail 0 2' >> /etc/fstab
-systemctl daemon-reload && mount -a
-df -h /srv/interieurstudio               # moet ≥ 100 GiB vrij tonen
+dpkg-reconfigure -plow unattended-upgrades   # kies "Yes"
 ```
 
-Mounten op label in plaats van op `/dev/sdb` is bewust: apparaatnamen kunnen na
-een reboot verschuiven, een label niet.
+## 2. WireGuard
 
-## 2. Een gewone gebruiker en SSH dichtzetten
+Draait WireGuard al, sla dit over en controleer alleen twee dingen: welk adres
+de server op de tunnel heeft (`ip -4 addr show wg0`) en dat de interface na een
+reboot automatisch opkomt (`systemctl is-enabled wg-quick@wg0`). Dat adres heb
+je in stap 7 nodig.
+
+Zo niet — sleutels, met een veilige umask:
+
+```bash
+umask 077
+mkdir -p /etc/wireguard/keys
+wg genkey | tee /etc/wireguard/keys/server.key | wg pubkey > /etc/wireguard/keys/server.pub
+wg genkey | tee /etc/wireguard/keys/laptop.key | wg pubkey > /etc/wireguard/keys/laptop.pub
+```
+
+De serverconfiguratie. Let op wat er **niet** in staat: geen `PostUp` met NAT en
+geen IP-forwarding. Je clients moeten alleen de VPS zelf bereiken, niet het
+internet via de VPS, en dan is forwarding onnodig — en wat je niet aanzet, kan
+niet verkeerd staan.
+
+```bash
+cat > /etc/wireguard/wg0.conf <<CONF
+[Interface]
+Address = 10.8.0.1/24
+ListenPort = 51820
+PrivateKey = $(cat /etc/wireguard/keys/server.key)
+
+[Peer]
+# laptop
+PublicKey = $(cat /etc/wireguard/keys/laptop.pub)
+AllowedIPs = 10.8.0.2/32
+CONF
+chmod 600 /etc/wireguard/wg0.conf
+
+systemctl enable --now wg-quick@wg0
+wg show
+ip -4 addr show wg0        # verwacht: 10.8.0.1/24
+```
+
+De clientconfiguratie maak je hier en neem je mee. `AllowedIPs` staat bewust op
+alleen het VPN-subnet: een split tunnel, zodat de rest van het internetverkeer
+van je laptop niet door de VPS gaat.
+
+```bash
+cat > /root/laptop.conf <<CONF
+[Interface]
+PrivateKey = $(cat /etc/wireguard/keys/laptop.key)
+Address = 10.8.0.2/32
+
+[Peer]
+PublicKey = $(cat /etc/wireguard/keys/server.pub)
+Endpoint = 203.0.113.10:51820
+AllowedIPs = 10.8.0.0/24
+PersistentKeepalive = 25
+CONF
+```
+
+Voor een telefoon of tablet hoef je geen bestand over te zetten — laat de
+terminal een QR-code tekenen en scan hem in de WireGuard-app:
+
+```bash
+qrencode -t ansiutf8 < /root/laptop.conf
+```
+
+Elke extra client krijgt een eigen sleutelpaar, een eigen `[Peer]`-blok in
+`wg0.conf` met een eigen `AllowedIPs`-adres (`10.8.0.3/32`, enzovoort), en daarna
+`systemctl reload wg-quick@wg0`. Sleutels delen tussen apparaten maakt
+intrekken onmogelijk.
+
+Haal de clientconfiguratie op vanaf **je eigen machine**, en verwijder hem daarna
+van de server:
+
+```bash
+scp root@203.0.113.10:/root/laptop.conf ./studio-wg.conf   # op je eigen machine
+ssh root@203.0.113.10 'shred -u /root/laptop.conf'
+```
+
+Zet de tunnel op je laptop op (`wg-quick up ./studio-wg.conf`, of via de
+WireGuard-app) en controleer dat je de VPS over de tunnel bereikt:
+
+```bash
+ping -c3 10.8.0.1        # op je eigen machine, met de tunnel actief
+```
+
+## 3. Een gewone gebruiker en SSH dichtzetten
 
 Je installeert niet als root. Maak een gebruiker en geef hem je sleutel:
 
@@ -125,11 +226,7 @@ chmod 600 /home/studio/.ssh/authorized_keys
 ```
 
 Heb je nog geen sleutel op de server maar wel op je eigen machine, dan zet je
-die er vanaf **je eigen terminal** neer:
-
-```bash
-ssh-copy-id studio@203.0.113.10
-```
+die er vanaf je eigen terminal neer met `ssh-copy-id studio@203.0.113.10`.
 
 **Controleer nu, in een tweede terminal, dat inloggen als `studio` werkt** —
 voordat je wachtwoordlogin uitschakelt. Sluit je je hier buiten, dan heb je de
@@ -154,44 +251,48 @@ sshd -t && systemctl reload ssh
 `sshd -t` controleert de configuratie vóór de herstart. Faalt hij, dan herstart
 er niets en blijft je huidige sessie leven.
 
-Firewall — SSH, HTTP en HTTPS, en de rest dicht:
+Je kunt SSH ook helemaal achter de VPN zetten. Dat is een echte verbetering —
+poort 22 verdwijnt dan van het publieke internet — maar het is ook de stap waar
+je je het makkelijkst buitensluit. Doe het pas als de tunnel uit stap 2 betrouwbaar
+staat, test het in een tweede terminal, en weet waar de webconsole van je
+provider zit:
 
 ```bash
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow OpenSSH
-ufw allow 80/tcp
-ufw allow 443/tcp
-ufw --force enable
-ufw status verbose
+echo 'ListenAddress 10.8.0.1' > /etc/ssh/sshd_config.d/98-vpn-only.conf
+sshd -t && systemctl reload ssh
+ssh studio@10.8.0.1 'id'      # met de tunnel actief, in een tweede terminal
 ```
 
-**Weet wat `ufw` hier wel en niet doet.** Docker zet zijn eigen regels in
-iptables voor gepubliceerde containerpoorten, en die worden vóór de regels van
-ufw beoordeeld. Poorten die een container publiceert zijn dus bereikbaar, ook
-als ufw ze zou weigeren. In deze stack is dat precies wat je wil — alleen Caddy
-publiceert 80 en 443, de API en PostgreSQL publiceren niets — maar ga niet
-uitrekenen dat ufw een gepubliceerde poort voor je afschermt. Wil je echt iets
-blokkeren, gebruik dan ook de firewall van je provider.
+Werkt dat niet, dan verwijder je dat bestand en herlaad je `ssh` opnieuw — je
+huidige sessie blijft bij een `reload` in leven.
 
-Heeft je provider een cloudfirewall, zet daar dan 22, 80 en 443 open. Twee
-firewalls die elkaar tegenspreken is een van de saaiste manieren om een
-certificaataanvraag te zien mislukken.
+## 4. De firewall, en waarom hij hier niet het werk doet
 
-Zet automatische beveiligingsupdates aan:
+Alleen WireGuard en SSH van buiten; 80 en 443 blijven publiek dicht:
 
 ```bash
-dpkg-reconfigure -plow unattended-upgrades   # kies "Yes"
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow 51820/udp
+sudo ufw allow OpenSSH
+sudo ufw --force enable
+sudo ufw status verbose
 ```
 
-Log hierna opnieuw in als `studio` en werk verder met `sudo`:
+Zet hier géén `ufw allow 80/tcp` of `443/tcp` bij. Heeft je provider een
+cloudfirewall, laat daar dan alleen 51820/udp door (en 22 zolang SSH nog niet
+achter de VPN zit).
 
-```bash
-exit
-ssh studio@203.0.113.10
-```
+**En lees dit voordat je denkt dat je klaar bent.** Docker zet zijn eigen regels
+in iptables voor gepubliceerde containerpoorten, en die worden vóór de regels
+van ufw beoordeeld. Een container die poort 80 publiceert op `0.0.0.0` is dus
+van buiten bereikbaar **ook al weigert ufw poort 80**. Dat is geen bug in ufw
+maar de manier waarop Docker zijn poorten doorzet, en het is precies de reden
+dat we in stap 7 Caddy aan het WireGuard-adres binden in plaats van op de
+firewall te vertrouwen. Dan luistert er op het publieke adres niets, en valt er
+ook niets te omzeilen.
 
-## 3. Docker Engine en Compose v2
+## 5. Docker Engine en Compose v2
 
 Via de officiële route van Docker voor Debian:
 
@@ -222,26 +323,50 @@ newgrp docker
 docker info >/dev/null && docker compose version
 ```
 
-Beide moeten slagen **zonder** `sudo` — de preflight eist dat. Wees je ervan
-bewust dat lid zijn van de groep `docker` in de praktijk gelijkstaat aan root op
-deze machine; houd die groep leeg op één beheerder en straks de
-back-upgebruiker.
+Beide moeten slagen **zonder** `sudo` — de preflight eist dat. Lid zijn van de
+groep `docker` staat in de praktijk gelijk aan root op deze machine; houd die
+groep beperkt tot jou en straks de back-upgebruiker.
 
-## 4. DNS controleren
+Docker moet ná WireGuard starten, anders kan Caddy bij een reboot niet aan een
+adres binden dat nog niet bestaat:
 
-Voordat je verder gaat, vanaf de VPS zelf:
+```bash
+sudo install -d -m 755 /etc/systemd/system/docker.service.d
+sudo tee /etc/systemd/system/docker.service.d/10-wireguard.conf >/dev/null <<'CONF'
+[Unit]
+Wants=wg-quick@wg0.service
+After=wg-quick@wg0.service
+CONF
+sudo systemctl daemon-reload
+```
+
+Kan of wil je die ordening niet, dan is `net.ipv4.ip_nonlocal_bind=1` het
+alternatief: binden op een adres dat nog niet actief is, wordt dan toegestaan.
+De ordening is netter, omdat er dan niets luistert op een tunnel die nog niet
+staat. Stap 15 toont of het klopt.
+
+## 6. DNS controleren
+
+Vanaf de VPS zelf:
 
 ```bash
 getent ahosts studio.voorbeeld.nl
-curl -s ifconfig.me; echo
 ```
 
-Het adres uit de eerste regel moet het adres uit de tweede zijn. Resolveert het
-niet, dan stopt de preflight — en terecht, want dan mislukt ook de
-certificaataanvraag. Wijst het naar een ander adres, dan wacht je op de TTL van
-je oude record.
+Dit moet je **WireGuard**-adres teruggeven (`10.8.0.1`), niet het publieke
+adres. Resolveert het niet, dan stopt de preflight. Krijg je het publieke adres,
+dan wijst je A-record nog verkeerd of wacht je op de TTL.
 
-## 5. De code en de configuratie
+Filtert je resolver privé-adressen weg, zet de naam dan lokaal vast:
+
+```bash
+echo '10.8.0.1 studio.voorbeeld.nl' | sudo tee -a /etc/hosts
+```
+
+Doe dat dan ook op elke client — zonder werkende naam krijgt de browser de app
+niet te zien, hoe goed de tunnel ook staat.
+
+## 7. De code en de twee lokale aanpassingen
 
 ```bash
 sudo mkdir -p /opt/interieurstudio
@@ -254,7 +379,48 @@ Houd deze map aan: de systemd-unit voor de back-up verwijst ernaar. Node.js,
 pnpm en PostgreSQL hoef je **niet** op de host te installeren — alles wordt in
 de containers gebouwd en gedraaid.
 
-Nu `.env`, zonder editor. Vul eerst je eigen twee waarden in als variabele:
+Zet de aanpassingen op een eigen branch, zodat een `git pull` straks een
+zichtbaar conflict geeft in plaats van je wijzigingen stil te overschrijven:
+
+```bash
+git checkout -b vps-vpn
+```
+
+**Aanpassing 1 — Caddy een eigen CA laten gebruiken.** Zonder dit blijft Caddy
+proberen een Let's Encrypt-certificaat te halen, wat achter de VPN niet lukt:
+
+```bash
+sed -i 's/^\tencode zstd gzip$/\ttls internal\n\tencode zstd gzip/' infra/docker/Caddyfile
+head -3 infra/docker/Caddyfile      # verwacht: tls internal onder de eerste regel
+```
+
+**Aanpassing 2 — Caddy alleen op de tunnel laten luisteren.** Vul hier het adres
+van je eigen `wg0` in:
+
+```bash
+WG_ADDR=10.8.0.1
+sed -i \
+  -e "s|- \"\${HTTP_PORT:-80}:80\"|- \"$WG_ADDR:\${HTTP_PORT:-80}:80\"|" \
+  -e "s|- \"\${HTTPS_PORT:-443}:443\"|- \"$WG_ADDR:\${HTTPS_PORT:-443}:443\"|" \
+  compose.production.yaml
+grep -A3 '^    ports:' compose.production.yaml
+```
+
+Je verwacht `"10.8.0.1:${HTTP_PORT:-80}:80"` en de tegenhanger voor 443.
+
+Dit staat in `compose.production.yaml` en niet in `.env` omdat de preflight eist
+dat `HTTP_PORT` en `HTTPS_PORT` **getallen** zijn; een `adres:poort` erin zetten
+laat de controle falen. Laat die twee dus op 80 en 443 staan.
+
+Leg de aanpassingen vast:
+
+```bash
+git commit -am "lokaal: eigen CA en binding op de WireGuard-interface"
+```
+
+## 8. Configuratie
+
+Nu `.env`, zonder editor. Vul eerst je eigen waarden in als variabele:
 
 ```bash
 DOMEIN=studio.voorbeeld.nl
@@ -268,9 +434,6 @@ sed -i \
   -e "s|^STUDIO_DATA_DIR=.*|STUDIO_DATA_DIR=$DATA|" \
   .env
 ```
-
-`PUBLIC_BASE_URL` moet letterlijk `https://` + `CADDY_SITE_ADDRESS` zijn; de
-preflight controleert dat, en de app accepteert geen andere origin.
 
 Dan de vijf geheimen. `install.sh` vraagt ze anders interactief op; hier zet je
 ze in één keer neer:
@@ -288,31 +451,29 @@ runtime, identity en sessies zijn gescheiden. Laat ze bij een herstart
 ongewijzigd — `install.sh` en `upgrade.sh` roteren nooit stilzwijgend een
 bestaand geheim.
 
-Maak de datamap aan op de lokale schijf:
+Maak de datamap aan:
 
 ```bash
 sudo install -d -o "$USER" -g "$USER" "$DATA"
 df -h "$DATA"        # moet ≥ 100 GiB vrij tonen
 ```
 
-**Zet `.env` nu buiten deze VPS.** Vanaf je eigen machine:
+**Zet `.env` nu buiten deze VPS.** Vanaf je eigen machine, met de tunnel actief:
 
 ```bash
-scp studio@203.0.113.10:/opt/interieurstudio/.env ./interieurstudio-env-backup
+scp studio@10.8.0.1:/opt/interieurstudio/.env ./interieurstudio-env-backup
 ```
 
-Bewaar dat bestand ergens veilig, samen met het restic-wachtwoord uit de
-volgende stap. De back-up bevat de geheimen met opzet **niet**; zonder het
-restic-wachtwoord is elke back-up onleesbaar.
+Bewaar dat bestand veilig, samen met het restic-wachtwoord uit de volgende stap.
+De back-up bevat de geheimen met opzet **niet**; zonder het restic-wachtwoord is
+elke back-up onleesbaar.
 
-## 6. Restic-bestemmingen
+## 9. Restic-bestemmingen
 
 Er zijn er twee nodig, op twee verschillende plekken, en geen van beide op deze
-VPS — anders verlies je bij één storing de app én de back-up. Op een VPS is
-objectopslag de praktische keuze (S3-compatibel, Backblaze B2, een restic
-REST-server); kies voor de tweede bestemming een andere aanbieder of locatie.
-
-Maak het wachtwoordbestand:
+VPS — anders verlies je bij één storing de app én de back-up. Objectopslag
+(S3-compatibel, Backblaze B2, een restic REST-server) is hier de praktische
+keuze; kies voor de tweede bestemming een andere aanbieder of locatie.
 
 ```bash
 sudo install -d -m 700 /etc/interieurstudio
@@ -323,8 +484,8 @@ sudo chmod 600 /etc/interieurstudio/restic-password
 Zet de credentials van je opslag in een apart bestand. Dit is geen extra
 netheid maar een noodzaak: `scripts/backup-lib.sh` geeft restic alleen de
 repository en het wachtwoordbestand mee en erft de rest van de omgeving. Een
-S3- of B2-repository werkt dus alleen als die credentials in de omgeving staan
-— ook straks in de nachtelijke systemd-run, die geen shell van jou erft.
+S3- of B2-repository werkt dus alleen als die credentials in de omgeving staan —
+ook straks in de nachtelijke systemd-run, die geen shell van jou erft.
 
 ```bash
 sudo tee /etc/interieurstudio/backup.env >/dev/null <<'CONF'
@@ -355,16 +516,17 @@ De variabele heet historisch `BACKUP_SYNOLOGY_REPOSITORY`; er hoeft geen
 Synology achter te zitten. `backup.sh` initialiseert niet zelf — een repository
 die er niet is, is een vergissing en geen situatie om stilzwijgend op te lossen.
 
-Wil je in plaats van objectopslag een SFTP-doel (`sftp:gebruiker@host:/pad`),
-dan heeft niet jouw gebruiker maar de back-upgebruiker uit stap 9 de SSH-sleutel
-en de `known_hosts` nodig. Objectopslag met een `EnvironmentFile` is op een VPS
-de kortste weg.
+Heb je een back-updoel dat zelf in je VPN hangt (een NAS achter dezelfde
+WireGuard), dan kan dat, maar dan heeft de back-upgebruiker uit stap 12 er een
+route en credentials voor nodig — en is het geen *tweede plek* meer als het
+naast je VPS in dezelfde ruimte staat. Objectopslag met een `EnvironmentFile` is
+op een VPS de kortste en de beste weg.
 
 **Sla `/etc/interieurstudio/restic-password` nu ook buiten deze VPS op.** Dit is
 het makkelijkst te vergeten bestand van de hele installatie en het enige dat je
 back-ups leesbaar maakt.
 
-## 7. Installeren
+## 10. Installeren
 
 Start een tmux-sessie, zodat een wegvallende verbinding de build niet meeneemt:
 
@@ -382,6 +544,16 @@ aan en start de stack. De eerste keer duurt dit een paar minuten: er worden twee
 images gebouwd. De migrator draait eenmalig en legt het databaseschema aan; pas
 als hij klaar is, start de API.
 
+Controleer meteen dat er alleen op de tunnel geluisterd wordt:
+
+```bash
+sudo ss -ltnp | grep -E ':(80|443)\b'
+```
+
+Je verwacht `10.8.0.1:80` en `10.8.0.1:443`, en **niet** `0.0.0.0:*`. Staat er
+`0.0.0.0`, dan is aanpassing 2 uit stap 7 niet meegekomen en is de app publiek
+bereikbaar.
+
 Blijft het hangen op `--wait`, dan wordt een container niet gezond. Kijk in deze
 volgorde — postgres moet gezond zijn voordat de migrator draait, en de migrator
 moet klaar zijn voordat de API start:
@@ -393,9 +565,65 @@ docker compose --env-file .env -f compose.production.yaml logs migrator
 docker compose --env-file .env -f compose.production.yaml logs api
 ```
 
-## 8. Eerste eigenaar en controle
+## 11. De eigen CA uitrollen
+
+Caddy heeft bij de eerste start een eigen CA aangemaakt. Haal de root eruit:
 
 ```bash
+docker compose --env-file .env -f compose.production.yaml exec caddy \
+  cat /data/caddy/pki/authorities/local/root.crt > /tmp/studio-root-ca.crt
+openssl x509 -in /tmp/studio-root-ca.crt -noout -subject -dates
+```
+
+Vindt hij dat pad niet, dan zoek je hem op de host — hij staat onder de
+gegevensmap van Caddy:
+
+```bash
+sudo find "$DATA/caddy" -name root.crt
+```
+
+Vertrouw hem op de VPS zelf (handig voor de controles in stap 12):
+
+```bash
+sudo cp /tmp/studio-root-ca.crt /usr/local/share/ca-certificates/studio-root.crt
+sudo update-ca-certificates
+```
+
+En haal hem naar je eigen machines. Vanaf je eigen terminal:
+
+```bash
+scp studio@10.8.0.1:/tmp/studio-root-ca.crt ./studio-root-ca.crt
+```
+
+Per besturingssysteem, allemaal vanuit de terminal:
+
+```bash
+# Debian/Ubuntu
+sudo cp studio-root-ca.crt /usr/local/share/ca-certificates/studio-root.crt && sudo update-ca-certificates
+
+# macOS
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain studio-root-ca.crt
+
+# Windows, in een PowerShell als administrator
+certutil -addstore -f Root studio-root-ca.crt
+```
+
+Op iOS en Android installeer je het bestand als profiel en zet je het daarna
+**expliciet aan** onder de certificaatvertrouwensinstellingen; de installatie
+alleen is niet genoeg. Firefox gebruikt zijn eigen certificaatopslag en negeert
+die van het systeem: importeer de root daar apart, of zet
+`security.enterprise_roots.enabled` aan.
+
+Twee dingen die anders voor verwarring zorgen: de bladcertificaten van Caddy's
+eigen CA leven maar een halve dag en de tussenliggende een week — dat is met
+opzet en Caddy vernieuwt ze zelf, zolang hij draait. En de root zelf zit in de
+back-up van je gegevensmap; zet je de installatie ooit ergens anders neer zonder
+die data, dan krijg je een nieuwe CA en moet je opnieuw uitrollen.
+
+## 12. Eerste eigenaar en controle
+
+```bash
+cd /opt/interieurstudio
 ./scripts/setup-owner.sh
 ```
 
@@ -413,20 +641,31 @@ curl -sS "https://$DOMEIN/api/v1/health"
 ```
 
 Die laatste twee zijn samen de test die de meeste eerste installaties afvangt.
-De `curl -I` bewijst dat het certificaat geldig is — `curl` faalt zelf op een
-ongeldig certificaat, dus een antwoord is al het bewijs. En `/api/v1/health`
-moet **JSON** teruggeven. Krijg je HTML, dan stuurt Caddy je API-aanroepen naar
-de SPA en doet de app straks geen knop.
+De `curl -I` bewijst dat het certificaat wordt vertrouwd — `curl` faalt zelf op
+een certificaat dat hij niet kan verifiëren, dus een antwoord is het bewijs.
+Werkte stap 11 niet, dan kun je hem eenmalig met het bestand meegeven:
+`curl --cacert /tmp/studio-root-ca.crt ...`. En `/api/v1/health` moet **JSON**
+teruggeven; krijg je HTML, dan stuurt Caddy je API-aanroepen naar de SPA en doet
+de app straks geen knop.
 
-De rest van de smoketest heeft wél een browser nodig: inloggen, meteen **MFA**
-aanzetten onder Beveiliging, een project maken dat na herladen blijft staan, en
-een **offerte-PDF downloaden**. Doe die laatste meteen — dat is de zwaarste
-route, want daar start Chromium in de container.
+Controleer daarna, vanaf je eigen machine, dat het aan de buitenkant dicht zit:
 
-## 9. De nachtelijke back-up
+```bash
+curl --connect-timeout 5 -sSI https://203.0.113.10/     # verwacht: timeout of refused
+```
+
+Een antwoord hier betekent dat de app publiek bereikbaar is. Loop dan stap 7
+(binding) en stap 4 (firewall) opnieuw na.
+
+De rest van de smoketest heeft wél een browser nodig, met de tunnel actief:
+inloggen, meteen **MFA** aanzetten onder Beveiliging, een project maken dat na
+herladen blijft staan, en een **offerte-PDF downloaden**. Doe die laatste
+meteen — dat is de zwaarste route, want daar start Chromium in de container.
+
+## 13. De nachtelijke back-up
 
 De meegeleverde unit draait als gebruiker `interieurstudio` vanuit
-`/opt/interieurstudio`. Maak die aan en geef hem wat hij nodig heeft:
+`/opt/interieurstudio`:
 
 ```bash
 sudo useradd --system --home /opt/interieurstudio --shell /usr/sbin/nologin interieurstudio
@@ -457,11 +696,10 @@ systemctl list-timers interieurstudio-backup.timer
 
 Die drop-in is niet optioneel bij objectopslag. De unit in de repository heeft
 geen `EnvironmentFile`, en zonder die regel heeft de nachtelijke run geen
-credentials voor je bucket — je handmatige back-up van hieronder slaagt dan wel,
-en de nachtelijke faalt.
+credentials voor je bucket — je handmatige back-up slaagt dan wel, en de
+nachtelijke faalt.
 
-Draai de eerste back-up met de hand, als de back-upgebruiker, precies zoals
-systemd hem straks draait:
+Draai de eerste back-up precies zoals systemd hem straks draait:
 
 ```bash
 sudo systemctl start interieurstudio-backup.service
@@ -472,7 +710,7 @@ Let op: **de API gaat tijdens de back-up even uit.** Dat is het
 onderhoudsvenster dat de dump consistent maakt. Hij gaat daarna vanzelf weer
 aan, ook als de back-up mislukt.
 
-## 10. De back-up verifiëren
+## 14. De back-up verifiëren
 
 Een geslaagde upload is nog geen geslaagde herstelbaarheid:
 
@@ -484,30 +722,33 @@ set -a; . /etc/interieurstudio/backup.env; set +a
 
 Dit haalt de nieuwste back-up naar een lege map, controleert de assethashes,
 start een geïsoleerde PostgreSQL **zonder netwerk**, zet de dump terug en eist
-dat de kerntabellen erin staan. Let op de schijfruimte: het hersteldoel krijgt
-een volledige kopie. Ruim de testmappen daarna op, en herhaal dit periodiek.
+dat de kerntabellen erin staan. Het hersteldoel krijgt een volledige kopie, dus
+ruim de testmappen daarna op. Herhaal dit periodiek.
 
 `restore.sh` weigert naar de productiedatamap te herstellen en weigert een doel
 dat niet leeg is. Een echte terugzetactie is met opzet geen one-liner; zie
 [backup-herstel.md](../notes/backup-herstel.md).
 
-## 11. Een reboot proeven
+## 15. Een reboot proeven
 
-Vijf minuten, en het is het stuk dat in deze omgeving niet gemeten is:
+Vijf minuten, en met VPN-only is dit de belangrijkste test van de hele
+installatie: de tunnel moet omhoog zijn voordat Caddy aan zijn adres bindt.
 
 ```bash
 sudo reboot
 # even wachten, dan opnieuw inloggen
-ssh studio@203.0.113.10
+ssh studio@203.0.113.10        # of 10.8.0.1, met de tunnel actief
+systemctl is-active wg-quick@wg0
+sudo ss -ltnp | grep -E ':(80|443)\b'     # verwacht: 10.8.0.1, niet 0.0.0.0
 cd /opt/interieurstudio && ./scripts/doctor.sh
 curl -sS "https://$DOMEIN/api/v1/health"
 systemctl list-timers interieurstudio-backup.timer
-mount | grep interieurstudio     # alleen bij een blockstorage-volume
 ```
 
 Alle services draaien (de containers hebben `restart: unless-stopped`), de
-healthcheck slaagt, het volume is gemount en de timer staat op de volgende
-nacht. Zo niet, dan weet je het nu en niet over drie weken.
+tunnel staat, Caddy luistert op de tunnel en de timer staat op de volgende
+nacht. Draait Caddy niet en meldt hij in de logs iets over een adres dat niet
+toegewezen kan worden, dan is de ordening uit stap 5 niet actief.
 
 ## Bijwerken
 
@@ -515,9 +756,31 @@ nacht. Zo niet, dan weet je het nu en niet over drie weken.
 cd /opt/interieurstudio
 tmux new -s upgrade
 set -a; . /etc/interieurstudio/backup.env; set +a
-git pull
+
+git fetch origin
+git rebase origin/main          # jouw twee aanpassingen komen hier bovenop
+docker compose --env-file .env -f compose.production.yaml stop caddy
 ./scripts/upgrade.sh
 ```
+
+Twee dingen wijken hier af van de basishandleiding.
+
+**De rebase.** Je twee lokale aanpassingen staan als commit op de branch
+`vps-vpn`; `git rebase origin/main` zet ze op de nieuwe versie. Raakt een
+update dezelfde regels, dan krijg je een zichtbaar conflict in plaats van een
+stille overschrijving — los het op, en controleer met `grep -A3 '^    ports:'
+compose.production.yaml` en `head -3 infra/docker/Caddyfile` dat beide
+aanpassingen er nog in staan voordat je verder gaat.
+
+**Het stoppen van Caddy.** `upgrade.sh` draait de preflight, en die controleert
+of poort 80 en 443 vrij zijn met een filter dat alleen naar het poortnummer
+kijkt — niet naar het adres waarop iets luistert. Bij de standaardinstellingen
+van Docker luistert er een `docker-proxy` op die poorten zolang de stack draait,
+en dan meldt de preflight ze als bezet en stopt de upgrade. Caddy eerst stoppen
+haalt die listener weg; `upgrade.sh` start hem daarna zelf weer met
+`up --build --wait`. Dit geldt net zo goed voor een publieke installatie en is
+hier beredeneerd uit `scripts/preflight.sh` en `scripts/upgrade.sh`, niet gemeten
+— faalt de preflight toch nog op de poorten, dan weet je waar het zit.
 
 `upgrade.sh` draait eerst de preflight, dan een volledige back-up, en pas daarna
 de nieuwe images en migrations. Zijn je restic-bestemmingen niet bereikbaar, dan
@@ -526,45 +789,56 @@ waarom de credentials hier in je omgeving moeten staan.
 
 ---
 
-## VPS-specifieke valkuilen
+## Valkuilen
 
-**De preflight stopt op schijfruimte terwijl je pakket "100 GB" heet.** GB is
-niet GiB. Zie [Voordat je begint](#voordat-je-begint); een volume van 120 GB of
-meer haalt de grens comfortabel.
+**De browser vertrouwt het certificaat niet.** Stap 11, en let op de twee
+uitzonderingen: Firefox gebruikt zijn eigen opslag, en op iOS/Android moet je de
+root na installatie apart aanzetten.
 
-**Je hebt jezelf buitengesloten.** Wachtwoordlogin uitzetten zonder eerst met de
-sleutel te testen is de klassieker. Gebruik de webconsole of het rescue-systeem
-van je provider, en verwijder `/etc/ssh/sshd_config.d/99-studio.conf`.
+**`getent ahosts` geeft het publieke adres.** Je A-record wijst nog naar de VPS
+in plaats van naar `10.8.0.1`, of je wacht op de TTL. De app laadt dan buiten de
+tunnel niet en binnen de tunnel niet over de juiste route.
 
-**Het certificaat komt niet.** Loop na: resolveert het domein naar dít adres
-(`getent ahosts` versus `curl ifconfig.me`), staan 80 en 443 open in ufw **en**
-in de cloudfirewall van je provider, en heb je een AAAA-record dat niet
-antwoordt? Kijk daarna in `docker compose ... logs caddy` — de ACME-fout staat er
-letterlijk.
+**De app is van buiten bereikbaar.** `sudo ss -ltnp | grep -E ':(80|443)\b'`
+moet je WireGuard-adres tonen. Staat er `0.0.0.0`, dan is aanpassing 2 uit stap 7
+weggevallen — bijvoorbeeld door een `git pull` die de rebase niet meenam. Ufw
+helpt hier niet tegen; zie stap 4.
 
-**`/api/v1/health` geeft HTML.** Dan worden API-aanroepen naar de webpagina
-gestuurd. De app laadt wel, maar geen enkele knop doet iets.
+**Na een reboot draait Caddy niet.** De tunnel kwam later dan Docker. Controleer
+`systemctl is-active wg-quick@wg0` en de drop-in uit stap 5.
+
+**`upgrade.sh` stopt op "HTTP-poort 80 is al in gebruik".** Zie
+[Bijwerken](#bijwerken): stop Caddy vóór de upgrade.
 
 **De nachtelijke back-up faalt terwijl de handmatige slaagde.** Dan mist de
 systemd-run iets wat jouw shell wel had: meestal de credentials
-(`EnvironmentFile`-drop-in uit stap 9), soms leesrecht op het
-restic-wachtwoord of schrijfrecht in `STUDIO_DATA_DIR`. `journalctl -u
+(`EnvironmentFile`-drop-in uit stap 13), soms leesrecht op het restic-wachtwoord
+of schrijfrecht in `STUDIO_DATA_DIR`. `journalctl -u
 interieurstudio-backup.service` zegt welke.
+
+**Je hebt jezelf buitengesloten.** Wachtwoordlogin uitzetten of SSH achter de
+VPN zetten zonder eerst te testen is de klassieker. Gebruik de webconsole of het
+rescue-systeem van je provider en verwijder het betreffende bestand uit
+`/etc/ssh/sshd_config.d/`.
 
 **Een snapshot van je provider is geen back-up van de database.** Een
 momentopname van een draaiende PostgreSQL is niet consistent. Gebruik hem voor
 de host, en `backup.sh` voor de data.
 
-**De schijf loopt vol tijdens een back-up.** De staging in
-`STUDIO_DATA_DIR/backups/staging` houdt kort een volledige kopie van de assets
-plus de dump. Reken dat mee, niet alleen de groei van de assets zelf.
-
-Voor alles wat niet VPS-specifiek is — rechten van de containers, de routering
-van Caddy, Chromium-fouten bij een PDF, niet meer kunnen inloggen — zie
-[Als het misgaat](installatie.md#als-het-misgaat) en
+Voor alles wat niet VPS- of VPN-specifiek is — rechten van de containers, de
+routering van Caddy, Chromium-fouten bij een PDF, niet meer kunnen inloggen —
+zie [Als het misgaat](installatie.md#als-het-misgaat) en
 [accountherstel.md](accountherstel.md).
 
 ## Wat deze installatie nog niet heeft
+
+**Geen toegang zonder VPN.** Dat is de bedoeling, maar het heeft een gevolg dat
+je pas merkt als je het nodig hebt: een klant kan geen presentatie of offerte
+bekijken, ook niet met een link. Wil je dat later, dan zijn er twee routes, en
+geen van beide staat in deze handleiding: een publieke ingang naast de VPN (dan
+heb je een publiek domein met een echt certificaat nodig, en een besluit over
+wie wat mag zien), of het gedeelde stuk buiten de app om delen — een PDF
+exporteren en die verzenden.
 
 Geen monitoring en geen waarschuwing als een back-up stilvalt — `doctor.sh` en
 `journalctl` tonen de status, maar je moet er zelf naar kijken. Geen
