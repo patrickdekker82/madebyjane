@@ -173,6 +173,34 @@ scp root@203.0.113.10:/root/laptop.conf ./studio-wg.conf
 ssh root@203.0.113.10 'shred -u /root/laptop.conf'
 ```
 
+Op een laptop importeer je dat bestand; de QR-code is alleen voor telefoons.
+
+- **macOS:** open de WireGuard-app, *File → Import Tunnel(s) from File*, kies
+  `studio-wg.conf`. Of sleep het bestand op het venster. Liever plakken? *Add
+  empty tunnel* opent een tekstveld waarin je de hele inhoud kunt plakken.
+- **Windows:** WireGuard-app, *Add Tunnel → Import tunnel(s) from file*.
+- **Linux:** `sudo cp studio-wg.conf /etc/wireguard/` en
+  `sudo wg-quick up studio-wg`.
+
+Is de tunnel al door een provider-app of paneel aangemaakt, dan bestaat die
+configuratie ergens op de VPS. Clientconfiguraties herken je aan een
+`Endpoint`-regel; de serverconfiguratie heeft die niet:
+
+```bash
+sudo grep -rl 'Endpoint' /root /home /etc/wireguard /opt --include='*.conf' 2>/dev/null
+sudo cat <het gevonden bestand>
+```
+
+Controleer in wat je vindt twee regels. `Endpoint` hoort het **publieke** IP van
+de VPS te zijn met de luisterpoort erachter. En `AllowedIPs` bepaalt wat er door
+de tunnel gaat: `10.8.0.0/24` stuurt alleen verkeer naar de VPN die kant op
+(wat deze opzet nodig heeft), terwijl `0.0.0.0/0` **al** je internetverkeer via
+de VPS leidt. Dat laatste werkt ook, maar is een andere keuze dan deze
+handleiding maakt.
+
+> De clientconfiguratie bevat een privésleutel. Mail hem niet rond, plak hem niet
+> in een chat, en verwijder het bestand van de server zodra je het hebt opgehaald.
+
 Zet de tunnel op je laptop op en test:
 
 ```bash
