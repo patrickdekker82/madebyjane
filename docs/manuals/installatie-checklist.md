@@ -27,6 +27,39 @@ DATA=/srv/interieurstudio       # waar de data komt te staan
 VPS_IP=203.0.113.10             # publieke IP van de VPS
 ```
 
+### Hoe kom je aan `WG_ADDR`?
+
+Draait WireGuard al op deze VPS, dan lees je het adres uit. Op de VPS:
+
+```bash
+ip -4 -br addr show | grep -E '^wg'
+```
+
+**Je ziet** bijvoorbeeld `wg0    UNKNOWN    10.8.0.1/24` — dan is `WG_ADDR` het
+deel vóór de slash, dus `10.8.0.1`. Komt er niets terug, probeer dan de
+configuratie zelf:
+
+```bash
+sudo grep -i '^Address' /etc/wireguard/*.conf
+```
+
+Blijft het leeg, dan is WireGuard hier nog niet ingericht. Dan valt er niets te
+vinden: **je kiest het adres zelf**, en stap 2 maakt het aan. Houd dan gewoon
+`10.8.0.1` aan zoals hierboven — dat is het adres dat stap 2 instelt, en er is
+geen reden om ervan af te wijken tenzij `10.8.0.0/24` bij jou al voor iets
+anders in gebruik is.
+
+Twee dingen om niet te verwarren:
+
+- Het gaat om het adres van de **VPS** op de tunnel (`Address` onder
+  `[Interface]` in `wg0.conf` op de server), niet om dat van je laptop
+  (`10.8.0.2`).
+- Het is niet het publieke IP van de VPS. Dat is `VPS_IP`, en dat gebruik je
+  alleen om in te loggen en als `Endpoint` in de clientconfiguratie.
+
+Geeft `ip` meerdere adressen op `wg0`, neem dan het IPv4-adres: `HTTP_PORT` en
+`HTTPS_PORT` ondersteunen geen IPv6.
+
 Zet vóór je begint een **A-record** voor `$DOMEIN` naar `$WG_ADDR` (dus naar het
 tunneladres, niet naar het publieke adres). Geen AAAA-record.
 
