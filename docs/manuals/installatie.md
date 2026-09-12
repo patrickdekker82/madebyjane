@@ -17,6 +17,11 @@ bekijkt.
 
 ## Wat je nodig hebt
 
+Installeer je op een Hyper-V-host, dan staat de route van een lege VM tot een
+draaiende stack stap voor stap in
+[installatie-hyper-v.md](installatie-hyper-v.md); die handleiding neemt de
+stappen hieronder over en vult aan wat op een Hyper-V-gast anders is.
+
 **Een Linux-host.** Debian 13 is het beoogde doel; de preflight waarschuwt bij
 iets anders maar gaat door. x86_64 of aarch64. Als startschatting: 4 vCPU,
 8–16 GB RAM en 100–200 GB lokale SSD. De preflight weigert te beginnen bij
