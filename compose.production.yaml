@@ -66,7 +66,7 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
     read_only: true
-    tmpfs: [/tmp]
+    tmpfs: [/tmp, /home/node/.cache]
     cap_drop: [ALL]
     # De ingang draait kort als root: hij zet de eigenaar van het aangekoppelde
     # gegevensvolume goed en stapt daarna met gosu over naar de gebruiker `node`.
@@ -101,7 +101,7 @@ services:
         condition: service_healthy
     restart: "no"
     read_only: true
-    tmpfs: [/tmp]
+    tmpfs: [/tmp, /home/node/.cache]
     cap_drop: [ALL]
     # Dezelfde image en dus dezelfde overstap naar `node`; zonder deze twee komt
     # de migrator niet op gang en wacht de API eeuwig op een run die nooit slaagt.
