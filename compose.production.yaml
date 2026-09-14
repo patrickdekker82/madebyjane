@@ -7,6 +7,11 @@ services:
       dockerfile: infra/docker/Dockerfile.web
     environment:
       CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:?Configureer CADDY_SITE_ADDRESS in .env}
+      CADDY_TLS: ${CADDY_TLS:-}
+    # HTTP_PORT en HTTPS_PORT mogen `poort` of `adres:poort` zijn. Met een adres
+    # publiceert Docker uitsluitend daarop — de manier om een installatie achter
+    # een VPN te houden, want een firewallregel op de host wordt voor
+    # gepubliceerde containerpoorten niet beoordeeld.
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
@@ -61,7 +66,7 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
     read_only: true
-    tmpfs: [/tmp]
+    tmpfs: [/tmp, /home/node/.cache]
     cap_drop: [ALL]
     # De ingang draait kort als root: hij zet de eigenaar van het aangekoppelde
     # gegevensvolume goed en stapt daarna met gosu over naar de gebruiker `node`.
@@ -96,7 +101,7 @@ services:
         condition: service_healthy
     restart: "no"
     read_only: true
-    tmpfs: [/tmp]
+    tmpfs: [/tmp, /home/node/.cache]
     cap_drop: [ALL]
     # Dezelfde image en dus dezelfde overstap naar `node`; zonder deze twee komt
     # de migrator niet op gang en wacht de API eeuwig op een run die nooit slaagt.
@@ -108,7 +113,7 @@ services:
     logging: *logging
 
   postgres:
-    image: postgres:17.5-bookworm@sha256:0145b2977c9b49729ff8f8edc3b1192691eff92c1039bc969e25ae64bd7cbbe9
+    image: postgres:17.5-bookworm
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-interieurstudio}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configureer POSTGRES_PASSWORD in .env}

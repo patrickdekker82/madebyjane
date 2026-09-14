@@ -2,6 +2,13 @@
 
 Versie 1.0 — 5 september 2026.
 
+> **Er is een opvolger.** [MASTERPROMPT-V2.md](MASTERPROMPT-V2.md) (14 september
+> 2026) legt vast wat de eerste productie-installatie heeft geleerd, voegt eisen
+> toe uit onderzoek naar bestaande vakapplicaties, en stelt de volgorde van
+> werken opnieuw vast. Dit document blijft onverkort geldig als eisenbasis — de
+> acceptatiematrix verwijst er per alinea naar — maar bij tegenstrijdigheid gaat
+> v2.0 vóór. Lees beide.
+
 Gebruik: geef Codex deze volledige tekst als bouwopdracht in de repository waarin de app moet worden ontwikkeld. Het document is zelfstandig bruikbaar. Voeg bij voorkeur ook het architectuuradvies toe. Werk steeds vanuit de actuele repository en houd voortgang daarin bij; deze opdracht vraagt om een gefaseerde implementatie, niet om een eenmalige codegeneratie zonder verificatie.
 
 ---

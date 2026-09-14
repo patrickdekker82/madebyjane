@@ -17,6 +17,19 @@ bekijkt.
 
 ## Wat je nodig hebt
 
+Twee handleidingen beginnen eerder dan deze en nemen de stappen hieronder over,
+elk met de valkuilen van hun eigen soort host:
+
+- [installatie-checklist.md](installatie-checklist.md) — de afvinkbare versie
+  van de VPS-route, met per stap wat je moet zien. Dit is wat je erbij houdt
+  terwijl je installeert.
+- [installatie-vps.md](installatie-vps.md) — een VPS achter een
+  WireGuard-VPN, volledig vanuit de terminal. Niets publiek bereikbaar, dus
+  Caddy's eigen CA in plaats van Let's Encrypt, een binding op de tunnel, en
+  een back-up die vanuit systemd bij zijn opslagcredentials kan.
+- [installatie-hyper-v.md](installatie-hyper-v.md) — een Hyper-V-VM, vanaf het
+  aanmaken van de machine.
+
 **Een Linux-host.** Debian 13 is het beoogde doel; de preflight waarschuwt bij
 iets anders maar gaat door. x86_64 of aarch64. Als startschatting: 4 vCPU,
 8–16 GB RAM en 100–200 GB lokale SSD. De preflight weigert te beginnen bij
@@ -26,10 +39,14 @@ capaciteitsprofiel gedraaid.
 **Docker Engine en Compose v2**, geïnstalleerd via de gedocumenteerde route van
 je distributie, en bruikbaar door de gebruiker die de installatie uitvoert.
 
-**Een domeinnaam die naar deze host wijst.** Caddy vraagt zelf een
-TLS-certificaat aan, en dat lukt alleen als DNS al klopt en poort 80 en 443 van
-buiten bereikbaar zijn. Installeer je intern of achter een VPN, dan heb je een
-eigen certificaatroute nodig; die staat hier nog niet beschreven.
+**Een domeinnaam die naar deze host wijst.** Caddy vraagt standaard zelf een
+publiek vertrouwd certificaat aan, en dat lukt alleen als DNS al klopt en poort
+80 en 443 van buiten bereikbaar zijn. Installeer je intern of achter een VPN,
+zet dan `CADDY_TLS=tls internal` in `.env`: Caddy gebruikt dan zijn eigen CA en
+`scripts/export-ca.sh` haalt de root eruit om op je apparaten te vertrouwen. Ook
+dan heb je een DNS-naam nodig die vanaf de host resolveert — een IP-adres
+invullen werkt niet. De volledige route staat in
+[installatie-vps.md](installatie-vps.md).
 
 **Lokale schijf voor de data.** Geen SMB- of NFS-share voor de
 PostgreSQL-directory.
@@ -64,7 +81,8 @@ Wat je zelf moet invullen:
 | `PUBLIC_BASE_URL` | `https://` plus je domein. Moet exact `https://` + `CADDY_SITE_ADDRESS` zijn; de preflight controleert dat. |
 | `CADDY_SITE_ADDRESS` | Het domein zelf, zonder schema. |
 | `STUDIO_DATA_DIR` | Waar de data komt te staan, bijvoorbeeld `/srv/interieurstudio`. |
-| `HTTP_PORT` / `HTTPS_PORT` | Alleen wijzigen als 80 en 443 al bezet zijn. |
+| `HTTP_PORT` / `HTTPS_PORT` | Alleen wijzigen als 80 en 443 al bezet zijn, of als `adres:poort` om uitsluitend op één interface te publiceren — de manier om de app achter een VPN te houden. |
+| `CADDY_TLS` | Leeg voor een automatisch, publiek vertrouwd certificaat. `tls internal` voor Caddy's eigen CA, de enige werkende route als poort 80 en 443 niet van buiten bereikbaar zijn. |
 | `BACKUP_RESTIC_PASSWORD_FILE` | Pad naar een bestand met het restic-wachtwoord, bijvoorbeeld `/etc/interieurstudio/restic-password`, met rechten `600`. |
 | `BACKUP_SYNOLOGY_REPOSITORY` / `BACKUP_EXTERNAL_REPOSITORY` | Twee restic-repositories, op twee verschillende plekken. |
 

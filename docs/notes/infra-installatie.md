@@ -1,4 +1,79 @@
 # Installatie- en beheerfundament
+## Aanvulling — bereikbaarheid en certificaatroute zijn configuratie geworden
+
+Een installatie die alleen via een VPN te bereiken is, vroeg twee lokale
+aanpassingen in getrackte bestanden: `tls internal` in de Caddyfile en een
+bindadres in de publicatie van Caddy. Dat werkte, maar het was de zwakste schakel
+van de opzet. Elke `git pull` haalde ze weg, en de fout die daarbij hoort is
+stil: de stack komt gewoon op, alleen luistert hij weer op alle interfaces. Een
+installatie die bedoeld was als niet-publiek is dan publiek, zonder dat iets het
+meldt.
+
+Beide zijn nu instellingen in `.env`, met de bestaande waarden als standaard:
+
+- `HTTP_PORT` en `HTTPS_PORT` accepteren naast `poort` ook `adres:poort`. Zonder
+  adres publiceert Docker zoals voorheen op alle interfaces; met adres
+  uitsluitend daarop. Dit hoort bij de publicatie en niet bij een firewallregel:
+  regels op de host worden voor gepubliceerde containerpoorten niet beoordeeld,
+  dus een `ufw deny 443` schermt niets af terwijl het lijkt alsof het dat doet.
+- `CADDY_TLS` gaat als omgevingsvariabele naar de Caddy-container en staat als
+  `{$CADDY_TLS}` in het siteblok. Leeg is de bestaande automatische route;
+  `tls internal` schakelt over op Caddy's eigen CA. `scripts/export-ca.sh` haalt
+  de root eruit, controleert dat het een leesbaar certificaat is, en meldt dat
+  die root in de back-up van de gegevensmap zit — een verhuizing zonder die data
+  levert een nieuwe CA op.
+
+De preflight controleert nu wat er te controleren valt: dat een opgegeven adres
+werkelijk op de host actief is (een neerliggende VPN-interface is daarmee een
+duidelijke melding in plaats van een cryptische containerstart), dat `CADDY_TLS`
+een van de toegestane vormen heeft, en dat de certificaatroute bij het
+DNS-antwoord past — een privaat adres met een publieke uitgifteroute kan nooit
+slagen, en een eigen CA op een publiek adres kent geen bezoeker. Die laatste twee
+zijn waarschuwingen: een host kan legitiem anders bereikbaar zijn dan zijn naam
+suggereert. `doctor.sh` toont de gekozen modus en waarschuwt als er ondanks een
+bindadres iets op alle interfaces luistert.
+
+### Ook opgelost: de preflight blokkeerde zijn eigen upgrade
+
+`upgrade.sh` draait de preflight terwijl de stack loopt, en de poortcontrole
+keek alleen naar het poortnummer. Bij de standaardinstellingen van Docker houdt
+een `docker-proxy` poort 80 en 443 vast zolang Caddy draait, dus meldde de
+preflight ze als bezet en stopte de upgrade — op elke installatie, publiek of
+niet. De controle vraagt nu eerst of de eigen Caddy-container draait en rekent
+een poort die híj vasthoudt niet als belemmering; bij een verse installatie
+moeten ze onverminderd vrij zijn.
+
+### Geverifieerd
+
+De Caddyfile is gecompileerd met dezelfde Caddy als in de image (2.10.2,
+`caddy adapt`). Met `CADDY_TLS` leeg én niet-gezet is de gecompileerde
+configuratie gelijk aan die van vóór deze wijziging: geen tls-app, en de
+route-orde blijft `/api/*` vóór de SPA-terugval. Met `tls internal` verschijnt
+precies één automatiseringsbeleid met issuer `internal`.
+
+De nieuwe preflight-functies zijn tabelgewijs gedraaid tegen twaalf
+publicatiewaarden (`80`, `10.8.0.1:443`, `127.0.0.1:80`, een adres dat niet op de
+host staat, `70000`, `0`, `abc`, `[::1]:80`, `:80`, `10.8.0.1:`, `1.2.3.4:80:90`)
+met een nagebootste interfacetabel, en tegen zeven `CADDY_TLS`-waarden en zeven
+DNS/TLS-combinaties inclusief de 172.16–172.31-grens. De publicatiecontrole
+zonder `ip` op het pad waarschuwt en blokkeert niet; dat is bedoeld, want op
+Debian is `ip` er altijd. De waarschuwing van `doctor.sh` is gedraaid met een
+nagebootste `ss` voor de drie relevante gevallen. De commando's uit stap 8 van
+de VPS-handleiding zijn letterlijk uitgevoerd op `.env.example` en het resultaat
+komt door alle nieuwe controles heen.
+
+### Niet geverifieerd in deze omgeving
+
+Er is hier geen Docker-daemon, dus dat Docker `adres:poort:poort` in deze
+compose-publicatie werkelijk alleen op dat adres bindt is de gedocumenteerde
+werking en niet gezien. Hetzelfde geldt voor het overslaan van de poortcontrole
+bij een draaiende stack: `docker compose ps --status running --quiet caddy` is
+hier niet uit te voeren. `ss` en `ip` ontbreken in deze werkruimte en zijn
+nagebootst. Dat Caddy bij `tls internal` de root op
+`/data/caddy/pki/authorities/local/root.crt` neerzet, is de gedocumenteerde
+indeling van zijn gegevensmap; `export-ca.sh` valt daarom terug op een zoekactie
+in de gegevensmap wanneer dat pad ontbreekt.
+
 ## Aanvulling — de eerste eigenaar kon in productie niet bestaan
 
 Bij het schrijven van de installatiehandleiding bleek het pad naar de eerste
