@@ -32,8 +32,13 @@ markeer geen onvoltooide fase als afgerond.
 
 Op 13 september 2026 is Studio geïnstalleerd op een VPS (6 vCPU, 12 GB RAM,
 200 GB SSD, Ubuntu 24.04.5 LTS) achter WireGuard. De app draait en is in
-gebruik genomen op `studio.ruimtebyjane.nl`. Dat is het goede nieuws en het
-bewijs dat de architectuur draagt.
+gebruik genomen op het eigen subdomein van de studio. Dat is het goede nieuws
+en het bewijs dat de architectuur draagt.
+
+Deze repository is openbaar. Noem er geen adressen, hostnamen of andere
+gegevens van de productie-installatie in; dit document beschrijft defecten van
+een draaiende host en is daarmee precies het soort tekst waar zulke gegevens
+niet in horen. De werkelijke waarden staan in `.env` op de host.
 
 De installatie kostte echter een hele dag en vroeg negen handmatige ingrepen
 die niet in enige handleiding staan. Elk daarvan is een defect, geen
@@ -437,9 +442,10 @@ werk eruit wordt gehaald.
 **P0.1 Bevestig dat de app niet publiek bereikbaar is.** Na de laatste
 herinstallatie staan `HTTP_PORT` en `HTTPS_PORT` op `10.8.0.1:80` en
 `10.8.0.1:443`, maar de externe test is daarna niet herhaald. Voer hem uit met
-de tunnel uit: `curl --connect-timeout 5 -sSI https://213.199.45.130/` hoort
-een timeout of geweigerde verbinding te geven. Krijg je antwoord, dan is dit
-het enige dat die dag gebeurt. Los daarna D2 op zodat het niet kan terugkeren.
+de tunnel uit: `curl --connect-timeout 5 -sSI https://<publiek-ip-van-de-vps>/`
+hoort een timeout of geweigerde verbinding te geven. Krijg je antwoord, dan is
+dit het enige dat die dag gebeurt. Los daarna D2 op zodat het niet kan
+terugkeren.
 
 **P0.2 Richt de back-up in (D9).** NAS via de tunnel als eerste bestemming,
 objectopslag buiten huis als tweede, en `verify-backup.sh` naar een geïsoleerd

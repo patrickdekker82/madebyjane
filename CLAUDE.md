@@ -54,9 +54,13 @@ falen in containers zonder browser; dat is bekend en geen regressie.
 ## Productieomgeving
 
 Draait sinds 13 september 2026 op een VPS (6 vCPU, 12 GB, 200 GB, **Ubuntu
-24.04.5 LTS**) achter WireGuard, op `studio.ruimtebyjane.nl`, met een eigen CA
-van Caddy. Niet Debian en niet Hyper-V — oudere documentatie gaat daar nog van
-uit. Installatie: `docs/manuals/installatie-checklist.md`.
+24.04.5 LTS**) achter WireGuard, op een eigen subdomein, met een eigen CA van
+Caddy. Niet Debian en niet Hyper-V — oudere documentatie gaat daar nog van uit.
+Installatie: `docs/manuals/installatie-checklist.md`.
+
+**Deze repository is openbaar.** Zet er geen adressen, hostnamen, sleutels of
+andere gegevens van de productie-installatie in. Gebruik in documentatie de
+voorbeeldwaarden uit de handleidingen (`203.0.113.10`, `studio.voorbeeld.nl`).
 
 Open en blokkerend: back-up is nog niet ingericht (D9), PDF-generatie faalt op
 de host (D8). Zie deel III van v2.0 voor de volgorde.
